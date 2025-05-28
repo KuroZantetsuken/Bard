@@ -37,8 +37,8 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
         *   `DISCORD_BOT_TOKEN`: Your Discord bot token.
         *   `GEMINI_API_KEY`: Your Gemini API key.
 
-5.  **Customize System Prompt:**
-    *   Edit the `system_prompt.md` file. This is purely for personality, necessary instructions are found in the main code.
+5.  **Customize Personality:**
+    *   Feel free to edit `prompts/personality.prompt.md`. This is purely for personality, core instructions are found in `prompts/capabilities.prompt.md`.
 
 ## Running the Bot
 
