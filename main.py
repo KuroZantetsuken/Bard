@@ -39,7 +39,7 @@ class Config:
     TTS_SAMPLE_WIDTH = 2       # Bytes per sample (16-bit PCM)
 
     # Fallback waveform for Discord voice messages if generation fails
-    DEFAULT_WAVEFORM_PLACEHOLDER = "FzYACgAAAAAAACQAAAAAAAA=" # Default placeholder from example
+    DEFAULT_WAVEFORM_PLACEHOLDER = "FzYACgAAAAAAACQAAAAAAAA=" # Default placeholder
 
     # FFMPEG path (can be overridden by environment variable)
     FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
@@ -47,8 +47,8 @@ class Config:
 
 # --- Environment Setup ---
 load_dotenv()
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GOOGLE_AI_KEY")
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # --- System Prompt ---
 def load_system_prompt() -> str:
@@ -669,7 +669,7 @@ class MessageSender:
         Sends a reply to a Discord message. Can be text, voice, or both.
         Returns the primary discord.Message object that was sent, or None.
         """
-        can_try_native_voice = audio_data and DISCORD_TOKEN and (not text_content or not text_content.strip())
+        can_try_native_voice = audio_data and DISCORD_BOT_TOKEN and (not text_content or not text_content.strip())
         temp_ogg_file_path_for_upload = None # Needs to be accessible in finally
 
         if existing_bot_message_to_edit:
@@ -733,7 +733,7 @@ class MessageSender:
                 async with aiohttp.ClientSession() as session:
                     upload_slot_api_url = f"https://discord.com/api/v10/channels/{channel_id}/attachments"
                     upload_slot_payload = {"files": [{"filename": "voice_message.ogg", "file_size": len(audio_data), "id": "0", "is_clip": False}]}
-                    upload_slot_headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
+                    upload_slot_headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
 
                     attachment_metadata = None
                     async with session.post(upload_slot_api_url, json=upload_slot_payload, headers=upload_slot_headers) as resp_slot:
@@ -764,7 +764,7 @@ class MessageSender:
                         "message_reference": {"message_id": str(message_to_reply_to.id)},
                         "allowed_mentions": {"parse": [], "replied_user": False}
                     }
-                    send_message_headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
+                    send_message_headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
 
                     async with session.post(send_message_api_url, json=send_message_payload, headers=send_message_headers) as resp_send:
                         if resp_send.status == 200 or resp_send.status == 201:
@@ -1459,7 +1459,7 @@ async def on_message_delete(message: discord.Message):
 # --- Setup and Main Execution ---
 def validate_environment_variables():
     """Validates that required environment variables are set."""
-    if not DISCORD_TOKEN:
+    if not DISCORD_BOT_TOKEN:
         msg = "❌ CRITICAL: DISCORD_BOT_TOKEN environment variable not found. The bot cannot start."
         logger.critical(msg)
         raise ValueError(msg)
@@ -1514,11 +1514,11 @@ def main():
         )
         logger.info(f"🤖 Gemini AI Client initialized. Using API version: v1beta")
 
-        logger.info(f"🔑 Discord Token: {'*' * (len(DISCORD_TOKEN) - 4) + DISCORD_TOKEN[-4:] if DISCORD_TOKEN else 'Not Set'}")
+        logger.info(f"🔑 Discord Token: {'*' * (len(DISCORD_BOT_TOKEN) - 4) + DISCORD_BOT_TOKEN[-4:] if DISCORD_BOT_TOKEN else 'Not Set'}")
         logger.info(f"🔑 Gemini API Key: {'*' * (len(GEMINI_API_KEY) - 4) + GEMINI_API_KEY[-4:] if GEMINI_API_KEY else 'Not Set'}")
 
         logger.info("📡 Starting Discord bot...")
-        bot.run(DISCORD_TOKEN, log_handler=None)
+        bot.run(DISCORD_BOT_TOKEN, log_handler=None)
 
     except ValueError as ve:
         print(f"Configuration Error: {ve}")
