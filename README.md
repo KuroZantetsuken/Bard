@@ -13,6 +13,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 *   **Customizable Persona:** The bot's behavior and initial instructions can be defined in the `system_prompt.md` file.
 *   **Reset Functionality:** Users can reset their conversation history with the bot.
 *   **Handles Message Edits/Deletions:** Adapts its responses if the user edits or deletes their messages.
+*   **Persistent Memory:** Locally saves short term memory containing all relevant context that persist between restarts.
 
 ## Setup and Installation
 
