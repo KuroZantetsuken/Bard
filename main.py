@@ -264,7 +264,7 @@ class MemoryManager:
         memories_list = []
         async with self.locks[filepath]:
             if not os.path.exists(filepath):
-                logger.info(f"🧠 No memory file found for user. Starting fresh.\nUser ID: {user_id}\nFilepath: {filepath}")
+                logger.info(f"🧠 No memory file found for user: {user_id}.")
                 return []
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
@@ -610,7 +610,7 @@ class MessageSender:
                                              not (existing_bot_message_to_edit.flags and existing_bot_message_to_edit.flags.value & 8192)
                     if is_simple_text_message:
                         await existing_bot_message_to_edit.edit(content=text_content[:Config.MAX_MESSAGE_LENGTH])
-                        logger.info(f"✏️ Edited existing bot message with text.\nID: {existing_bot_message_to_edit.id}")
+                        logger.info(f"✏️ Edited existing bot message. Content:\n{text_content}")
                         return existing_bot_message_to_edit
                 except discord.HTTPException as e:
                     logger.error(f"❌ Failed to edit bot message with text. Falling back to delete and resend.\nID: {existing_bot_message_to_edit.id}\nError:\n{e}", exc_info=True)
@@ -1123,36 +1123,43 @@ async def on_message(message: discord.Message):
         await MessageProcessor.process(message)
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
-    if after.author == bot.user or after.author.bot: return
+    if after.author == bot.user or after.author.bot:
+        return
+    if before.content == after.content and \
+       before.attachments == after.attachments and \
+       not before.embeds and after.embeds:
+        logger.info(f"ℹ️ Message edit ignored for Message ID {after.id}: likely initial embed generation by Discord.")
+        return
     is_dm_after = isinstance(after.channel, discord.DMChannel)
     is_mentioned_after = bot.user.mentioned_in(after)
     is_reply_to_bot_after = False
     if after.reference and after.reference.message_id:
         try:
-            referenced_message_after = await after.channel.fetch_message(after.reference.message_id)
-            if referenced_message_after.author == bot.user:
-                is_reply_to_bot_after = True
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
+            if hasattr(after.channel, 'fetch_message'): # Ensure channel supports fetching
+                referenced_message_after = await after.channel.fetch_message(after.reference.message_id)
+                if referenced_message_after.author == bot.user:
+                    is_reply_to_bot_after = True
+            else:
+                logger.warning(f"⚠️ Channel type {type(after.channel)} for message {after.id} lacks fetch_message method during edit check.")
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            logger.debug(f"🔍 Could not fetch referenced message for edit check (Msg ID: {after.id}, Ref ID: {after.reference.message_id}). Error: {e}")
     content_lower_after = after.content.lower().strip()
     is_reset_command_after = content_lower_after.startswith(f"{bot.command_prefix}reset")
     is_forget_command_after = content_lower_after.startswith(f"{bot.command_prefix}forget")
     should_process_after = is_dm_after or is_mentioned_after or is_reply_to_bot_after or is_reset_command_after or is_forget_command_after
-    bot_response_to_original_message = active_bot_responses.pop(before.id, None)
+    existing_bot_response = active_bot_responses.get(after.id)
     if should_process_after:
-        logger.info(f"📥 Edited message qualifies for processing. Reprocessing as new message.\nMessage ID: {after.id}")
-        if bot_response_to_original_message:
-            try:
-                await bot_response_to_original_message.delete()
-            except discord.HTTPException:
-                logger.warning(f"⚠️ Could not delete previous bot response for edited message.\nBot Response ID: {bot_response_to_original_message.id}\nOriginal User Message ID: {before.id}")
-        await MessageProcessor.process(after, bot_message_to_edit=None)
+        logger.info(f"📥 Edited message (ID: {after.id}) qualifies for processing. Reprocessing.")
+        await MessageProcessor.process(after, bot_message_to_edit=existing_bot_response)
     else:
-        if bot_response_to_original_message:
+        if existing_bot_response:
+            logger.info(f"🗑️ Edited message (ID: {after.id}) no longer qualifies. Deleting previous bot response (ID: {existing_bot_response.id}).")
             try:
-                await bot_response_to_original_message.delete()
-                logger.info(f"🗑️ Deleted bot response as original message was edited to no longer qualify.\nBot Response ID: {bot_response_to_original_message.id}\nOriginal User Message ID: {before.id}")
-            except discord.HTTPException: pass
+                await existing_bot_response.delete()
+            except discord.HTTPException as e:
+                logger.warning(f"⚠️ Could not delete previous bot response (ID: {existing_bot_response.id}) for edited message that no longer qualifies. Error: {e}")
+            finally:
+                active_bot_responses.pop(after.id, None)
 @bot.event
 async def on_message_delete(message: discord.Message):
     if message.id in active_bot_responses:
