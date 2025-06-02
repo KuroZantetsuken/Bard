@@ -26,8 +26,8 @@ class Config:
     VOICE_NAME = "Kore"  # Prebuilt voice for TTS
     MAX_MESSAGE_LENGTH = 2000  # Discord message length limit
     MAX_REPLY_DEPTH = 10       # Max depth for fetching reply chains
-    THINKING_BUDGET = 1024     # Token budget for Gemini's thinking process
-    MAX_OUTPUT_TOKENS = 2048   # Max tokens for Gemini's response
+    THINKING_BUDGET = 2048     # Token budget for Gemini's thinking process
+    MAX_OUTPUT_TOKENS = 65536   # Max tokens for Gemini's response
     # TTS Audio Properties (matching Gemini TTS output)
     TTS_SAMPLE_RATE = 24000    # Hz
     TTS_CHANNELS = 1           # Mono
@@ -40,7 +40,7 @@ class Config:
     PROMPT_DIR = "prompts" # Directory to load .prompt.md files from
     HISTORY_DIR = "history" # Directory to save and load .history.json files
     MEMORY_DIR = "memories" # Directory to save and load .memory.json files
-    MAX_HISTORY_TURNS = 16  # Number of user + assistant turn pairs (e.g., 16 turns = 32 content entries)
+    MAX_HISTORY_TURNS = 4  # Number of user + assistant turn pairs (e.g., 16 turns = 32 content entries)
     MAX_MEMORIES_PER_USER = 32 # Max number of memories to store and load per user
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
