@@ -7,13 +7,14 @@ import re
 import tempfile
 import wave
 import json
-from datetime import datetime, timezone, timedelta
-from collections import defaultdict
-from typing import NamedTuple, List as TypingList
 import aiohttp
 import discord
 import numpy as np
 import soundfile
+import magic
+from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+from typing import NamedTuple, List as TypingList
 from discord.ext import commands
 from dotenv import load_dotenv
 from google import genai
@@ -390,45 +391,38 @@ class MemoryManager:
         return "\n".join(formatted_mem_parts)
 class MimeDetector:
     """
-    Detects MIME types from byte data using known signatures.
-    Note: This is a basic detector. For more comprehensive detection,
-    consider integrating with libraries like `python-magic` or using
-    the `mimetypes` module as a first pass.
+    Detects MIME types from byte data using the python-magic library.
     """
-    MIME_SIGNATURES = {
-        b'\x89PNG': 'image/png',
-        b'\xff\xd8\xff': 'image/jpeg',
-        b'GIF8': 'image/gif',
-        b'ID3': 'audio/mpeg',
-        b'\xff\xfb': 'audio/mpeg',
-        b'%PDF': 'application/pdf',
-    }
     @classmethod
     def detect(cls, data: bytes) -> str:
         """
-        Detects the MIME type of the given byte data.
+        Detects the MIME type of the given byte data using libmagic.
         Args:
             data: The byte data to inspect.
         Returns:
-            The detected MIME type string, or 'application/octet-stream' if unknown.
+            The detected MIME type string, or 'application/octet-stream' if unknown or on error.
         """
-        if data.startswith(b'RIFF'):
-            if b'WEBP' in data[8:12]:
-                return 'image/webp'
-            elif b'WAVE' in data[8:12]:
-                return 'audio/wav'
-            logger.debug("🔍 Detected RIFF container, but not specifically WEBP or WAV. Falling back.")
-            return 'application/vnd.rn-realmedia'
-        for signature, mime_type in cls.MIME_SIGNATURES.items():
-            if data.startswith(signature):
+        try:
+            mime_type = magic.from_buffer(data, mime=True)
+            if mime_type:
+                logger.debug(f"🔍 MIME type detected by python-magic: {mime_type}")
                 return mime_type
-        if b'ftyp' in data[4:8] or b'moov' in data[4:8] or \
-           (len(data) > 8 and b'ftyp' in data[4:12]) or \
-           (len(data) > 8 and b'moov' in data[4:12]):
-            logger.debug("🔍 Detected MP4-based container (ftyp/moov). Assuming 'video/mp4'.")
-            return 'video/mp4'
-        logger.debug("🔍 MIME type not identified by known signatures. Defaulting to 'application/octet-stream'.")
-        return 'application/octet-stream'
+            else:
+                logger.warning("🔍 python-magic returned an empty MIME type. Defaulting to octet-stream.")
+                return 'application/octet-stream'
+        except ImportError:
+            logger.error("❌ python-magic library is not installed correctly or its dependency libmagic is missing. "
+                         "Please ensure 'python-magic' is in requirements.txt and libmagic is installed system-wide. "
+                         "Falling back to 'application/octet-stream'.")
+            return 'application/octet-stream'
+        except magic.MagicException as e:
+            logger.error(f"❌ python-magic encountered an error (e.g., magic file not found or corrupt): {e}. "
+                         "Falling back to 'application/octet-stream'.")
+            return 'application/octet-stream'
+        except Exception as e:
+            logger.error(f"❌ Unexpected error during MIME detection with python-magic: {e}. "
+                         "Falling back to 'application/octet-stream'.", exc_info=True)
+            return 'application/octet-stream'
 class YouTubeProcessor:
     """Extracts YouTube URLs and prepares them as FileData parts for Gemini."""
     PATTERNS = [
