@@ -22,31 +22,27 @@ from google.genai.chats import Chat as GenAIChatSession
 logger = logging.getLogger("Bard")
 class Config:
     """Stores all configuration constants for the bot."""
-    MODEL_ID = "gemini-2.5-flash-preview-05-20"
-    TTS_MODEL_ID = "gemini-2.5-flash-preview-tts" # Specific model for TTS
-    VOICE_NAME = "Kore"  # Prebuilt voice for TTS
-    MAX_MESSAGE_LENGTH = 2000  # Discord message length limit
-    MAX_REPLY_DEPTH = 10       # Max depth for fetching reply chains
-    THINKING_BUDGET = 2048     # Token budget for Gemini's thinking process
-    MAX_OUTPUT_TOKENS = 65536   # Max tokens for Gemini's response
-    # TTS Audio Properties (matching Gemini TTS output)
-    TTS_SAMPLE_RATE = 24000    # Hz
-    TTS_CHANNELS = 1           # Mono
-    TTS_SAMPLE_WIDTH = 2       # Bytes per sample (16-bit PCM)
-    # Fallback waveform for Discord voice messages if generation fails
-    DEFAULT_WAVEFORM_PLACEHOLDER = "FzYACgAAAAAAACQAAAAAAAA=" # Default placeholder
-    # FFMPEG path (can be overridden by environment variable)
+    load_dotenv()
+    DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-flash-preview-05-20")
+    MODEL_ID_TTS = os.getenv("MODEL_ID_TTS", "gemini-2.5-flash-preview-tts")
+    VOICE_NAME = os.getenv("VOICE_NAME", "Kore")
+    MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", 2000))
+    MAX_REPLY_DEPTH = int(os.getenv("MAX_REPLY_DEPTH", 10))
+    THINKING_BUDGET = int(os.getenv("THINKING_BUDGET", 2048))
+    MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", 65536))
+    TTS_SAMPLE_RATE = int(os.getenv("TTS_SAMPLE_RATE", 24000))
+    TTS_CHANNELS = int(os.getenv("TTS_CHANNELS", 1))
+    TTS_SAMPLE_WIDTH = int(os.getenv("TTS_SAMPLE_WIDTH", 2))
+    WAVEFORM_PLACEHOLDER = os.getenv("WAVEFORM_PLACEHOLDER", "FzYACgAAAAAAACQAAAAAAAA=")
     FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
-    # Prompt, History and Memory Configuration
-    PROMPT_DIR = "prompts" # Directory to load .prompt.md files from
-    HISTORY_DIR = "history" # Directory to save and load .history.json files
-    MEMORY_DIR = "memories" # Directory to save and load .memory.json files
-    MAX_HISTORY_TURNS = 4  # Number of user + assistant turn pairs (e.g., 4 pairs = 8 content entries)
-    HISTORY_MAX_AGE_MINUTES = int(os.getenv("HISTORY_MAX_AGE_MINUTES", "0")) # Max age of history entries in minutes. 0 or less to disable.
-    MAX_MEMORIES_PER_USER = 32 # Max number of memories to store and load per user
-load_dotenv()
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    PROMPT_DIR = os.getenv("PROMPT_DIR", "prompts")
+    HISTORY_DIR = os.getenv("HISTORY_DIR", "history")
+    MEMORY_DIR = os.getenv("MEMORY_DIR", "memories")
+    MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", 4))
+    MAX_HISTORY_AGE = int(os.getenv("MAX_HISTORY_AGE", "0"))
+    MAX_MEMORIES = int(os.getenv("MAX_MEMORIES", 32))
 active_bot_responses = {}
 gemini_client = None
 chat_history_manager = None
@@ -197,15 +193,15 @@ class ChatHistoryManager:
             except Exception as e:
                 logger.error(f"❌ Error loading history from file.\nFilepath: {filepath}\nError:\n{e}", exc_info=True)
                 return []
-        if Config.HISTORY_MAX_AGE_MINUTES > 0:
+        if Config.MAX_HISTORY_AGE > 0:
             now_utc = datetime.now(timezone.utc)
-            min_age_delta = timedelta(minutes=Config.HISTORY_MAX_AGE_MINUTES)
+            min_age_delta = timedelta(minutes=Config.MAX_HISTORY_AGE)
             age_filtered_entries = [
                 entry for entry in loaded_history_entries
                 if (now_utc - entry.timestamp) <= min_age_delta
             ]
             if len(age_filtered_entries) < len(loaded_history_entries):
-                logger.info(f"💾 History filtered by age ({Config.HISTORY_MAX_AGE_MINUTES} min): {len(loaded_history_entries)} -> {len(age_filtered_entries)} entries.")
+                logger.info(f"💾 History filtered by age ({Config.MAX_HISTORY_AGE} min): {len(loaded_history_entries)} -> {len(age_filtered_entries)} entries.")
             loaded_history_entries = age_filtered_entries
         max_content_entries = Config.MAX_HISTORY_TURNS * 2
         if len(loaded_history_entries) > max_content_entries:
@@ -317,15 +313,15 @@ class MemoryManager:
             except Exception as e:
                 logger.error(f"❌ Error loading memories from file.\nUser ID: {user_id}\nFilepath: {filepath}\nError:\n{e}", exc_info=True)
                 return []
-        if len(memories_list) > Config.MAX_MEMORIES_PER_USER:
-            memories_list = memories_list[-Config.MAX_MEMORIES_PER_USER:]
-            logger.info(f"🧠 Memories for user {user_id} truncated to {len(memories_list)} entries (max: {Config.MAX_MEMORIES_PER_USER}).")
+        if len(memories_list) > Config.MAX_MEMORIES:
+            memories_list = memories_list[-Config.MAX_MEMORIES:]
+            logger.info(f"🧠 Memories for user {user_id} truncated to {len(memories_list)} entries (max: {Config.MAX_MEMORIES}).")
         return memories_list
     async def save_memories(self, user_id: int, memories: list[dict]):
         """Saves memories for a given user_id."""
         filepath = self._get_memory_filepath(user_id)
-        if len(memories) > Config.MAX_MEMORIES_PER_USER:
-            memories_to_save = memories[-Config.MAX_MEMORIES_PER_USER:]
+        if len(memories) > Config.MAX_MEMORIES:
+            memories_to_save = memories[-Config.MAX_MEMORIES:]
         else:
             memories_to_save = memories
         logger.info(f"🧠 Saving {len(memories_to_save)} memories for user {user_id} to {filepath}")
@@ -510,7 +506,7 @@ class TTSGenerator:
             mono_audio_data = np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
             num_samples = len(mono_audio_data)
             if num_samples == 0:
-                return duration_secs, Config.DEFAULT_WAVEFORM_PLACEHOLDER
+                return duration_secs, Config.WAVEFORM_PLACEHOLDER
             if np.issubdtype(mono_audio_data.dtype, np.integer):
                  mono_audio_data = mono_audio_data / np.iinfo(mono_audio_data.dtype).max
             step = max(1, num_samples // max_waveform_points)
@@ -522,17 +518,17 @@ class TTSGenerator:
                 scaled_value = int(min(rms * 5.0, 1.0) * 255)
                 waveform_raw_bytes.append(scaled_value)
             if not waveform_raw_bytes:
-                return duration_secs, Config.DEFAULT_WAVEFORM_PLACEHOLDER
+                return duration_secs, Config.WAVEFORM_PLACEHOLDER
             waveform_b64 = base64.b64encode(waveform_raw_bytes).decode('utf-8')
             return duration_secs, waveform_b64
         except Exception as e:
             logger.error(f"❌ Error getting duration/waveform for audio file.\nFile:\n{audio_path}\nError:\n{e}", exc_info=True)
             try:
                 info = soundfile.info(audio_path)
-                return info.duration, Config.DEFAULT_WAVEFORM_PLACEHOLDER
+                return info.duration, Config.WAVEFORM_PLACEHOLDER
             except Exception as e_info:
                 logger.error(f"❌ Fallback to get duration also failed for audio file.\nFile:\n{audio_path}\nError:\n{e_info}", exc_info=True)
-                return 1.0, Config.DEFAULT_WAVEFORM_PLACEHOLDER
+                return 1.0, Config.WAVEFORM_PLACEHOLDER
     @staticmethod
     async def generate_speech_ogg(text_for_tts: str) -> tuple[bytes, float, str] | None:
         """Generates speech audio in OGG Opus format from text using Gemini TTS."""
@@ -542,7 +538,7 @@ class TTSGenerator:
             return None
         tmp_wav_path, tmp_ogg_path = None, None
         try:
-            logger.info(f"🎤 Generating TTS (WAV) with details:\nText:\n{text_for_tts}\nVoice: {Config.VOICE_NAME}\nModel: {Config.TTS_MODEL_ID}")
+            logger.info(f"🎤 Generating TTS (WAV) with details:\nText:\n{text_for_tts}\nVoice: {Config.VOICE_NAME}\nModel: {Config.MODEL_ID_TTS}")
             speech_generation_config = types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(
@@ -550,7 +546,7 @@ class TTSGenerator:
                 )
             )
             response = await gemini_client.aio.models.generate_content(
-                model=Config.TTS_MODEL_ID, contents=text_for_tts, config=speech_generation_config
+                model=Config.MODEL_ID_TTS, contents=text_for_tts, config=speech_generation_config
             )
             wav_data = None
             if (response.candidates and response.candidates[0].content and
@@ -634,10 +630,10 @@ class MessageSender:
                      text_content: str | None,
                      audio_data: bytes | None = None,
                      duration_secs: float = 0.0,
-                     waveform_b64: str = Config.DEFAULT_WAVEFORM_PLACEHOLDER,
+                     waveform_b64: str = Config.WAVEFORM_PLACEHOLDER,
                      existing_bot_message_to_edit: discord.Message | None = None) -> discord.Message | None:
         """Sends a reply to a Discord message. Can be text, voice, or both."""
-        can_try_native_voice = audio_data and DISCORD_BOT_TOKEN and (not text_content or not text_content.strip())
+        can_try_native_voice = audio_data and Config.DISCORD_BOT_TOKEN and (not text_content or not text_content.strip())
         temp_ogg_file_path_for_upload = None
         if existing_bot_message_to_edit:
             if text_content and not audio_data:
@@ -666,7 +662,7 @@ class MessageSender:
                 async with aiohttp.ClientSession() as session:
                     upload_slot_api_url = f"https://discord.com/api/v10/channels/{channel_id}/attachments"
                     upload_slot_payload = {"files": [{"filename": "voice_message.ogg", "file_size": len(audio_data), "id": "0", "is_clip": False}]}
-                    upload_slot_headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
+                    upload_slot_headers = {"Authorization": f"Bot {Config.DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
                     attachment_metadata = None
                     async with session.post(upload_slot_api_url, json=upload_slot_payload, headers=upload_slot_headers) as resp_slot:
                         if resp_slot.status == 200:
@@ -691,7 +687,7 @@ class MessageSender:
                         "message_reference": {"message_id": str(message_to_reply_to.id)},
                         "allowed_mentions": {"parse": [], "replied_user": False}
                     }
-                    send_message_headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
+                    send_message_headers = {"Authorization": f"Bot {Config.DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
                     async with session.post(send_message_api_url, json=send_message_payload, headers=send_message_headers) as resp_send:
                         if resp_send.status == 200 or resp_send.status == 201:
                             response_data = await resp_send.json()
@@ -1108,7 +1104,7 @@ class MessageProcessor:
                     logger.debug(f"💬 Tag processing loop ended. Found {len(content_lines_for_discord)} content lines for Discord message.")
                     break
                 final_text_for_discord = "\n".join(content_lines_for_discord).strip()
-                ogg_audio_data, audio_duration, audio_waveform_b64 = None, 0.0, Config.DEFAULT_WAVEFORM_PLACEHOLDER
+                ogg_audio_data, audio_duration, audio_waveform_b64 = None, 0.0, Config.WAVEFORM_PLACEHOLDER
                 if speak_content_for_tts:
                     if speak_content_for_tts.strip():
                         tts_prompt_for_generator = f"In a {speak_style_for_tts.replace('_', ' ').lower()} tone, say: {speak_content_for_tts}" if speak_style_for_tts else speak_content_for_tts
@@ -1140,13 +1136,13 @@ async def on_ready():
     logger.info(f"🎉 Logged in as {bot.user.name} (ID: {bot.user.id})")
     logger.info(f"🔗 Discord.py Version: {discord.__version__}")
     logger.info(f"🧠 Using Main Gemini Model: {Config.MODEL_ID}")
-    logger.info(f"🗣️ Using TTS Gemini Model: {Config.TTS_MODEL_ID} with Voice: {Config.VOICE_NAME}")
+    logger.info(f"🗣️ Using TTS Gemini Model: {Config.MODEL_ID_TTS} with Voice: {Config.VOICE_NAME}")
     logger.info(f"💾 Chat History Max Turns (User+Assistant pairs): {Config.MAX_HISTORY_TURNS}")
-    if Config.HISTORY_MAX_AGE_MINUTES > 0:
-        logger.info(f"💾 Chat History Max Age (Minutes): {Config.HISTORY_MAX_AGE_MINUTES}")
+    if Config.MAX_HISTORY_AGE > 0:
+        logger.info(f"💾 Chat History Max Age (Minutes): {Config.MAX_HISTORY_AGE}")
     else:
         logger.info(f"💾 Chat History Max Age: Disabled")
-    logger.info(f"🧠 User Memory Max Entries: {Config.MAX_MEMORIES_PER_USER}")
+    logger.info(f"🧠 User Memory Max Entries: {Config.MAX_MEMORIES}")
     try:
         activity_name = f"messages | {bot.command_prefix}reset | {bot.command_prefix}forget"
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=activity_name))
@@ -1220,9 +1216,9 @@ async def on_message_delete(message: discord.Message):
             except discord.HTTPException: pass
 def validate_environment_variables():
     """Validates that essential environment variables are set."""
-    if not DISCORD_BOT_TOKEN:
+    if not Config.DISCORD_BOT_TOKEN:
         raise ValueError("DISCORD_BOT_TOKEN not found in environment variables.")
-    if not GEMINI_API_KEY:
+    if not Config.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY not found in environment variables.")
     logger.info("✅ Environment variables validated.")
 def setup_logging():
@@ -1250,14 +1246,14 @@ def main():
         setup_logging()
         logger.info("🚀 Initializing Gemini Discord Bot...")
         validate_environment_variables()
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
+        gemini_client = genai.Client(api_key=Config.GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
         chat_history_manager = ChatHistoryManager()
         memory_manager = MemoryManager()
         logger.info(f"🤖 Gemini AI Client initialized. Target API version: v1beta")
         logger.info(f"💾 Chat History Manager initialized.")
         logger.info(f"🧠 Memory Manager initialized.")
         logger.info("📡 Starting Discord bot...")
-        bot.run(DISCORD_BOT_TOKEN, log_handler=None)
+        bot.run(Config.DISCORD_BOT_TOKEN, log_handler=None)
     except ValueError as ve:
         print(f"Configuration Error: {ve}")
         if logger.handlers: logger.critical(f"💥 Configuration Error:\n{ve}", exc_info=True)
