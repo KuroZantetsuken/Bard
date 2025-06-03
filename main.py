@@ -7,8 +7,9 @@ import re
 import tempfile
 import wave
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+from typing import NamedTuple, List as TypingList
 import aiohttp
 import discord
 import numpy as np
@@ -40,7 +41,8 @@ class Config:
     PROMPT_DIR = "prompts" # Directory to load .prompt.md files from
     HISTORY_DIR = "history" # Directory to save and load .history.json files
     MEMORY_DIR = "memories" # Directory to save and load .memory.json files
-    MAX_HISTORY_TURNS = 4  # Number of user + assistant turn pairs (e.g., 16 turns = 32 content entries)
+    MAX_HISTORY_TURNS = 4  # Number of user + assistant turn pairs (e.g., 4 pairs = 8 content entries)
+    HISTORY_MAX_AGE_MINUTES = int(os.getenv("HISTORY_MAX_AGE_MINUTES", "0")) # Max age of history entries in minutes. 0 or less to disable.
     MAX_MEMORIES_PER_USER = 32 # Max number of memories to store and load per user
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -52,6 +54,9 @@ memory_manager = None
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+class HistoryEntry(NamedTuple):
+    timestamp: datetime
+    content: types.Content
 class PromptManager:
     @staticmethod
     def load_combined_system_prompt() -> str:
@@ -134,18 +139,32 @@ class ChatHistoryManager:
             logger.error("❌ Attempted to get history filepath with neither guild_id nor user_id.")
             filename = "unknown_history.history.json"
         return os.path.join(Config.HISTORY_DIR, filename)
-    async def load_history(self, guild_id: int | None, user_id: int | None = None) -> list[types.Content]:
+    async def load_history(self, guild_id: int | None, user_id: int | None = None) -> TypingList[HistoryEntry]:
         filepath = self._get_history_filepath(guild_id, user_id)
-        history_list = []
+        loaded_history_entries: TypingList[HistoryEntry] = []
         async with self.locks[filepath]:
             if not os.path.exists(filepath):
                 logger.info(f"💾 No history file found. Starting fresh.\nFilepath: {filepath}")
                 return []
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
-                    raw_history = json.load(f)
-                    reconstructed_history = []
-                    for item_dict in raw_history:
+                    raw_history_list = json.load(f)
+                    if not isinstance(raw_history_list, list):
+                        logger.error(f"❌ History file content is not a list. Starting fresh.\nFilepath: {filepath}")
+                        return []
+                    for item_wrapper_dict in raw_history_list:
+                        if not isinstance(item_wrapper_dict, dict) or "timestamp" not in item_wrapper_dict or "content" not in item_wrapper_dict:
+                            logger.warning(f"⚠️ Skipping malformed history item wrapper in {filepath}: {item_wrapper_dict}")
+                            continue
+                        timestamp_str = item_wrapper_dict["timestamp"]
+                        item_dict = item_wrapper_dict["content"]
+                        try:
+                            entry_timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                            if entry_timestamp.tzinfo is None:
+                                entry_timestamp = entry_timestamp.replace(tzinfo=timezone.utc)
+                        except ValueError:
+                            logger.warning(f"⚠️ Skipping history item with invalid timestamp format in {filepath}: {timestamp_str}")
+                            continue
                         loaded_parts = []
                         for part_dict in item_dict.get("parts", []):
                             if "text" in part_dict:
@@ -169,30 +188,50 @@ class ChatHistoryManager:
                         if role not in ("user", "model"):
                             logger.warning(f"⚠️ Invalid role found in history file. Defaulting to 'user'.\nRole:\n{role}")
                             role = "user"
-                        reconstructed_history.append(types.Content(role=role, parts=loaded_parts))
-                    history_list = reconstructed_history
-                logger.info(f"💾 Loaded {len(history_list)} history entries from {filepath}.")
+
+                        reconstructed_content = types.Content(role=role, parts=loaded_parts)
+                        loaded_history_entries.append(HistoryEntry(timestamp=entry_timestamp, content=reconstructed_content))
+                logger.info(f"💾 Loaded {len(loaded_history_entries)} raw history entries from {filepath}.")
             except json.JSONDecodeError:
                 logger.error(f"❌ Could not decode JSON from history file. Starting with fresh history for this session.\nFilepath: {filepath}")
                 return []
             except Exception as e:
                 logger.error(f"❌ Error loading history from file.\nFilepath: {filepath}\nError:\n{e}", exc_info=True)
                 return []
-        max_entries = Config.MAX_HISTORY_TURNS * 2
-        if len(history_list) > max_entries:
-            history_list = history_list[-max_entries:]
-            logger.info(f"💾 History truncated.\nEntries: {len(history_list)}\nMax Entries: {max_entries}")
-        return history_list
-    async def save_history(self, guild_id: int | None, user_id: int | None, history: list[types.Content]):
+
+        if Config.HISTORY_MAX_AGE_MINUTES > 0:
+            now_utc = datetime.now(timezone.utc)
+            min_age_delta = timedelta(minutes=Config.HISTORY_MAX_AGE_MINUTES)
+            age_filtered_entries = [
+                entry for entry in loaded_history_entries
+                if (now_utc - entry.timestamp) <= min_age_delta
+            ]
+            if len(age_filtered_entries) < len(loaded_history_entries):
+                logger.info(f"💾 History filtered by age ({Config.HISTORY_MAX_AGE_MINUTES} min): {len(loaded_history_entries)} -> {len(age_filtered_entries)} entries.")
+            loaded_history_entries = age_filtered_entries
+
+
+        max_content_entries = Config.MAX_HISTORY_TURNS * 2
+        if len(loaded_history_entries) > max_content_entries:
+            final_history_entries = loaded_history_entries[-max_content_entries:]
+            logger.info(f"💾 History truncated by turn count: {len(loaded_history_entries)} -> {len(final_history_entries)} entries (max: {max_content_entries}).")
+            loaded_history_entries = final_history_entries
+
+        return loaded_history_entries
+    async def save_history(self, guild_id: int | None, user_id: int | None, history_entries: TypingList[HistoryEntry]):
         filepath = self._get_history_filepath(guild_id, user_id)
-        max_entries = Config.MAX_HISTORY_TURNS * 2
-        if len(history) > max_entries:
-            history_to_save = history[-max_entries:]
+
+        max_content_entries = Config.MAX_HISTORY_TURNS * 2
+        if len(history_entries) > max_content_entries:
+            entries_to_save = history_entries[-max_content_entries:]
         else:
-            history_to_save = history
-        logger.info(f"💾 Saving {len(history_to_save)} history entries to {filepath}.")
-        serializable_history = []
-        for content_item in history_to_save:
+            entries_to_save = history_entries
+
+        logger.info(f"💾 Saving {len(entries_to_save)} history entries to {filepath}.")
+
+        serializable_history_wrappers = []
+        for entry in entries_to_save:
+            content_item = entry.content
             parts_list = []
             for part in content_item.parts:
                 if part.text is not None:
@@ -211,15 +250,22 @@ class ChatHistoryManager:
                             "file_uri": part.file_data.file_uri
                         }
                     })
-            serializable_history.append({
+
+            content_dict = {
                 "role": content_item.role,
                 "parts": parts_list
-            })
+            }
+            entry_wrapper_dict = {
+                "timestamp": entry.timestamp.isoformat(),
+                "content": content_dict
+            }
+            serializable_history_wrappers.append(entry_wrapper_dict)
+
         temp_filepath = filepath + ".tmp"
         async with self.locks[filepath]:
             try:
                 with open(temp_filepath, "w", encoding="utf-8") as f:
-                    json.dump(serializable_history, f, indent=2)
+                    json.dump(serializable_history_wrappers, f, indent=2)
                 os.replace(temp_filepath, filepath)
                 logger.info(f"💾 History successfully saved to {filepath}.")
             except Exception as e:
@@ -976,24 +1022,35 @@ class MessageProcessor:
             return
         async with message.channel.typing():
             try:
-                history_list = await chat_history_manager.load_history(guild_id_for_history, user_id_for_dm_history)
+
+                loaded_history_entries: TypingList[HistoryEntry] = await chat_history_manager.load_history(guild_id_for_history, user_id_for_dm_history)
+
+
+                history_for_gemini_session: TypingList[types.Content] = [entry.content for entry in loaded_history_entries]
+
+
+                current_session_history_entries: TypingList[HistoryEntry] = list(loaded_history_entries)
                 combined_system_prompt = PromptManager.load_combined_system_prompt()
                 gemini_gen_config = GeminiConfigManager.create_config(combined_system_prompt)
+
                 current_chat_session = gemini_client.aio.chats.create(
                     model=Config.MODEL_ID,
                     config=gemini_gen_config,
-                    history=history_list
+                    history=history_for_gemini_session
                 )
+
                 metadata_header = PromptManager.generate_per_message_metadata_header(message)
                 reply_chain_data = await ReplyChainProcessor.get_chain(message)
                 gemini_parts_for_prompt, is_substantively_empty_beyond_context = await MessageProcessor._build_gemini_prompt_parts(
                     message, metadata_header, content_for_llm, reply_chain_data
                 )
-                if is_substantively_empty_beyond_context and not history_list:
+
+                if is_substantively_empty_beyond_context and not history_for_gemini_session:
                     logger.info("💬 Message content was substantively empty (beyond context), and no history. Sending default greeting.")
                     bot_response_msg = await MessageSender.send(message,"Hello! How can I help you today?",None,existing_bot_message_to_edit=bot_message_to_edit)
                     if bot_response_msg: active_bot_responses[message.id] = bot_response_msg
                     return
+
                 final_api_parts: list[types.Part] = []
                 for p_item in gemini_parts_for_prompt:
                     if isinstance(p_item, str):
@@ -1003,25 +1060,41 @@ class MessageProcessor:
                     else:
                         logger.warning(f"⚠️ Encountered unexpected item type ({type(p_item)}) when finalizing parts for Gemini API. Skipping.\nItem:\n{str(p_item)}")
                         continue
+
                 if not final_api_parts:
                     logger.error("❌ All prompt parts were unexpectedly skipped or invalid before sending to Gemini. Aborting this request.")
                     error_reply_msg = await MessageSender.send(message, "❌ I encountered an internal error preparing your request.", None, existing_bot_message_to_edit=bot_message_to_edit)
                     if error_reply_msg: active_bot_responses[message.id] = error_reply_msg
                     return
-                logger.info(f"🧠 Sending parts to Gemini. Part Count: {len(final_api_parts)}. History Length (turns): {len(history_list)//2}.")
+
+                logger.info(f"🧠 Sending parts to Gemini. Part Count: {len(final_api_parts)}. History Length (Content objects for API): {len(history_for_gemini_session)}.")
                 response_from_gemini = await current_chat_session.send_message(final_api_parts)
+
+
                 user_turn_content = types.Content(role="user", parts=final_api_parts)
-                history_list.append(user_turn_content)
+                current_session_history_entries.append(
+                    HistoryEntry(timestamp=datetime.now(timezone.utc), content=user_turn_content)
+                )
+
                 if response_from_gemini.candidates and response_from_gemini.candidates[0].content:
                     model_turn_content = response_from_gemini.candidates[0].content
                     if model_turn_content.role != "model":
                         logger.warning(f"🧠 Model response content had unexpected role. Forcing to 'model'.\nActual Role:\n{model_turn_content.role}")
                         model_turn_content = types.Content(role="model", parts=model_turn_content.parts)
-                    history_list.append(model_turn_content)
+
+                    current_session_history_entries.append(
+                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_turn_content)
+                    )
                 else:
                     logger.error("❌ No valid content found in Gemini response to form model's turn in history.")
-                    history_list.append(types.Content(role="model", parts=[types.Part(text="[Error: No response from model or malformed response]")]))
-                await chat_history_manager.save_history(guild_id_for_history, user_id_for_dm_history, history_list)
+
+                    error_model_content = types.Content(role="model", parts=[types.Part(text="[Error: No response from model or malformed response]")])
+                    current_session_history_entries.append(
+                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=error_model_content)
+                    )
+
+                await chat_history_manager.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
+
                 raw_response_text = ResponseExtractor.extract_text(response_from_gemini)
                 user_id_for_memory_ops = message.author.id
                 response_lines = raw_response_text.splitlines()
@@ -1029,11 +1102,13 @@ class MessageProcessor:
                 speak_content_for_tts = None
                 speak_style_for_tts = None
                 speak_tag_already_processed = False
+
                 logger.debug(f"🧠 Starting tag processing for AI response. Raw response lines: {len(response_lines)}. User: {user_id_for_memory_ops}")
                 for line_num, line_content in enumerate(response_lines):
                     stripped_line = line_content.strip()
                     if not stripped_line and not content_lines_for_discord:
                         continue
+
                     mem_add_match = MessageProcessor.MEMORY_ADD_PATTERN.fullmatch(stripped_line)
                     if mem_add_match:
                         memory_to_add = mem_add_match.group(1).strip()
@@ -1042,6 +1117,7 @@ class MessageProcessor:
                         else:
                             logger.warning(f"🧠 Found [MEMORY:ADD] tag with empty content from AI for user {user_id_for_memory_ops}.")
                         continue
+
                     mem_rem_match = MessageProcessor.MEMORY_REMOVE_PATTERN.fullmatch(stripped_line)
                     if mem_rem_match:
                         memory_id_str_to_remove = mem_rem_match.group(1).strip()
@@ -1051,6 +1127,7 @@ class MessageProcessor:
                         except ValueError:
                             logger.warning(f"🧠 Invalid memory ID '{memory_id_str_to_remove}' in [MEMORY:REMOVE] tag from AI for user {user_id_for_memory_ops}.")
                         continue
+
                     if not speak_tag_already_processed:
                         speak_tag_match = MessageProcessor.SPEAK_TAG_PATTERN.fullmatch(stripped_line)
                         if speak_tag_match:
@@ -1059,10 +1136,13 @@ class MessageProcessor:
                             speak_tag_already_processed = True
                             logger.info(f"🎤 Found [SPEAK] tag from AI response for user {user_id_for_memory_ops}. Style: {speak_style_for_tts}, Content: '{speak_content_for_tts}'")
                             continue
+
                     content_lines_for_discord.extend(response_lines[line_num:])
                     logger.debug(f"💬 Tag processing loop ended. Found {len(content_lines_for_discord)} content lines for Discord message.")
                     break
+
                 final_text_for_discord = "\n".join(content_lines_for_discord).strip()
+
                 ogg_audio_data, audio_duration, audio_waveform_b64 = None, 0.0, Config.DEFAULT_WAVEFORM_PLACEHOLDER
                 if speak_content_for_tts:
                     if speak_content_for_tts.strip():
@@ -1097,6 +1177,10 @@ async def on_ready():
     logger.info(f"🧠 Using Main Gemini Model: {Config.MODEL_ID}")
     logger.info(f"🗣️ Using TTS Gemini Model: {Config.TTS_MODEL_ID} with Voice: {Config.VOICE_NAME}")
     logger.info(f"💾 Chat History Max Turns (User+Assistant pairs): {Config.MAX_HISTORY_TURNS}")
+    if Config.HISTORY_MAX_AGE_MINUTES > 0:
+        logger.info(f"💾 Chat History Max Age (Minutes): {Config.HISTORY_MAX_AGE_MINUTES}")
+    else:
+        logger.info(f"💾 Chat History Max Age: Disabled")
     logger.info(f"🧠 User Memory Max Entries: {Config.MAX_MEMORIES_PER_USER}")
     try:
         activity_name = f"messages | {bot.command_prefix}reset | {bot.command_prefix}forget"
@@ -1135,7 +1219,7 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     is_reply_to_bot_after = False
     if after.reference and after.reference.message_id:
         try:
-            if hasattr(after.channel, 'fetch_message'): # Ensure channel supports fetching
+            if hasattr(after.channel, 'fetch_message'):
                 referenced_message_after = await after.channel.fetch_message(after.reference.message_id)
                 if referenced_message_after.author == bot.user:
                     is_reply_to_bot_after = True
@@ -1143,9 +1227,11 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
                 logger.warning(f"⚠️ Channel type {type(after.channel)} for message {after.id} lacks fetch_message method during edit check.")
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             logger.debug(f"🔍 Could not fetch referenced message for edit check (Msg ID: {after.id}, Ref ID: {after.reference.message_id}). Error: {e}")
+
     content_lower_after = after.content.lower().strip()
     is_reset_command_after = content_lower_after.startswith(f"{bot.command_prefix}reset")
     is_forget_command_after = content_lower_after.startswith(f"{bot.command_prefix}forget")
+
     should_process_after = is_dm_after or is_mentioned_after or is_reply_to_bot_after or is_reset_command_after or is_forget_command_after
     existing_bot_response = active_bot_responses.get(after.id)
     if should_process_after:
@@ -1182,17 +1268,21 @@ def setup_logging():
     app_logger = logging.getLogger("Bard")
     app_logger.setLevel(logging.INFO)
     app_logger.propagate = False
+
     console_handler = logging.StreamHandler()
     file_handler = logging.FileHandler('.log', mode='a', encoding='utf-8')
+
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s')
     console_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
+
     app_logger.addHandler(console_handler)
     app_logger.addHandler(file_handler)
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("discord.http").setLevel(logging.WARNING)
     logging.getLogger("google.genai").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
     app_logger.info("⚙️ Logging configured.")
 def main():
     global gemini_client, chat_history_manager, memory_manager
