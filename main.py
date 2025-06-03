@@ -741,6 +741,8 @@ class MessageSender:
         return sent_text_message or sent_audio_file_message
 class AttachmentProcessor:
     """Downloads Discord attachments and prepares them for Gemini."""
+    _gemini_file_cache: dict[int, types.FileData] = {}
+    _attachment_upload_locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
     @staticmethod
     async def _download_and_prepare_attachment(attachment: discord.Attachment) -> tuple[io.BytesIO, str, str] | None:
         try:
@@ -759,37 +761,51 @@ class AttachmentProcessor:
             logger.error(f"❌ Error downloading attachment.\nFilename: {attachment.filename}\nURL: {attachment.url}\nError:\n{e}", exc_info=True)
             return None
     @staticmethod
-    async def _upload_to_file_api(file_like_object: io.BytesIO, mime_type: str, display_name: str) -> types.File | types.Part:
-        global gemini_client
+    async def _upload_to_file_api(attachment: discord.Attachment) -> types.Part:
+        global gemini_client, logger
         if not gemini_client:
-            logger.error("❌ Gemini client not initialized. Cannot upload file to File API.")
-            return types.Part(text=f"[Attachment: {display_name} - Gemini client not ready for upload]")
-        try:
-            file_like_object.seek(0)
-            uploaded_file = await gemini_client.aio.files.upload(
-                file=file_like_object,
-                config=types.UploadFileConfig(mime_type=mime_type, display_name=display_name)
-            )
-            logger.info(f"📎 Successfully uploaded file to Gemini File API.\nDisplay Name: {display_name}\nMIME Type: {mime_type}\nFile URI: {uploaded_file.uri}")
-            return uploaded_file
-        except Exception as e:
-            logger.error(f"❌ Error uploading file to Gemini File API.\nDisplay Name: {display_name}\nMIME Type: {mime_type}\nError:\n{e}", exc_info=True)
-            return types.Part(text=f"[Attachment: {display_name} - Gemini File API Upload failed. Error: {str(e)}]")
+            logger.error("❌ Gemini client not initialized. Cannot process attachment for File API.")
+            return types.Part(text=f"[Attachment: {attachment.filename} - Gemini client not ready for upload]")
+        cached_file_data = AttachmentProcessor._gemini_file_cache.get(attachment.id)
+        if cached_file_data:
+            logger.info(f"📎 Cache HIT for attachment ID {attachment.id}. Using URI: {cached_file_data.file_uri}")
+            return types.Part(file_data=cached_file_data)
+        lock = AttachmentProcessor._attachment_upload_locks[attachment.id]
+        async with lock:
+            cached_file_data_in_lock = AttachmentProcessor._gemini_file_cache.get(attachment.id)
+            if cached_file_data_in_lock:
+                logger.info(f"📎 Cache HIT (after lock) for attachment ID {attachment.id}. Using URI: {cached_file_data_in_lock.file_uri}")
+                return types.Part(file_data=cached_file_data_in_lock)
+            logger.info(f"📎 Cache MISS for attachment ID {attachment.id}. Proceeding with download and upload.")
+            prepared_data = await AttachmentProcessor._download_and_prepare_attachment(attachment)
+            if not prepared_data:
+                return types.Part(text=f"[Attachment: {attachment.filename} - Download or preparation failed.]")
+            file_io, mime, fname = prepared_data
+            try:
+                file_io.seek(0)
+                uploaded_gemini_file_obj = await gemini_client.aio.files.upload(
+                    file=file_io,
+                    config=types.UploadFileConfig(mime_type=mime, display_name=fname)
+                )
+                logger.info(f"📎 Successfully uploaded file to Gemini File API.\nDisplay Name: {fname}\nMIME Type: {mime}\nFile URI: {uploaded_gemini_file_obj.uri}")
+                new_file_data_to_cache = types.FileData(
+                    mime_type=uploaded_gemini_file_obj.mime_type,
+                    file_uri=uploaded_gemini_file_obj.uri
+                )
+                AttachmentProcessor._gemini_file_cache[attachment.id] = new_file_data_to_cache
+                logger.info(f"📎 Successfully CACHED attachment ID {attachment.id}. URI: {new_file_data_to_cache.file_uri}")
+                return types.Part(file_data=new_file_data_to_cache)
+            except Exception as e:
+                logger.error(f"❌ Error uploading file to Gemini File API.\nDisplay Name: {fname}\nMIME Type: {mime}\nError:\n{e}", exc_info=True)
+                return types.Part(text=f"[Attachment: {fname} - Gemini File API Upload failed. Error: {str(e)}]")
     @staticmethod
     async def process_discord_attachments(attachments: list[discord.Attachment]) -> list[types.Part]:
         parts: list[types.Part] = []
-        if not attachments: return parts
-        for attachment in attachments:
-            prepared_data = await AttachmentProcessor._download_and_prepare_attachment(attachment)
-            if prepared_data:
-                file_io, mime, fname = prepared_data
-                upload_result = await AttachmentProcessor._upload_to_file_api(file_io, mime, fname)
-                if isinstance(upload_result, types.File):
-                    parts.append(types.Part(file_data=types.FileData(mime_type=upload_result.mime_type, file_uri=upload_result.uri)))
-                elif isinstance(upload_result, types.Part):
-                    parts.append(upload_result)
-            else:
-                parts.append(types.Part(text=f"[Attachment: {attachment.filename} - Download or preparation failed.]"))
+        if not attachments:
+            return parts
+        for attachment_obj in attachments:
+            file_part = await AttachmentProcessor._upload_to_file_api(attachment_obj)
+            parts.append(file_part)
         return parts
 class ReplyChainProcessor:
     """Processes message reply chains to provide context to the LLM."""
@@ -933,7 +949,7 @@ class MessageProcessor:
             if message.attachments:
                  parts.append(types.Part(text=f"{current_message_text_placeholder} [See attached files]"))
         if message.attachments:
-            logger.info(f"📎 Processing {len(message.attachments)} attachment(s) from current message.\nMessage ID: {message.id}")
+            logger.info(f"📎 Processing {len(message.attachments)} attachment(s) from current message.")
             current_message_attachment_parts = await AttachmentProcessor.process_discord_attachments(list(message.attachments))
             if current_message_attachment_parts: parts.extend(p for p in current_message_attachment_parts if p)
         final_parts = [p for p in parts if p and not (isinstance(p, str) and not p.strip())]
