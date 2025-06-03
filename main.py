@@ -1036,7 +1036,7 @@ class MessageProcessor:
                     error_reply_msg = await MessageSender.send(message, "❌ I encountered an internal error preparing your request.", None, existing_bot_message_to_edit=bot_message_to_edit)
                     if error_reply_msg: active_bot_responses[message.id] = error_reply_msg
                     return
-                logger.info(f"🧠 Sending parts to Gemini. Part Count: {len(final_api_parts)}. History Length (Content objects for API): {len(history_for_gemini_session)}.")
+                logger.info(f"🧠 Sending parts to Gemini. Part Count: {len(final_api_parts)}. History Length: {len(history_for_gemini_session)}.")
                 response_from_gemini = await current_chat_session.send_message(final_api_parts)
                 user_turn_content = types.Content(role="user", parts=final_api_parts)
                 current_session_history_entries.append(
@@ -1130,7 +1130,7 @@ async def on_ready():
     logger.info(f"🎉 Logged in as {bot.user.name} (ID: {bot.user.id})")
     logger.info(f"🔗 Discord.py Version: {discord.__version__}")
     logger.info(f"🧠 Using Main Gemini Model: {Config.MODEL_ID}")
-    logger.info(f"🗣️ Using TTS Gemini Model: {Config.MODEL_ID_TTS} with Voice: {Config.VOICE_NAME}")
+    logger.info(f"🎤 Using TTS Gemini Model: {Config.MODEL_ID_TTS} with Voice: {Config.VOICE_NAME}")
     logger.info(f"💾 Chat History Max Turns (User+Assistant pairs): {Config.MAX_HISTORY_TURNS}")
     if Config.MAX_HISTORY_AGE > 0:
         logger.info(f"💾 Chat History Max Age (Minutes): {Config.MAX_HISTORY_AGE}")
@@ -1174,31 +1174,36 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     is_reply_to_bot_after = False
     if after.reference and after.reference.message_id:
         try:
-            if hasattr(after.channel, 'fetch_message'):
+            if hasattr(after.channel, 'fetch_message'): # Ensure channel supports fetching
                 referenced_message_after = await after.channel.fetch_message(after.reference.message_id)
                 if referenced_message_after.author == bot.user:
                     is_reply_to_bot_after = True
             else:
-                logger.warning(f"⚠️ Channel type {type(after.channel)} for message {after.id} lacks fetch_message method during edit check.")
+                logger.warning(f"⚠️ Channel type {type(after.channel)} for message {after.id} lacks fetch_message method during edit qualification check.")
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-            logger.debug(f"🔍 Could not fetch referenced message for edit check (Msg ID: {after.id}, Ref ID: {after.reference.message_id}). Error: {e}")
+            logger.debug(f"🔍 Could not fetch referenced message for edit qualification check (Msg ID: {after.id}, Ref ID: {after.reference.message_id}). Error: {e}")
     content_lower_after = after.content.lower().strip()
     is_reset_command_after = content_lower_after.startswith(f"{bot.command_prefix}reset")
     is_forget_command_after = content_lower_after.startswith(f"{bot.command_prefix}forget")
     should_process_after = is_dm_after or is_mentioned_after or is_reply_to_bot_after or is_reset_command_after or is_forget_command_after
     existing_bot_response = active_bot_responses.get(after.id)
-    if should_process_after:
-        logger.info(f"📥 Edited message (ID: {after.id}) qualifies for processing. Reprocessing.")
-        await MessageProcessor.process(after, bot_message_to_edit=existing_bot_response)
-    else:
+    if not should_process_after:
         if existing_bot_response:
-            logger.info(f"🗑️ Edited message (ID: {after.id}) no longer qualifies. Deleting previous bot response (ID: {existing_bot_response.id}).")
+            logger.info(f"🗑️ Edited message (ID: {after.id}) no longer qualifies for bot processing. Deleting previous bot response (ID: {existing_bot_response.id}).")
             try:
                 await existing_bot_response.delete()
             except discord.HTTPException as e:
                 logger.warning(f"⚠️ Could not delete previous bot response (ID: {existing_bot_response.id}) for edited message that no longer qualifies. Error: {e}")
             finally:
                 active_bot_responses.pop(after.id, None)
+        return
+    if before.content == after.content and \
+       before.attachments == after.attachments and \
+       not before.embeds and after.embeds:
+        logger.info(f"ℹ️ Edit on qualifying message (ID: {after.id}) ignored: likely initial embed generation by Discord. No reprocessing needed.")
+        return
+    logger.info(f"📥 Edited message (ID: {after.id}) qualifies for processing and is a substantive edit. Reprocessing.")
+    await MessageProcessor.process(after, bot_message_to_edit=existing_bot_response)
 @bot.event
 async def on_message_delete(message: discord.Message):
     if message.id in active_bot_responses:
