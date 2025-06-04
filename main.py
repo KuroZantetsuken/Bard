@@ -1187,7 +1187,7 @@ class MessageProcessor:
             try:
                 loaded_history_entries: TypingList[HistoryEntry] = await chat_history_manager.load_history(guild_id_for_history, user_id_for_dm_history)
                 history_for_gemini_session: TypingList[types.Content] = []
-                if loaded_history_entries: # Check if there's any history loaded
+                if loaded_history_entries:
                     history_for_gemini_session = [
                         entry.content for entry in loaded_history_entries
                         if entry.content.role in ("user", "model")
