@@ -564,7 +564,7 @@ class TTSGenerator:
                 )
             )
             response = await gemini_client.aio.models.generate_content(
-                model=Config.MODEL_ID_TTS, contents=text_for_tts, generation_config=speech_generation_config
+                model=Config.MODEL_ID_TTS, contents=text_for_tts, config=speech_generation_config
             )
             wav_data = None
             if (response.candidates and response.candidates[0].content and
