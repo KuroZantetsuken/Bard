@@ -1268,7 +1268,7 @@ class MessageProcessor:
                                     logger.info("🎤 TTS successful for 'speak_message'.")
                                 else:
                                     logger.warning(f"🎤 TTS failed for 'speak_message'. Intended text: '{text_to_speak_arg}'")
-                                    text_from_gemini_for_discord_parts.insert(0, f"[Notice: TTS failed for: \"{text_to_speak_arg}\"]")
+                                    text_from_gemini_for_discord_parts.insert(0, f"❌ TTS failed for: \"{text_to_speak_arg}\"]")
                             else:
                                 logger.warning("🧠 'speak_message' called without 'text_to_speak'.")
                         elif function_name == "add_user_memory":
@@ -1320,7 +1320,7 @@ class MessageProcessor:
                                         config=tooling_gen_config,
                                     )
                                 tooling_text_result = ResponseExtractor.extract_text(tooling_response)
-                                logger.info(f"🛠️ Built-in tools call result: {tooling_text_result[:200]}{'...' if len(tooling_text_result) > 200 else ''}")
+                                logger.info(f"🛠️ Built-in tools call result: {tooling_text_result}")
                                 func_resp = types.Part.from_function_response(
                                     name=function_name, response={"tool_output": tooling_text_result if tooling_text_result else "No textual output from tools."}
                                 )
@@ -1375,7 +1375,7 @@ class MessageProcessor:
                                                 current_session_history_entries.append(HistoryEntry(timestamp=datetime.now(timezone.utc), content=types.Content(role="tool", parts=[part, types.Part(text="[TTS Executed as follow-up]") ])))
                                             else:
                                                 logger.warning(f"🎤 TTS failed for follow-up 'speak_message'. Text: '{speak_text}'")
-                                                text_from_gemini_for_discord_parts.insert(0, f"[Notice: Follow-up TTS failed for: \"{speak_text}\"]")
+                                                text_from_gemini_for_discord_parts.insert(0, f"❌ Follow-up TTS failed for: \"{speak_text}\"]")
                                     else:
                                          logger.warning(f"🧠 Model attempted non-speak function call ({part.function_call.name}) after function results. Ignoring.")
                         else:
