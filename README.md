@@ -4,26 +4,27 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 
 ## Features
 - **Multimodal:** Understands text, images, audio, videos, and documents.
-- **Text-to-Speech:** Can generate native Discord voice messages. Supports different speech styles (via Function Calling).
-    - Prompt using natural language.
 - **History:** Short-term memory per server.
-    - Only accessible in their respective server.
+    - Only accessible in the respective server, by any user.
     - Saved locally.
     - Reset with `!reset @Bot`.
-- **Memory:** Long-term memory per user (via Function Calling).
-    - Only accessible by the respective user, in any server.
-    - Saved locally.
-    - Reset with `!forget @Bot`.
-- **Google Search & URL Context:** Accesses Google Search for current information and can analyze content from URLs.
+- **Function Calling:** Uses Gemini's function calling feature for robust tool usage.
+    - **Memory:** Long-term memory per user.
+        - Only accessible by the respective user, in any server.
+        - Saved locally.
+        - Reset with `!forget @Bot`.
+    - **Text-to-Speech:** Can generate native Discord voice messages. Supports different speech styles.
+        - Request using natural language.
+    - **Google Search & URL Context:** Accesses Google Search or web URLs using native tools.
 - **Context-Aware:** Understands message reply chains along with any attachments.
 - **Dynamic:** Adapts its responses if the user edits or deletes their messages.
-- **Function Calling:** Uses Gemini's function calling feature for more robust handling of speech synthesis and memory operations.
 
 ## Usage
 
 ### **Prerequisites:**
-- Python 3.10+.
-- FFmpeg: For native voice message processing (`wav` to `ogg`).
+- Python 3.10+
+- FFmpeg
+- requirements.txt
 
 ### **Clone the Repository:**
     ```bash
@@ -41,7 +42,6 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 - Open `.env` and fill in the required values:
     - `DISCORD_BOT_TOKEN`: Your Discord bot token.
     - `GEMINI_API_KEY`: Your Gemini API key.
-- Open `main.py` and edit the variables at the top found in the `Config` class.
 - Edit `prompts/personality.prompt.md` to define the bot's personality.
 - `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities, including function calling. Take care in editing it.
 
