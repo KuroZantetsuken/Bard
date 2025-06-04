@@ -181,9 +181,19 @@ class ChatHistoryManager:
                                     mime_type=part_dict["file_data"]["mime_type"],
                                     file_uri=part_dict["file_data"]["file_uri"]
                                 )))
+                            elif "function_call" in part_dict:
+                                loaded_parts.append(types.Part(function_call=types.FunctionCall(
+                                    name=part_dict["function_call"]["name"],
+                                    args=part_dict["function_call"]["args"]
+                                )))
+                            elif "function_response" in part_dict:
+                                loaded_parts.append(types.Part(function_response=types.FunctionResponse(
+                                    name=part_dict["function_response"]["name"],
+                                    response=part_dict["function_response"]["response"]
+                                )))
                         role = item_dict.get("role", "user")
-                        if role not in ("user", "model"):
-                            logger.warning(f"⚠️ Invalid role found in history file. Defaulting to 'user'.\nRole:\n{role}")
+                        if role not in ("user", "model", "tool"):
+                            logger.warning(f"⚠️ Invalid role found in history file: {role}. Defaulting to 'user'.")
                             role = "user"
                         reconstructed_content = types.Content(role=role, parts=loaded_parts)
                         loaded_history_entries.append(HistoryEntry(timestamp=entry_timestamp, content=reconstructed_content))
@@ -237,6 +247,20 @@ class ChatHistoryManager:
                         "file_data": {
                             "mime_type": part.file_data.mime_type,
                             "file_uri": part.file_data.file_uri
+                        }
+                    })
+                elif part.function_call is not None:
+                    parts_list.append({
+                        "function_call": {
+                            "name": part.function_call.name,
+                            "args": dict(part.function_call.args) if part.function_call.args else {}
+                        }
+                    })
+                elif part.function_response is not None:
+                     parts_list.append({
+                        "function_response": {
+                            "name": part.function_response.name,
+                            "response": dict(part.function_response.response) if part.function_response.response else {}
                         }
                     })
             content_dict = {
@@ -540,7 +564,7 @@ class TTSGenerator:
                 )
             )
             response = await gemini_client.aio.models.generate_content(
-                model=Config.MODEL_ID_TTS, contents=text_for_tts, config=speech_generation_config
+                model=Config.MODEL_ID_TTS, contents=text_for_tts, generation_config=speech_generation_config
             )
             wav_data = None
             if (response.candidates and response.candidates[0].content and
@@ -636,7 +660,7 @@ class MessageSender:
                                              not (existing_bot_message_to_edit.flags and existing_bot_message_to_edit.flags.value & 8192)
                     if is_simple_text_message:
                         await existing_bot_message_to_edit.edit(content=text_content[:Config.MAX_MESSAGE_LENGTH])
-                        logger.info(f"✏️ Edited existing bot message. Content:\n{text_content}")
+                        logger.info(f"✏️ Edited existing bot message with text. Content:\n{text_content}")
                         return existing_bot_message_to_edit
                 except discord.HTTPException as e:
                     logger.error(f"❌ Failed to edit bot message with text. Falling back to delete and resend.\nID: {existing_bot_message_to_edit.id}\nError:\n{e}", exc_info=True)
@@ -675,9 +699,15 @@ class MessageSender:
                     discord_cdn_filename = attachment_metadata["upload_filename"]
                     send_message_api_url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
                     send_message_payload = {
-                        "content": "", "flags": 8192,
-                        "attachments": [{"id": "0", "filename": "voice_message.ogg", "uploaded_filename": discord_cdn_filename,
-                                         "duration_secs": round(duration_secs, 2), "waveform": waveform_b64}],
+                        "content": "",
+                        "flags": 8192,
+                        "attachments": [{
+                            "id": "0",
+                            "filename": "voice_message.ogg",
+                            "uploaded_filename": discord_cdn_filename,
+                            "duration_secs": round(duration_secs, 2),
+                            "waveform": waveform_b64
+                        }],
                         "message_reference": {"message_id": str(message_to_reply_to.id)},
                         "allowed_mentions": {"parse": [], "replied_user": False}
                     }
@@ -689,7 +719,7 @@ class MessageSender:
                             if message_id:
                                 try:
                                     sent_message = await message_to_reply_to.channel.fetch_message(message_id)
-                                    logger.info(f"🎤 Sent native Discord voice message.\nID: {sent_message.id}\nTo: {message_to_reply_to.author.name}\nIn Channel: #{message_to_reply_to.channel}")
+                                    logger.info(f"🎤 Sent native Discord voice message. ID: {sent_message.id} To: {message_to_reply_to.author.name} In Channel: #{message_to_reply_to.channel}")
                                     return sent_message
                                 except discord.HTTPException:
                                     logger.warning("🎤 Sent native voice message, but failed to fetch the discord.Message object afterwards.")
@@ -702,7 +732,7 @@ class MessageSender:
                     try:
                         discord_file = discord.File(temp_ogg_file_path_for_upload, "voice_response.ogg")
                         fallback_msg = await message_to_reply_to.reply(file=discord_file)
-                        logger.info(f"📎 Sent voice response as .ogg file attachment (fallback).\nID: {fallback_msg.id}")
+                        logger.info(f"📎 Sent voice response as .ogg file attachment (fallback). ID: {fallback_msg.id}")
                         if text_content and text_content.strip():
                              await MessageSender._send_text_reply(message_to_reply_to, text_content)
                         return fallback_msg
@@ -731,7 +761,7 @@ class MessageSender:
                 else:
                     sent_audio_file_message = await message_to_reply_to.reply(file=discord_file)
                 if sent_audio_file_message:
-                    logger.info(f"📎 Sent voice response as .ogg file attachment.\nID: {sent_audio_file_message.id}")
+                    logger.info(f"📎 Sent voice response as .ogg file attachment. ID: {sent_audio_file_message.id}")
             except Exception as e:
                 logger.error(f"❌ Failed to send .ogg file as attachment.\nError:\n{e}", exc_info=True)
             finally:
@@ -853,10 +883,117 @@ class ReplyChainProcessor:
 class GeminiConfigManager:
     """Manages the generation configuration for Gemini API calls."""
     @staticmethod
-    def create_config(system_instruction_str: str) -> types.GenerateContentConfig:
-        """Creates the Gemini generation configuration using a provided system instruction string."""
+    def create_main_config(system_instruction_str: str) -> types.GenerateContentConfig:
+        """
+        Creates the Gemini generation configuration for the main chat interaction,
+        enabling only custom functions.
+        """
+        speak_message_func = types.FunctionDeclaration(
+            name="speak_message",
+            description=(
+                "Generates an audio voice message from the provided text, optionally with a specified speaking style. "
+                "This function should be called if the user explicitly asks for a voice/audio response, or if a spoken "
+                "response is most appropriate. The text provided to be spoken will NOT appear in your chat response to the user; "
+                "your chat response should be separate and only contain acknowledgements or related information, not the spoken text itself."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "text_to_speak": types.Schema(
+                        type=types.Type.STRING,
+                        description="The exact and complete text content to be converted into a voice message. This text will NOT be part of your regular chat reply."
+                    ),
+                    "style": types.Schema(
+                        type=types.Type.STRING,
+                        description="Optional. The speaking style (e.g., CHEERFUL, SAD, ANGRY, EXCITED, FRIENDLY, HOPEFUL, POLITE, SERIOUS, SOMBER, WHISPERING). If omitted, a neutral voice is used."
+                    ),
+                },
+                required=["text_to_speak"],
+            )
+        )
+        add_user_memory_func = types.FunctionDeclaration(
+            name="add_user_memory",
+            description=(
+                "Stores a piece of information (memory) about the user that they have stated or implied. "
+                "After calling this, formulate a chat response acknowledging the memory was saved."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "memory_content": types.Schema(
+                        type=types.Type.STRING,
+                        description="The textual content of the memory to be saved for the user."
+                    ),
+                },
+                required=["memory_content"],
+            )
+        )
+        remove_user_memory_func = types.FunctionDeclaration(
+            name="remove_user_memory",
+            description=(
+                "Removes a previously stored memory for the user, identified by its ID. Memory IDs are provided when listing memories "
+                "or can be inferred from context. After calling this, formulate a chat response acknowledging the memory was removed."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "memory_id": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="The unique numerical identifier of the memory to be removed."
+                    ),
+                },
+                required=["memory_id"],
+            )
+        )
+        use_built_in_tools_func = types.FunctionDeclaration(
+            name="use_built_in_tools",
+            description=(
+                "Accesses built-in capabilities like Google Search or analyzing web URL content. "
+                "Call this function if you need up-to-date information, to browse a webpage, or perform similar online tasks. "
+                "The system will pass the original user request to these tools. You will receive the result back to formulate a response. "
+                "This function takes no specific arguments from you; the context is handled by the system."
+            ),
+            parameters=types.Schema(type=types.Type.OBJECT, properties={})
+        )
+        custom_functions_tool = types.Tool(
+            function_declarations=[
+                speak_message_func,
+                add_user_memory_func,
+                remove_user_memory_func,
+                use_built_in_tools_func,
+            ]
+        )
         config = types.GenerateContentConfig(
             system_instruction=system_instruction_str,
+            temperature=1.0,
+            top_p=0.95,
+            max_output_tokens=Config.MAX_OUTPUT_TOKENS,
+            safety_settings=[
+                types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
+                for cat in [
+                    types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    types.HarmCategory.HARM_CATEGORY_HARASSMENT
+                ]
+            ],
+            tools=[custom_functions_tool],
+            thinking_config=types.ThinkingConfig(
+                include_thoughts=False,
+                thinking_budget=Config.THINKING_BUDGET
+            )
+        )
+        logger.debug(f"⚙️ Created MAIN Gemini GenerateContentConfig with custom functions. System instruction: {len(system_instruction_str)} chars.")
+        return config
+    @staticmethod
+    def create_tooling_config(system_instruction_str: str) -> types.GenerateContentConfig:
+        """
+        Creates the Gemini generation configuration for the internal tooling call,
+        enabling built-in tools like Google Search.
+        """
+        google_search_tool = types.Tool(google_search_retrieval={})
+        config = types.GenerateContentConfig(
+            system_instruction="ALWAYS USE GOOGLE SEARCH AND URL CONTEXT TOOLS",
             temperature=1.0,
             top_p=0.95,
             max_output_tokens=Config.MAX_OUTPUT_TOKENS,
@@ -875,7 +1012,7 @@ class GeminiConfigManager:
                 thinking_budget=Config.THINKING_BUDGET
             )
         )
-        logger.debug(f"⚙️ Created Gemini GenerateContentConfig.\nSystem instruction length (chars): {len(system_instruction_str)}")
+        logger.debug(f"⚙️ Created TOOLING Gemini GenerateContentConfig with built-in tools. System instruction: {len(system_instruction_str)} chars.")
         return config
 class ResponseExtractor:
     """Extracts text content from various Gemini API response structures."""
@@ -893,9 +1030,6 @@ class ResponseExtractor:
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, 'text') and part.text:
                         texts.append(part.text)
-                    if part.function_call:
-                        args_str = json.dumps(dict(part.function_call.args), indent=2)
-                        logger.info(f"🧠 Gemini Function Call executed by model:\nName: {part.function_call.name}\nArgs:\n{args_str}")
                 if texts:
                     return '\n'.join(texts).strip()
         except (AttributeError, IndexError, ValueError) as e:
@@ -907,13 +1041,10 @@ class ResponseExtractor:
                     return '\n'.join(texts).strip()
         except (AttributeError, ValueError):
             pass
-        logger.error(f"❌ Failed to extract text from Gemini response.\nType:\n{type(response)}\nFull Response:\n{str(response)}")
+        logger.error(f"❌ Failed to extract text from Gemini response.\nType:\n{type(response)}\nFull Response:\n{str(response)[:500]}")
         return "I encountered an issue processing the response format from the AI."
 class MessageProcessor:
     """Core class for processing incoming Discord messages and interacting with Gemini."""
-    SPEAK_TAG_PATTERN = re.compile(r"\[SPEAK(?::([A-Z_]+))?\]\s*(.*)", re.IGNORECASE | re.DOTALL)
-    MEMORY_ADD_PATTERN = re.compile(r"\[MEMORY:ADD\]\s*(.*)", re.IGNORECASE | re.DOTALL)
-    MEMORY_REMOVE_PATTERN = re.compile(r"\[MEMORY:REMOVE\]\s*(\S+)", re.IGNORECASE)
     @staticmethod
     async def _build_gemini_prompt_parts(message: discord.Message, metadata_header_str: str, cleaned_content: str, reply_chain_data: list[dict]) -> tuple[list[types.Part | str], bool]:
         """
@@ -930,69 +1061,108 @@ class MessageProcessor:
         if formatted_memories_str:
             parts.append(types.Part(text=formatted_memories_str))
             logger.info(f"🧠 Injected {len(user_memories_list)} memories for user {user_id_for_memory} into prompt.")
+        textual_reply_context = ""
         if reply_chain_data:
-            textual_reply_context = ReplyChainProcessor.format_context_for_llm(reply_chain_data, message.id, bot.user.id)
+            textual_reply_context = ReplyChainProcessor.format_context_for_llm(reply_chain_data, message.id, bot.user.id if bot.user else 0)
             if textual_reply_context.strip():
                 parts.append(types.Part(text=textual_reply_context))
         if message.reference and message.reference.message_id and len(reply_chain_data) > 1:
-            replied_to_msg_data = reply_chain_data[-2]
-            if replied_to_msg_data['author_id'] != bot.user.id and replied_to_msg_data['attachments']:
-                logger.info(f"📎 Processing {len(replied_to_msg_data['attachments'])} attachment(s) from replied-to message.\nMessage ID: {replied_to_msg_data['message_obj'].id}")
-                replied_attachments_parts = await AttachmentProcessor.process_discord_attachments(replied_to_msg_data['attachments'])
-                if replied_attachments_parts: parts.extend(p for p in replied_attachments_parts if p)
+            replied_to_msg_data_index = -2
+            if len(reply_chain_data) == 2 and reply_chain_data[0]['message_obj'].id == message.reference.message_id:
+                replied_to_msg_data_index = 0
+            if 0 <= replied_to_msg_data_index < len(reply_chain_data) or \
+               (replied_to_msg_data_index < 0 and abs(replied_to_msg_data_index) <= len(reply_chain_data)):
+                replied_to_msg_data = reply_chain_data[replied_to_msg_data_index]
+                if replied_to_msg_data['author_id'] != (bot.user.id if bot.user else 0) and replied_to_msg_data['attachments']:
+                    logger.info(f"📎 Processing {len(replied_to_msg_data['attachments'])} attachment(s) from replied-to message.\nMessage ID: {replied_to_msg_data['message_obj'].id}")
+                    replied_attachments_parts = await AttachmentProcessor.process_discord_attachments(replied_to_msg_data['attachments'])
+                    if replied_attachments_parts: parts.extend(p for p in replied_attachments_parts if p)
+            else:
+                 logger.warning(f"⚠️ Could not reliably determine replied-to message for attachment processing. Chain length: {len(reply_chain_data)}")
         content_after_youtube, youtube_file_data_parts = YouTubeProcessor.process_content(cleaned_content)
         if youtube_file_data_parts: parts.extend(youtube_file_data_parts)
         current_message_text_placeholder = "User Message:"
         if content_after_youtube.strip():
             parts.append(types.Part(text=f"{current_message_text_placeholder} {content_after_youtube.strip()}"))
         else:
-            if message.attachments:
-                 parts.append(types.Part(text=f"{current_message_text_placeholder} [See attached files]"))
+            if message.attachments or youtube_file_data_parts:
+                 parts.append(types.Part(text=f"{current_message_text_placeholder} [See attached files or provided links]"))
         if message.attachments:
             logger.info(f"📎 Processing {len(message.attachments)} attachment(s) from current message.")
             current_message_attachment_parts = await AttachmentProcessor.process_discord_attachments(list(message.attachments))
             if current_message_attachment_parts: parts.extend(p for p in current_message_attachment_parts if p)
         final_parts = [p for p in parts if p and not (isinstance(p, str) and not p.strip())]
-        final_parts = [
-            p for p in final_parts
-            if not (isinstance(p, types.Part) and p.text and p.text.strip() == current_message_text_placeholder)
-        ]
+        temp_final_parts = []
+        for p_item_idx, p_item_val in enumerate(final_parts):
+            is_standalone_placeholder = False
+            if isinstance(p_item_val, types.Part) and p_item_val.text:
+                 is_placeholder_text = p_item_val.text.startswith(current_message_text_placeholder) and \
+                                      not p_item_val.text.replace(current_message_text_placeholder, "").replace("[See attached files or provided links]", "").strip()
+                 if is_placeholder_text:
+                     has_data_after = False
+                     for subsequent_part in final_parts[p_item_idx+1:]:
+                         if isinstance(subsequent_part, types.Part) and (subsequent_part.file_data or subsequent_part.inline_data):
+                             has_data_after = True
+                             break
+                     if not has_data_after and not message.attachments and not youtube_file_data_parts:
+                         is_standalone_placeholder = True
+            if not is_standalone_placeholder:
+                temp_final_parts.append(p_item_val)
+        final_parts = temp_final_parts
         is_substantively_empty_beyond_context = True
-        start_index_for_substantive_check = 1
-        if formatted_memories_str: start_index_for_substantive_check = 2
-        if len(final_parts) > start_index_for_substantive_check:
-            has_substantive_content = False
-            for part_item in final_parts[start_index_for_substantive_check:]:
-                if isinstance(part_item, types.Part):
-                    if part_item.text and part_item.text.strip():
-                        is_placeholder_only_variant = part_item.text.startswith(current_message_text_placeholder) and \
-                                                  not part_item.text.replace(current_message_text_placeholder, "").replace("[See attached files]", "").strip()
-                        if not is_placeholder_only_variant and not part_item.text.startswith("[Attachment:") and not part_item.text.startswith("[REPLY_CONTEXT:START]"):
-                            has_substantive_content = True; break
-                    if part_item.file_data:
-                        has_substantive_content = True; break
-                elif isinstance(part_item, str) and part_item.strip() and not part_item.startswith("[Attachment:") and not part_item.startswith("[REPLY_CONTEXT:START]"):
-                     has_substantive_content = True; break
-            is_substantively_empty_beyond_context = not has_substantive_content
-        else:
-            is_substantively_empty_beyond_context = True
+        has_substantive_content_after_initial_context = False
+        initial_context_part_count = 1
+        if formatted_memories_str: initial_context_part_count += 1
+        if textual_reply_context.strip(): initial_context_part_count +=1
+        for i, part_item in enumerate(final_parts):
+            if i < initial_context_part_count:
+                continue
+            if isinstance(part_item, types.Part):
+                if part_item.text and part_item.text.strip() and not part_item.text.startswith("[Attachment:"):
+                    is_only_placeholder_text = part_item.text.startswith(current_message_text_placeholder) and \
+                                              not part_item.text.replace(current_message_text_placeholder, "").replace("[See attached files or provided links]", "").strip()
+                    if is_only_placeholder_text:
+                        has_any_file_data_in_request = any(
+                            p.file_data or p.inline_data for p_idx, p in enumerate(final_parts)
+                            if p_idx >= initial_context_part_count and isinstance(p, types.Part)
+                        )
+                        if has_any_file_data_in_request:
+                            has_substantive_content_after_initial_context = True; break
+                    else:
+                        has_substantive_content_after_initial_context = True; break
+                if part_item.file_data or part_item.inline_data:
+                    has_substantive_content_after_initial_context = True; break
+            elif isinstance(part_item, str) and part_item.strip() and not part_item.startswith("[Attachment:"):
+                 has_substantive_content_after_initial_context = True; break
+        is_substantively_empty_beyond_context = not has_substantive_content_after_initial_context
         if is_substantively_empty_beyond_context:
-             logger.warning("⚠️ No substantive parts (beyond metadata, memories, and basic context placeholders) were built for Gemini.")
+             logger.warning("⚠️ No substantive parts (beyond metadata, memories, and reply context) were built for Gemini.")
         else:
             logger.info(f"💬 Final assembled parts for Gemini (Count: {len(final_parts)}):")
             for i, part_item in enumerate(final_parts):
+                log_preview = ""
+                part_type_str = ""
                 if isinstance(part_item, str):
-                    logger.info(f"  Part {i+1} [Raw String]:\n{part_item}")
-                elif hasattr(part_item, 'text') and isinstance(part_item.text, str):
-                    logger.info(f"  Part {i+1} [Text Part]:\n{part_item.text}")
-                elif hasattr(part_item, 'file_data') and part_item.file_data:
-                    logger.info(f"  Part {i+1} [FileData]:\nURI: {part_item.file_data.file_uri}\nMIME: {part_item.file_data.mime_type}")
-                else:
-                    logger.info(f"  Part {i+1} [Other Part Type]:\n{str(part_item)}")
+                    log_preview = part_item
+                    part_type_str = "Raw String"
+                elif isinstance(part_item, types.Part):
+                    if part_item.text:
+                        log_preview = part_item.text
+                        part_type_str = "Text Part"
+                    elif part_item.file_data:
+                        log_preview = f"URI: {part_item.file_data.file_uri}, MIME: {part_item.file_data.mime_type}"
+                        part_type_str = "FileData Part"
+                    elif part_item.inline_data:
+                        log_preview = f"MIME: {part_item.inline_data.mime_type}, Size: {len(part_item.inline_data.data)} bytes"
+                        part_type_str = "InlineData Part"
+                    else:
+                        log_preview = str(part_item)
+                        part_type_str = "Other Part Type"
+                logger.info(f"  Part {i+1} [{part_type_str}]:\n{log_preview}")
         return final_parts, is_substantively_empty_beyond_context
     @staticmethod
     async def process(message: discord.Message, bot_message_to_edit: discord.Message | None = None):
-        global chat_history_manager, memory_manager
+        global chat_history_manager, memory_manager, gemini_client
         content_for_llm = re.sub(r'<[@#&!][^>]+>', '', message.content).strip()
         guild_id_for_history = message.guild.id if message.guild else None
         user_id_for_dm_history = message.author.id if guild_id_for_history is None else None
@@ -1002,10 +1172,7 @@ class MessageProcessor:
         if message.content.strip().lower().startswith(reset_command_str):
             deleted_count_msg = "No active chat history found to clear."
             if await chat_history_manager.delete_history(guild_id_for_history, user_id_for_dm_history):
-                if guild_id_for_history:
-                    deleted_count_msg = f"🧹 Cleared chat history for this server ({message.guild.name})!"
-                else:
-                    deleted_count_msg = f"🧹 Your DM chat history with me has been reset!"
+                deleted_count_msg = f"🧹 Chat history has been cleared!"
             bot_response_message = await MessageSender.send(message, deleted_count_msg, None)
             if bot_response_message: active_bot_responses[message.id] = bot_response_message
             return
@@ -1019,18 +1186,25 @@ class MessageProcessor:
         async with message.channel.typing():
             try:
                 loaded_history_entries: TypingList[HistoryEntry] = await chat_history_manager.load_history(guild_id_for_history, user_id_for_dm_history)
-                history_for_gemini_session: TypingList[types.Content] = [entry.content for entry in loaded_history_entries]
+                history_for_gemini_session: TypingList[types.Content] = []
+                if loaded_history_entries: # Check if there's any history loaded
+                    history_for_gemini_session = [
+                        entry.content for entry in loaded_history_entries
+                        if entry.content.role in ("user", "model")
+                    ]
+                if len(history_for_gemini_session) != len(loaded_history_entries):
+                    logger.info(f"💾 Filtered history for chat session: {len(loaded_history_entries)} raw entries -> {len(history_for_gemini_session)} user/model entries for session init.")
                 current_session_history_entries: TypingList[HistoryEntry] = list(loaded_history_entries)
                 combined_system_prompt = PromptManager.load_combined_system_prompt()
-                gemini_gen_config = GeminiConfigManager.create_config(combined_system_prompt)
-                current_chat_session = gemini_client.aio.chats.create(
+                gemini_main_gen_config = GeminiConfigManager.create_main_config(combined_system_prompt)
+                current_chat_session: GenAIChatSession = gemini_client.aio.chats.create(
                     model=Config.MODEL_ID,
-                    config=gemini_gen_config,
-                    history=history_for_gemini_session
+                    history=history_for_gemini_session,
+                    config=gemini_main_gen_config,
                 )
                 metadata_header = PromptManager.generate_per_message_metadata_header(message)
                 reply_chain_data = await ReplyChainProcessor.get_chain(message)
-                gemini_parts_for_prompt, is_substantively_empty_beyond_context = await MessageProcessor._build_gemini_prompt_parts(
+                raw_gemini_parts_for_prompt, is_substantively_empty_beyond_context = await MessageProcessor._build_gemini_prompt_parts(
                     message, metadata_header, content_for_llm, reply_chain_data
                 )
                 if is_substantively_empty_beyond_context and not history_for_gemini_session:
@@ -1038,104 +1212,193 @@ class MessageProcessor:
                     bot_response_msg = await MessageSender.send(message,"Hello! How can I help you today?",None,existing_bot_message_to_edit=bot_message_to_edit)
                     if bot_response_msg: active_bot_responses[message.id] = bot_response_msg
                     return
-                final_api_parts: list[types.Part] = []
-                for p_item in gemini_parts_for_prompt:
-                    if isinstance(p_item, str):
-                        final_api_parts.append(types.Part(text=p_item))
-                    elif isinstance(p_item, types.Part):
-                        final_api_parts.append(p_item)
-                    else:
-                        logger.warning(f"⚠️ Encountered unexpected item type ({type(p_item)}) when finalizing parts for Gemini API. Skipping.\nItem:\n{str(p_item)}")
-                        continue
-                if not final_api_parts:
-                    logger.error("❌ All prompt parts were unexpectedly skipped or invalid before sending to Gemini. Aborting this request.")
-                    error_reply_msg = await MessageSender.send(message, "❌ I encountered an internal error preparing your request.", None, existing_bot_message_to_edit=bot_message_to_edit)
-                    if error_reply_msg: active_bot_responses[message.id] = error_reply_msg
+                api_parts_for_user_turn: list[types.Part] = []
+                for p_item in raw_gemini_parts_for_prompt:
+                    if isinstance(p_item, str): api_parts_for_user_turn.append(types.Part(text=p_item))
+                    elif isinstance(p_item, types.Part): api_parts_for_user_turn.append(p_item)
+                if not api_parts_for_user_turn :
+                    logger.error("❌ All prompt parts for user turn were unexpectedly skipped or invalid. Aborting.")
+                    error_reply = await MessageSender.send(message, "❌ I couldn't prepare your request properly.", None, existing_bot_message_to_edit=bot_message_to_edit)
+                    if error_reply: active_bot_responses[message.id] = error_reply
                     return
-                logger.info(f"🧠 Sending parts to Gemini. Part Count: {len(final_api_parts)}. History Length: {len(history_for_gemini_session)}.")
-                response_from_gemini = await current_chat_session.send_message(final_api_parts)
-                user_turn_content = types.Content(role="user", parts=final_api_parts)
+                user_turn_content_for_session_and_tooling = types.Content(role="user", parts=api_parts_for_user_turn)
                 current_session_history_entries.append(
-                    HistoryEntry(timestamp=datetime.now(timezone.utc), content=user_turn_content)
+                    HistoryEntry(timestamp=datetime.now(timezone.utc), content=user_turn_content_for_session_and_tooling)
                 )
-                if response_from_gemini.candidates and response_from_gemini.candidates[0].content:
-                    model_turn_content = response_from_gemini.candidates[0].content
-                    if model_turn_content.role != "model":
-                        logger.warning(f"🧠 Model response content had unexpected role. Forcing to 'model'.\nActual Role:\n{model_turn_content.role}")
-                        model_turn_content = types.Content(role="model", parts=model_turn_content.parts)
-                    current_session_history_entries.append(
-                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_turn_content)
-                    )
-                else:
-                    logger.error("❌ No valid content found in Gemini response to form model's turn in history.")
-                    error_model_content = types.Content(role="model", parts=[types.Part(text="[Error: No response from model or malformed response]")])
-                    current_session_history_entries.append(
-                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=error_model_content)
-                    )
-                await chat_history_manager.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
-                raw_response_text = ResponseExtractor.extract_text(response_from_gemini)
-                user_id_for_memory_ops = message.author.id
-                response_lines = raw_response_text.splitlines()
-                content_lines_for_discord = []
-                speak_content_for_tts = None
-                speak_style_for_tts = None
-                speak_tag_already_processed = False
-                logger.debug(f"🧠 Starting tag processing for AI response. Raw response lines: {len(response_lines)}. User: {user_id_for_memory_ops}")
-                for line_num, line_content in enumerate(response_lines):
-                    stripped_line = line_content.strip()
-                    if not stripped_line and not content_lines_for_discord:
-                        continue
-                    mem_add_match = MessageProcessor.MEMORY_ADD_PATTERN.fullmatch(stripped_line)
-                    if mem_add_match:
-                        memory_to_add = mem_add_match.group(1).strip()
-                        if memory_to_add:
-                            await memory_manager.add_memory(user_id_for_memory_ops, memory_to_add)
-                        else:
-                            logger.warning(f"🧠 Found [MEMORY:ADD] tag with empty content from AI for user {user_id_for_memory_ops}.")
-                        continue
-                    mem_rem_match = MessageProcessor.MEMORY_REMOVE_PATTERN.fullmatch(stripped_line)
-                    if mem_rem_match:
-                        memory_id_str_to_remove = mem_rem_match.group(1).strip()
-                        try:
-                            memory_id_val = int(memory_id_str_to_remove)
-                            await memory_manager.remove_memory(user_id_for_memory_ops, memory_id_val)
-                        except ValueError:
-                            logger.warning(f"🧠 Invalid memory ID '{memory_id_str_to_remove}' in [MEMORY:REMOVE] tag from AI for user {user_id_for_memory_ops}.")
-                        continue
-                    if not speak_tag_already_processed:
-                        speak_tag_match = MessageProcessor.SPEAK_TAG_PATTERN.fullmatch(stripped_line)
-                        if speak_tag_match:
-                            speak_style_for_tts, text_within_speak_tag = speak_tag_match.groups()
-                            speak_content_for_tts = text_within_speak_tag.strip()
-                            speak_tag_already_processed = True
-                            logger.info(f"🎤 Found [SPEAK] tag from AI response for user {user_id_for_memory_ops}. Style: {speak_style_for_tts}, Content: '{speak_content_for_tts}'")
-                            continue
-                    content_lines_for_discord.extend(response_lines[line_num:])
-                    logger.debug(f"💬 Tag processing loop ended. Found {len(content_lines_for_discord)} content lines for Discord message.")
-                    break
-                final_text_for_discord = "\n".join(content_lines_for_discord).strip()
+                logger.info(f"🧠 Sending {len(user_turn_content_for_session_and_tooling.parts)} parts to Gemini (Main Call). History length: {len(history_for_gemini_session)}.")
+                response_from_gemini = await current_chat_session.send_message(
+                    user_turn_content_for_session_and_tooling.parts,
+                )
+                text_from_gemini_for_discord_parts = []
+                function_calls_to_execute = []
+                executed_function_responses_for_gemini = []
                 ogg_audio_data, audio_duration, audio_waveform_b64 = None, 0.0, Config.WAVEFORM_PLACEHOLDER
-                if speak_content_for_tts:
-                    if speak_content_for_tts.strip():
-                        tts_prompt_for_generator = f"In a {speak_style_for_tts.replace('_', ' ').lower()} tone, say: {speak_content_for_tts}" if speak_style_for_tts else speak_content_for_tts
-                        tts_result = await TTSGenerator.generate_speech_ogg(tts_prompt_for_generator)
-                        if tts_result:
-                            ogg_audio_data, audio_duration, audio_waveform_b64 = tts_result
-                            logger.info(f"🎤 TTS successful for [SPEAK] content. Audio generated. Text part of Discord message (if any): '{final_text_for_discord}'")
-                        else:
-                            logger.warning(f"🎤 TTS failed for [SPEAK] content. Prepending intended spoken text as a notice to the Discord message.")
-                            failed_speak_notice = f"[Automated notice: I tried to speak the following, but TTS failed: \"{speak_content_for_tts}\"]"
-                            if final_text_for_discord:
-                                final_text_for_discord = f"{failed_speak_notice}\n\n{final_text_for_discord}"
+                if response_from_gemini.candidates and response_from_gemini.candidates[0].content:
+                    initial_model_response_content = response_from_gemini.candidates[0].content
+                    if initial_model_response_content.role != "model":
+                        initial_model_response_content = types.Content(role="model", parts=initial_model_response_content.parts)
+                    current_session_history_entries.append(
+                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=initial_model_response_content)
+                    )
+                    for part in initial_model_response_content.parts:
+                        if part.function_call:
+                            logger.info(f"💡 Model suggested function call: {part.function_call.name}")
+                            function_calls_to_execute.append(part.function_call)
+                        elif part.text:
+                            text_from_gemini_for_discord_parts.append(part.text)
+                else:
+                    logger.error("❌ No valid content in Gemini's initial response (Main Call).")
+                    text_from_gemini_for_discord_parts.append("[Error: AI did not provide an initial response.]")
+                if function_calls_to_execute:
+                    logger.info(f"⚙️ Model requested {len(function_calls_to_execute)} function call(s). Executing...")
+                    tool_call_parts_for_history = []
+                    for fc_obj in function_calls_to_execute:
+                        function_name = fc_obj.name
+                        args = dict(fc_obj.args) if fc_obj.args else {}
+                        logger.info(f"  📞 Executing function: {function_name} with args: {args}")
+                        tool_call_parts_for_history.append(types.Part(function_call=fc_obj))
+                        if function_name == "speak_message":
+                            text_to_speak_arg = args.get("text_to_speak")
+                            style_arg = args.get("style")
+                            if text_to_speak_arg:
+                                tts_prompt = f"In a {style_arg.replace('_', ' ').lower()} tone, say: {text_to_speak_arg}" if style_arg else text_to_speak_arg
+                                tts_result = await TTSGenerator.generate_speech_ogg(tts_prompt)
+                                if tts_result:
+                                    ogg_audio_data, audio_duration, audio_waveform_b64 = tts_result
+                                    logger.info("🎤 TTS successful for 'speak_message'.")
+                                else:
+                                    logger.warning(f"🎤 TTS failed for 'speak_message'. Intended text: '{text_to_speak_arg}'")
+                                    text_from_gemini_for_discord_parts.insert(0, f"[Notice: TTS failed for: \"{text_to_speak_arg}\"]")
                             else:
-                                final_text_for_discord = failed_speak_notice
-                    else:
-                        logger.info("🎤 [SPEAK] tag was found but its content was empty. No TTS performed.")
+                                logger.warning("🧠 'speak_message' called without 'text_to_speak'.")
+                        elif function_name == "add_user_memory":
+                            content_arg = args.get("memory_content")
+                            if content_arg:
+                                success = await memory_manager.add_memory(user_id_for_memory, content_arg)
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"success": success, "action": "added", "preview": content_arg[:30]}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                            else:
+                                logger.warning("🧠 'add_user_memory' called without 'memory_content'.")
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"success": False, "error": "Missing memory_content"}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                        elif function_name == "remove_user_memory":
+                            id_arg = args.get("memory_id")
+                            try:
+                                mem_id = int(id_arg)
+                                success = await memory_manager.remove_memory(user_id_for_memory, mem_id)
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"success": success, "action": "removed", "id": mem_id}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                            except (ValueError, TypeError):
+                                logger.warning(f"🧠 'remove_user_memory' called with invalid 'memory_id': {id_arg}.")
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"success": False, "error": f"Invalid memory_id: {id_arg}"}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                        elif function_name == "use_built_in_tools":
+                            logger.info("🛠️ Performing secondary Gemini call for built-in tools.")
+                            tooling_gen_config = GeminiConfigManager.create_tooling_config(combined_system_prompt)
+                            try:
+                                contents_for_tooling_call: list[types.Content] = []
+                                contents_for_tooling_call.extend(history_for_gemini_session)
+                                contents_for_tooling_call.append(user_turn_content_for_session_and_tooling)
+                                logger.info(f"🛠️ Tooling call 'contents' will have {len(contents_for_tooling_call)} Content items (history + current).")
+                                for i, content_item in enumerate(contents_for_tooling_call):
+                                    logger.debug(f"  Tooling Content {i} Role: {content_item.role}, Parts: {len(content_item.parts)}")
+                                    tooling_response = await gemini_client.aio.models.generate_content(
+                                        model=Config.MODEL_ID,
+                                        contents=contents_for_tooling_call,
+                                        config=tooling_gen_config,
+                                    )
+                                tooling_text_result = ResponseExtractor.extract_text(tooling_response)
+                                logger.info(f"🛠️ Built-in tools call result: {tooling_text_result[:200]}{'...' if len(tooling_text_result) > 200 else ''}")
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"tool_output": tooling_text_result if tooling_text_result else "No textual output from tools."}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                            except Exception as e_tool:
+                                logger.error(f"❌ Error during 'use_built_in_tools' secondary API call: {e_tool}", exc_info=True)
+                                func_resp = types.Part.from_function_response(
+                                    name=function_name, response={"success": False, "error": f"Tooling call failed: {str(e_tool)}"}
+                                )
+                                executed_function_responses_for_gemini.append(func_resp)
+                                tool_call_parts_for_history.append(func_resp)
+                        else:
+                            logger.warning(f"🧠 Model called unknown function: {function_name}")
+                            func_resp = types.Part.from_function_response(
+                                name=function_name, response={"success": False, "error": "Unknown function"}
+                            )
+                            executed_function_responses_for_gemini.append(func_resp)
+                            tool_call_parts_for_history.append(func_resp)
+                    if tool_call_parts_for_history:
+                         current_session_history_entries.append(
+                            HistoryEntry(timestamp=datetime.now(timezone.utc), content=types.Content(role="tool", parts=tool_call_parts_for_history))
+                        )
+                    if executed_function_responses_for_gemini:
+                        logger.info(f"⚙️ Sending {len(executed_function_responses_for_gemini)} function execution results back to Gemini (Main Call).")
+                        response_after_functions = await current_chat_session.send_message(
+                            executed_function_responses_for_gemini,
+                        )
+                        text_from_gemini_for_discord_parts = []
+                        if response_after_functions.candidates and response_after_functions.candidates[0].content:
+                            final_model_content = response_after_functions.candidates[0].content
+                            if final_model_content.role != "model":
+                                final_model_content = types.Content(role="model", parts=final_model_content.parts)
+                            current_session_history_entries.append(
+                                HistoryEntry(timestamp=datetime.now(timezone.utc), content=final_model_content)
+                            )
+                            for part in final_model_content.parts:
+                                if part.text:
+                                    text_from_gemini_for_discord_parts.append(part.text)
+                                elif part.function_call:
+                                    logger.warning(f"⚠️ Model attempted a function call ({part.function_call.name}) after processing initial function results. This subsequent call will be handled if it's 'speak_message' or ignored.")
+                                    if part.function_call.name == "speak_message":
+                                        speak_args = dict(part.function_call.args) if part.function_call.args else {}
+                                        speak_text = speak_args.get("text_to_speak")
+                                        speak_style = speak_args.get("style")
+                                        if speak_text:
+                                            speak_tts_prompt = f"In a {speak_style.replace('_', ' ').lower()} tone, say: {speak_text}" if speak_style else speak_text
+                                            speak_tts_result = await TTSGenerator.generate_speech_ogg(speak_tts_prompt)
+                                            if speak_tts_result:
+                                                ogg_audio_data, audio_duration, audio_waveform_b64 = speak_tts_result
+                                                logger.info("🎤 TTS successful for follow-up 'speak_message'.")
+                                                current_session_history_entries.append(HistoryEntry(timestamp=datetime.now(timezone.utc), content=types.Content(role="tool", parts=[part, types.Part(text="[TTS Executed as follow-up]") ])))
+                                            else:
+                                                logger.warning(f"🎤 TTS failed for follow-up 'speak_message'. Text: '{speak_text}'")
+                                                text_from_gemini_for_discord_parts.insert(0, f"[Notice: Follow-up TTS failed for: \"{speak_text}\"]")
+                                    else:
+                                         logger.warning(f"🧠 Model attempted non-speak function call ({part.function_call.name}) after function results. Ignoring.")
+                        else:
+                            logger.error("❌ No valid content in Gemini's response after function execution (Main Call).")
+                            text_from_gemini_for_discord_parts.append("[Error: AI did not provide a response after processing function results.]")
+                final_text_for_discord = "\n".join(text_from_gemini_for_discord_parts).strip()
+                if not final_text_for_discord and not ogg_audio_data:
+                    final_text_for_discord = "I processed your request but have no further text to add."
+                await chat_history_manager.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
                 new_or_edited_bot_message = await MessageSender.send(
-                    message, final_text_for_discord, ogg_audio_data, audio_duration, audio_waveform_b64, bot_message_to_edit
+                    message, final_text_for_discord if final_text_for_discord else None,
+                    ogg_audio_data, audio_duration, audio_waveform_b64, bot_message_to_edit
                 )
                 if new_or_edited_bot_message: active_bot_responses[message.id] = new_or_edited_bot_message
                 else: active_bot_responses.pop(message.id, None)
+            except types.StopCandidateException as sce:
+                logger.error(f"❌ Gemini API StopCandidateException: {sce}", exc_info=True)
+                error_reply_msg = await MessageSender.send(message, f"❌ The AI stopped responding unexpectedly (Reason: {sce.finish_reason}). Please try again.", None, existing_bot_message_to_edit=bot_message_to_edit)
+                if error_reply_msg: active_bot_responses[message.id] = error_reply_msg
+            except types.BlockedPromptException as bpe:
+                logger.error(f"❌ Gemini API BlockedPromptException: {bpe}", exc_info=True)
+                error_reply_msg = await MessageSender.send(message, "❌ Your request was blocked by the AI's safety filters. Please rephrase your request.", None, existing_bot_message_to_edit=bot_message_to_edit)
+                if error_reply_msg: active_bot_responses[message.id] = error_reply_msg
             except Exception as e:
                 logger.error(f"❌ Message processing pipeline error.\nUser: {message.author.name}\nError:\n{e}", exc_info=True)
                 error_reply_msg = await MessageSender.send(message, "❌ I encountered an error processing your request.", None, existing_bot_message_to_edit=bot_message_to_edit)
@@ -1162,40 +1425,48 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author == bot.user or message.author.bot: return
     is_dm = isinstance(message.channel, discord.DMChannel)
-    is_mentioned = bot.user.mentioned_in(message)
+    is_mentioned = bot.user.mentioned_in(message) if bot.user else False
     is_reply_to_bot = False
     if message.reference and message.reference.message_id:
         try:
-            referenced_message = await message.channel.fetch_message(message.reference.message_id)
-            if referenced_message.author == bot.user:
-                is_reply_to_bot = True
+            if hasattr(message.channel, 'fetch_message'):
+                referenced_message = await message.channel.fetch_message(message.reference.message_id)
+                if referenced_message.author == bot.user:
+                    is_reply_to_bot = True
+            elif isinstance(message.channel, discord.DMChannel) and message.reference.cached_message:
+                 if message.reference.cached_message.author == bot.user:
+                    is_reply_to_bot = True
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
     content_lower = message.content.lower().strip()
     is_reset_command = content_lower.startswith(f"{bot.command_prefix}reset")
     is_forget_command = content_lower.startswith(f"{bot.command_prefix}forget")
     if is_dm or is_mentioned or is_reply_to_bot or is_reset_command or is_forget_command:
+        if message.id in active_bot_responses and bot_message_to_edit is None:
+             logger.warning(f"⚠️ Message {message.id} is already associated with an active response. Skipping new on_message event.")
+             return
         await MessageProcessor.process(message)
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
     if after.author == bot.user or after.author.bot:
         return
     if before.content == after.content and \
-       before.attachments == after.attachments and \
-       not before.embeds and after.embeds:
-        logger.info(f"ℹ️ Message edit ignored for Message ID {after.id}: likely initial embed generation by Discord.")
+       (not before.attachments and not after.attachments or before.attachments == after.attachments) and \
+       (not before.embeds and after.embeds and not any(e.type == 'gifv' for e in after.embeds)):
+        logger.info(f"ℹ️ Message edit ignored for Message ID {after.id}: likely initial embed generation by Discord (non-gifv).")
         return
     is_dm_after = isinstance(after.channel, discord.DMChannel)
-    is_mentioned_after = bot.user.mentioned_in(after)
+    is_mentioned_after = bot.user.mentioned_in(after) if bot.user else False
     is_reply_to_bot_after = False
     if after.reference and after.reference.message_id:
         try:
-            if hasattr(after.channel, 'fetch_message'): # Ensure channel supports fetching
+            if hasattr(after.channel, 'fetch_message'):
                 referenced_message_after = await after.channel.fetch_message(after.reference.message_id)
                 if referenced_message_after.author == bot.user:
                     is_reply_to_bot_after = True
-            else:
-                logger.warning(f"⚠️ Channel type {type(after.channel)} for message {after.id} lacks fetch_message method during edit qualification check.")
+            elif isinstance(after.channel, discord.DMChannel) and after.reference.cached_message:
+                if after.reference.cached_message.author == bot.user:
+                    is_reply_to_bot_after = True
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             logger.debug(f"🔍 Could not fetch referenced message for edit qualification check (Msg ID: {after.id}, Ref ID: {after.reference.message_id}). Error: {e}")
     content_lower_after = after.content.lower().strip()
@@ -1214,8 +1485,8 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
                 active_bot_responses.pop(after.id, None)
         return
     if before.content == after.content and \
-       before.attachments == after.attachments and \
-       not before.embeds and after.embeds:
+       (not before.attachments and not after.attachments or before.attachments == after.attachments) and \
+       (not before.embeds and after.embeds and not any(e.type == 'gifv' for e in after.embeds)):
         logger.info(f"ℹ️ Edit on qualifying message (ID: {after.id}) ignored: likely initial embed generation by Discord. No reprocessing needed.")
         return
     logger.info(f"📥 Edited message (ID: {after.id}) qualifies for processing and is a substantive edit. Reprocessing.")
@@ -1238,56 +1509,76 @@ def validate_environment_variables():
     logger.info("✅ Environment variables validated.")
 def setup_logging():
     """Configures logging for the application."""
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
     logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s', handlers=[logging.StreamHandler()], force=True)
     app_logger = logging.getLogger("Bard")
+    for handler in app_logger.handlers[:]:
+        app_logger.removeHandler(handler)
     app_logger.setLevel(logging.INFO)
     app_logger.propagate = False
     console_handler = logging.StreamHandler()
     console_formatter = logging.Formatter('%(message)s')
     console_handler.setFormatter(console_formatter)
     app_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler('.log', mode='a', encoding='utf-8')
-    detailed_file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s')
-    file_handler.setFormatter(detailed_file_formatter)
-    app_logger.addHandler(file_handler)
+    try:
+        file_handler = logging.FileHandler('.log', mode='a', encoding='utf-8')
+        detailed_file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s')
+        file_handler.setFormatter(detailed_file_formatter)
+        app_logger.addHandler(file_handler)
+    except Exception as e:
+        app_logger.error(f"Failed to set up file logging: {e}")
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("discord.http").setLevel(logging.WARNING)
-    logging.getLogger("google.genai").setLevel(logging.WARNING)
+    logging.getLogger("google.generativeai").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     app_logger.info("⚙️ Logging configured.")
 def main():
-    global gemini_client, chat_history_manager, memory_manager
-    try:
-        setup_logging()
-        logger.info("🚀 Initializing Gemini Discord Bot...")
-        validate_environment_variables()
-        gemini_client = genai.Client(api_key=Config.GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
-        chat_history_manager = ChatHistoryManager()
-        memory_manager = MemoryManager()
-        logger.info(f"🤖 Gemini AI Client initialized. Target API version: v1beta")
-        logger.info(f"💾 Chat History Manager initialized.")
-        logger.info(f"🧠 Memory Manager initialized.")
-        logger.info("📡 Starting Discord bot...")
-        bot.run(Config.DISCORD_BOT_TOKEN, log_handler=None)
-    except ValueError as ve:
-        print(f"Configuration Error: {ve}")
-        if logger.handlers: logger.critical(f"💥 Configuration Error:\n{ve}", exc_info=True)
-        return 1
-    except discord.LoginFailure as lf:
-        logger.critical(f"🛑 Discord Login Failed. Check bot token and intents.\nError:\n{lf}")
-        print("❌ Discord Login Failed. Check bot token and intents.")
-        return 1
-    except Exception as e:
-        logger.critical(f"💥 Fatal error during bot execution:\n{e}", exc_info=True)
-        print(f"💥 Fatal error: {e}")
-        return 1
-    finally:
-        logger.info("🛑 Bot shutdown sequence initiated.")
-    return 0
+        global gemini_client, chat_history_manager, memory_manager
+        try:
+            setup_logging()
+            logger.info("🚀 Initializing Gemini Discord Bot...")
+            validate_environment_variables()
+            gemini_client = genai.Client(api_key=Config.GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
+            chat_history_manager = ChatHistoryManager()
+            memory_manager = MemoryManager()
+            logger.info(f"🤖 Gemini AI Client (genai.Client) initialized. Target API version: v1beta")
+            logger.info(f"💾 Chat History Manager initialized.")
+            logger.info(f"🧠 Memory Manager initialized.")
+            logger.info("📡 Starting Discord bot...")
+            bot.run(Config.DISCORD_BOT_TOKEN, log_handler=None)
+        except ValueError as ve:
+            print(f"Configuration Error: {ve}")
+            if logger and logger.handlers: logger.critical(f"💥 Configuration Error:\n{ve}", exc_info=True)
+            else: print(f"CRITICAL: Configuration Error: {ve}")
+            return 1
+        except discord.LoginFailure as lf:
+            log_msg = f"🛑 Discord Login Failed. Check bot token and intents.\nError:\n{lf}"
+            print(log_msg)
+            if logger and logger.handlers: logger.critical(log_msg)
+            else: print(f"CRITICAL: {log_msg}")
+            return 1
+        except Exception as e:
+            log_msg = f"💥 Fatal error during bot execution:\n{e}"
+            print(log_msg)
+            if logger and logger.handlers: logger.critical(log_msg, exc_info=True)
+            else: print(f"CRITICAL: {log_msg} - {e}")
+            return 1
+        finally:
+            if logger and logger.handlers: logger.info("🛑 Bot shutdown sequence initiated.")
+            else: print("INFO: Bot shutdown sequence initiated.")
+        return 0
 if __name__ == "__main__":
     exit_code = main()
+    final_log_msg_base = "Bot exited"
     if exit_code == 0:
-        logger.info("✅ Bot exited gracefully.")
+        final_log_msg = f"✅ {final_log_msg_base} gracefully."
     else:
-        logger.warning(f"⚠️ Bot exited with error code: {exit_code}.")
-    logging.shutdown()
+        final_log_msg = f"⚠️ {final_log_msg_base} with error code: {exit_code}."
+    if logger and logger.handlers:
+        if exit_code == 0: logger.info(final_log_msg)
+        else: logger.warning(final_log_msg)
+        logging.shutdown()
+    else:
+        print(final_log_msg)

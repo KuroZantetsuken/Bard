@@ -4,19 +4,20 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 
 ## Features
 - **Multimodal:** Understands text, images, audio, videos, and documents.
-- **Text-to-Speech:** Can generate native Discord voice messages. Supports different speech styles.
+- **Text-to-Speech:** Can generate native Discord voice messages. Supports different speech styles (via Function Calling).
     - Prompt using natural language.
 - **History:** Short-term memory per server.
     - Only accessible in their respective server.
     - Saved locally.
     - Reset with `!reset @Bot`.
-- **Memory:** Long-term memory per user.
+- **Memory:** Long-term memory per user (via Function Calling).
     - Only accessible by the respective user, in any server.
     - Saved locally.
     - Reset with `!forget @Bot`.
 - **Google Search & URL Context:** Accesses Google Search for current information and can analyze content from URLs.
 - **Context-Aware:** Understands message reply chains along with any attachments.
 - **Dynamic:** Adapts its responses if the user edits or deletes their messages.
+- **Function Calling:** Uses Gemini's function calling feature for more robust handling of speech synthesis and memory operations.
 
 ## Usage
 
@@ -42,7 +43,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - `GEMINI_API_KEY`: Your Gemini API key.
 - Open `main.py` and edit the variables at the top found in the `Config` class.
 - Edit `prompts/personality.prompt.md` to define the bot's personality.
-- `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities. Take care in editing it.
+- `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities, including function calling. Take care in editing it.
 
 ## Running the Bot
 
