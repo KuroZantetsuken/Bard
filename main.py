@@ -157,7 +157,7 @@ class MessageProcessor:
                     pass
                 contents_for_gemini_call.extend(history_for_session_init)
                 contents_for_gemini_call.append(user_turn_content)
-                logger.info(f"🧠 Sending {len(contents_for_gemini_call)} Content items to Gemini (Main Call).")
+                logger.info(f"📥 Message received:\n{message.author.display_name}: {content_for_llm}")
                 response_from_gemini = await gemini_client.aio.models.generate_content(
                     model=Config.MODEL_ID,
                     contents=contents_for_gemini_call,
@@ -227,7 +227,6 @@ class MessageProcessor:
                             # Log finish reason and safety ratings for debugging
                             finish_reason_str = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
                             safety_ratings_str = str(candidate.safety_ratings) if hasattr(candidate, 'safety_ratings') else 'N/A'
-                            logger.info(f"⚙️ Response after functions - Candidate Finish Reason: {finish_reason_str}, Safety Ratings: {safety_ratings_str}")
                             if candidate.content:
                                 model_content_from_candidate = candidate.content
                                 parts_for_history = []

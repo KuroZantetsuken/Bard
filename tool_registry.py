@@ -82,7 +82,7 @@ class ToolRegistry:
                 response={"success": False, "error": f"Internal error: Tool instance for '{function_name}' not found."}
             ))
         try:
-            logger.info(f"⚙️ Executing function '{function_name}' via tool '{tool_class_name}' with args: {args}")
+            logger.info(f"⚙️ Executing function '{function_name}' via '{tool_class_name}'")
             return await tool_instance.execute_tool(function_name, args, context)
         except Exception as e:
             logger.error(f"❌ Error executing function '{function_name}' in tool '{tool_class_name}': {e}", exc_info=True)

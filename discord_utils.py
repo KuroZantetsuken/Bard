@@ -127,7 +127,7 @@ class MessageSender:
                     logger.error(f"❌ Failed to send to channel directly.\nError:\n{e_chan}", exc_info=True)
                     return None
         if primary_sent_message and len(text_content) <= Config.MAX_MESSAGE_LENGTH:
-            logger.info(f"📤 Sent text reply. Content:\n{text_content}")
+            logger.info(f"📤 Sent text reply:\n{text_content}")
         return primary_sent_message
     @staticmethod
     async def send(
@@ -217,7 +217,7 @@ class MessageSender:
                                 try:
                                     fetched_msg = await message_to_reply_to.channel.fetch_message(message_id)
                                     sent_native_voice_message_obj = fetched_msg
-                                    logger.info(f"🎤 Sent native Discord voice message. ID: {fetched_msg.id}")
+                                    logger.info(f"🎤 Sent native Discord voice message.")
                                 except discord.HTTPException as e_fetch:
                                     logger.warning(f"🎤 Sent native voice message (ID: {message_id}), but failed to fetch Message object. Error: {e_fetch}")
                             else:
