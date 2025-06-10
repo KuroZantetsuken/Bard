@@ -313,11 +313,14 @@ async def on_ready():
     logger.info(f"🔗 Discord.py Version: {discord.__version__}")
     logger.info(f"🧠 Using Main Gemini Model: {Config.MODEL_ID}")
     logger.info(f"🎤 Using TTS Gemini Model: {Config.MODEL_ID_TTS} with Voice: {Config.VOICE_NAME}")
-    logger.info(f"💾 Chat History Max Turns: {Config.MAX_HISTORY_TURNS}")
-    if Config.MAX_HISTORY_AGE > 0:
-        logger.info(f"💾 Chat History Max Age: {Config.MAX_HISTORY_AGE} minutes")
+    if Config.MAX_HISTORY_TURNS > 0:
+        logger.info(f"💾 Chat History Max Turns: {Config.MAX_HISTORY_TURNS}")
     else:
-        logger.info("💾 Chat History Max Age: Disabled (keeps all history up to turn limit)")
+        logger.info("💾 Chat History Max Turns: Disabled")
+    if Config.MAX_HISTORY_AGE > 0 & Config.MAX_HISTORY_TURNS > 0:
+        logger.info(f"💾 Chat History Max Age: {Config.MAX_HISTORY_AGE} minutes")
+    elif Config.MAX_HISTORY_TURNS > 0:
+        logger.info("💾 Chat History Max Age: Unlimited")
     logger.info(f"🧠 User Memory Max Entries: {Config.MAX_MEMORIES}")
     logger.info(f"🛠️ Tools loaded: {list(tool_reg.tools.keys()) if tool_reg else 'N/A (ToolRegistry not init)'}")
     try:

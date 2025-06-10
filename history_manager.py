@@ -30,6 +30,8 @@ class ChatHistoryManager:
             filename = "unknown_history.history.json"
         return os.path.join(Config.HISTORY_DIR, filename)
     async def load_history(self, guild_id: int | None, user_id: int | None = None) -> TypingList[HistoryEntry]:
+        if Config.MAX_HISTORY_TURNS == 0:
+            return []
         filepath = self._get_history_filepath(guild_id, user_id)
         loaded_history_entries: TypingList[HistoryEntry] = []
         async with self.locks[filepath]:
@@ -116,6 +118,8 @@ class ChatHistoryManager:
             loaded_history_entries = final_history_entries
         return loaded_history_entries
     async def save_history(self, guild_id: int | None, user_id: int | None, history_entries: TypingList[HistoryEntry]):
+        if Config.MAX_HISTORY_TURNS == 0:
+            return
         filepath = self._get_history_filepath(guild_id, user_id)
         max_content_entries = Config.MAX_HISTORY_TURNS * 2
         if len(history_entries) > max_content_entries:

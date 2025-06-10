@@ -40,8 +40,8 @@ class Config:
     # Directory where tool modules are located (folder)
     TOOLS_DIR = "tools"
     # Max number of user + assistant turn pairs (e.g., 16 turns = 32 content entries)
-    MAX_HISTORY_TURNS = 16
+    MAX_HISTORY_TURNS = 0
     # Max age of turns considered for history (minutes) - 0 for disabled
-    MAX_HISTORY_AGE = 10
+    MAX_HISTORY_AGE = 0
     # Max number of memories to store and load per user
     MAX_MEMORIES = 32
