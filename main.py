@@ -163,6 +163,20 @@ class MessageProcessor:
                     contents=contents_for_gemini_call,
                     config=main_gen_config,
                 )
+                if not response_from_gemini.candidates:
+                    logger.error(f"❌ Gemini response was blocked. Prompt Feedback: {response_from_gemini.prompt_feedback}")
+                    err_msg = "❌ Your request was blocked by the AI's safety filters. Please rephrase."
+                    bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
+                    if bot_resp: active_bot_responses[message.id] = bot_resp
+                    return
+                first_candidate = response_from_gemini.candidates[0]
+                has_function_calls = any(part.function_call for part in first_candidate.content.parts)
+                if first_candidate.finish_reason.name != "STOP" and not has_function_calls:
+                    logger.error(f"❌ Gemini generation stopped unexpectedly. Finish Reason: {first_candidate.finish_reason.name}. Safety Ratings: {first_candidate.safety_ratings}")
+                    err_msg = f"❌ The AI stopped responding unexpectedly (Reason: {first_candidate.finish_reason.name}). Please try again."
+                    bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
+                    if bot_resp: active_bot_responses[message.id] = bot_resp
+                    return
                 response_text_parts = []
                 function_calls_to_execute = []
                 tool_exec_context = ToolContext(
@@ -172,21 +186,17 @@ class MessageProcessor:
                     gemini_config_manager=gemini_cfg_mgr, response_extractor=resp_extractor,
                     audio_data=None, audio_duration=None, audio_waveform=None
                 )
-                if response_from_gemini.candidates and response_from_gemini.candidates[0].content:
-                    model_response_content = response_from_gemini.candidates[0].content
-                    if model_response_content.role != "model":
-                        model_response_content = gemini_types.Content(role="model", parts=model_response_content.parts)
-                    current_session_history_entries.append(
-                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_response_content)
-                    )
-                    for part in model_response_content.parts:
-                        if part.text:
-                            response_text_parts.append(part.text)
-                        elif part.function_call:
-                            function_calls_to_execute.append(part.function_call)
-                else:
-                    logger.error("❌ No valid content in Gemini's initial response (Main Call).")
-                    response_text_parts.append("[Error: AI did not provide an initial response.]")
+                model_response_content = first_candidate.content
+                if model_response_content.role != "model":
+                    model_response_content = gemini_types.Content(role="model", parts=model_response_content.parts)
+                current_session_history_entries.append(
+                    HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_response_content)
+                )
+                for part in model_response_content.parts:
+                    if part.text:
+                        response_text_parts.append(part.text)
+                    elif part.function_call:
+                        function_calls_to_execute.append(part.function_call)
                 if function_calls_to_execute:
                     logger.info(f"⚙️ Model requested {len(function_calls_to_execute)} function call(s). Executing...")
                     function_response_parts_for_gemini: TypingList[gemini_types.Part] = []
@@ -222,16 +232,18 @@ class MessageProcessor:
                         )
                         response_text_parts = []
                         final_model_response_content_for_history: Optional[gemini_types.Content] = None
-                        if response_after_functions.candidates:
+                        if not response_after_functions.candidates:
+                            logger.error(f"❌ Gemini response after functions was blocked. Prompt Feedback: {response_after_functions.prompt_feedback}")
+                            response_text_parts.append("[Error: The AI's final response was blocked by safety filters.]")
+                        else:
                             candidate = response_after_functions.candidates[0]
-                            # Log finish reason and safety ratings for debugging
-                            finish_reason_str = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
-                            safety_ratings_str = str(candidate.safety_ratings) if hasattr(candidate, 'safety_ratings') else 'N/A'
+                            finish_reason = candidate.finish_reason.name
+                            if finish_reason not in ("STOP", "MAX_TOKENS"):
+                                logger.error(f"❌ Gemini generation stopped after functions. Finish Reason: {finish_reason}. Safety Ratings: {candidate.safety_ratings}")
+                                response_text_parts.append(f"[Error: The AI stopped responding unexpectedly (Reason: {finish_reason}).]")
                             if candidate.content:
                                 model_content_from_candidate = candidate.content
-                                parts_for_history = []
-                                if hasattr(model_content_from_candidate, 'parts') and model_content_from_candidate.parts is not None:
-                                    parts_for_history = list(model_content_from_candidate.parts)
+                                parts_for_history = list(model_content_from_candidate.parts) if hasattr(model_content_from_candidate, 'parts') and model_content_from_candidate.parts else []
                                 final_model_response_content_for_history = gemini_types.Content(
                                     role="model",
                                     parts=parts_for_history
@@ -242,10 +254,8 @@ class MessageProcessor:
                                             response_text_parts.append(part.text)
                                         elif part.function_call:
                                             logger.warning(f"⚠️ Model attempted a function call ({part.function_call.name}) AFTER initial function results. Executing this follow-up.")
-
                                             follow_up_tool_history_parts = [gemini_types.Part(function_call=part.function_call)]
-
-                                            follow_up_resp_part = await tool_reg.execute_function( # type: ignore
+                                            follow_up_resp_part = await tool_reg.execute_function(
                                                 part.function_call.name, dict(part.function_call.args) if part.function_call.args else {}, tool_exec_context
                                             )
                                             if follow_up_resp_part:
@@ -262,11 +272,7 @@ class MessageProcessor:
                                 else:
                                     logger.info("ℹ️ Response after functions: Model content has no actual parts to process (e.g., after TTS, this is often expected).")
                             else:
-                                logger.error("❌ No valid content object in Gemini's response after function execution (candidate.content is None).")
-                                response_text_parts.append("[Error: AI did not provide a content object after function results.]")
-                        else:
-                            logger.error("❌ No candidates in Gemini's response after function execution.")
-                            response_text_parts.append("[Error: AI did not provide any candidates after function results.]")
+                                logger.warning("⚠️ No valid content object in Gemini's response after function execution (candidate.content is None).")
                         if final_model_response_content_for_history:
                              current_session_history_entries.append(
                                 HistoryEntry(timestamp=datetime.now(timezone.utc), content=final_model_response_content_for_history)
@@ -290,16 +296,6 @@ class MessageProcessor:
                     active_bot_responses[message.id] = new_bot_msg
                 elif message.id in active_bot_responses:
                     active_bot_responses.pop(message.id, None)
-            except gemini_types.StopCandidateException as sce:
-                logger.error(f"❌ Gemini API StopCandidateException: {sce}", exc_info=True)
-                err_msg = f"❌ The AI stopped responding unexpectedly (Reason: {sce.finish_reason}). Please try again."
-                bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
-                if bot_resp: active_bot_responses[message.id] = bot_resp
-            except gemini_types.BlockedPromptException as bpe:
-                logger.error(f"❌ Gemini API BlockedPromptException: {bpe}", exc_info=True)
-                err_msg = "❌ Your request was blocked by the AI's safety filters. Please rephrase."
-                bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
-                if bot_resp: active_bot_responses[message.id] = bot_resp
             except Exception as e:
                 logger.error(f"❌ Message processing pipeline error for user {message.author.name}: {e}", exc_info=True)
                 err_msg = "❌ I encountered an error processing your request."

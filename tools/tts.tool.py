@@ -172,6 +172,23 @@ class TTSGenerator:
                 contents=text_for_tts,
                 config=speech_generation_config
             )
+            if not gemini_response_object.candidates or gemini_response_object.candidates[0].finish_reason.name != "STOP":
+                reason = "Unknown"
+                details = ""
+                if not gemini_response_object.candidates:
+                    reason = "No candidates returned"
+                    if gemini_response_object.prompt_feedback:
+                         details = f"Prompt Feedback: {gemini_response_object.prompt_feedback}"
+                else:
+                    candidate = gemini_response_object.candidates[0]
+                    reason = candidate.finish_reason.name
+                    if candidate.finish_reason.name == "SAFETY":
+                        details = f"Safety Ratings: {candidate.safety_ratings}"
+                logger.error(f"❌ TTS generation stopped by API. Finish Reason: {reason}. {details}")
+                if ffmpeg_process and ffmpeg_process.returncode is None:
+                    ffmpeg_process.terminate()
+                    await ffmpeg_process.wait()
+                return None
             feed_task = asyncio.create_task(
                 TTSGenerator._feed_ffmpeg_stdin(ffmpeg_process, gemini_response_object, Config.MODEL_ID_TTS)
             )
@@ -194,12 +211,6 @@ class TTSGenerator:
             duration_secs, waveform_b64 = TTSGenerator._get_audio_duration_and_waveform(ogg_opus_bytes)
             logger.info(f"🎤 OGG Opus generated successfully. Size: {len(ogg_opus_bytes)} bytes, Duration: {duration_secs:.2f}s.")
             return ogg_opus_bytes, duration_secs, waveform_b64
-        except types.StopCandidateException as sce:
-            logger.error(f"❌ TTS generation stopped by API (safety/other): {sce}", exc_info=True)
-            if ffmpeg_process and ffmpeg_process.returncode is None:
-                ffmpeg_process.kill()
-                await ffmpeg_process.wait()
-            return None
         except FileNotFoundError:
              logger.error(f"❌ ffmpeg command not found. Ensure FFMPEG_PATH ('{Config.FFMPEG_PATH}') is correct and ffmpeg is installed.")
              return None

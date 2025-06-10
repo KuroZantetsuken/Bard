@@ -63,29 +63,24 @@ class NativeTool(BaseTool):
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
-            tooling_text_result = response_extractor_instance.extract_text(tooling_response)
-            if tooling_response.candidates and tooling_response.candidates[0].content:
-                for part in tooling_response.candidates[0].content.parts:
-                    if part.function_call:
-                        logger.info(f"🛠️ Tooling call made internal function call: {part.function_call.name}")
-                    if part.function_response:
-                        logger.info(f"🛠️ Tooling call received internal function response for: {part.function_response.name}")
-            logger.info(f"🛠️ Built-in tools call result (extracted text): {tooling_text_result[:200]}...")
+            if not gemini_response_object.candidates or gemini_response_object.candidates[0].finish_reason.name != "STOP":
+                reason = "Unknown"
+                details = ""
+                if not gemini_response_object.candidates:
+                    reason = "No candidates returned"
+                    if gemini_response_object.prompt_feedback:
+                         details = f"Prompt Feedback: {gemini_response_object.prompt_feedback}"
+                else:
+                    candidate = gemini_response_object.candidates[0]
+                    reason = candidate.finish_reason.name
+                    if candidate.finish_reason.name == "SAFETY":
+                        details = f"Safety Ratings: {candidate.safety_ratings}"
+                logger.error(f"❌ Built-in tools call stopped by API. Finish Reason: {reason}. {details}")
+                return None
+            logger.info(f"🛠️ Built-in tools call result (extracted text): {tooling_text_result}")
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
                 response={"tool_output": tooling_text_result if tooling_text_result else "No textual output from tools."}
-            ))
-        except types.StopCandidateException as sce:
-            logger.error(f"❌ NativeTool: Gemini API StopCandidateException during tooling call: {sce}", exc_info=True)
-            return types.Part(function_response=types.FunctionResponse(
-                name=function_name,
-                response={"success": False, "error": f"Tooling call stopped: {sce.finish_reason}"}
-            ))
-        except types.BlockedPromptException as bpe:
-            logger.error(f"❌ NativeTool: Gemini API BlockedPromptException during tooling call: {bpe}", exc_info=True)
-            return types.Part(function_response=types.FunctionResponse(
-                name=function_name,
-                response={"success": False, "error": "Tooling call request was blocked by safety filters."}
             ))
         except Exception as e_tool:
             logger.error(f"❌ NativeTool: Error during 'use_built_in_tools' secondary API call: {e_tool}", exc_info=True)
