@@ -63,15 +63,16 @@ class NativeTool(BaseTool):
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
-            if not gemini_response_object.candidates or gemini_response_object.candidates[0].finish_reason.name != "STOP":
+            tooling_text_result = response_extractor_instance.extract_text(tooling_response)
+            if not tooling_response.candidates or tooling_response.candidates[0].finish_reason.name != "STOP":
                 reason = "Unknown"
                 details = ""
-                if not gemini_response_object.candidates:
+                if not tooling_response.candidates:
                     reason = "No candidates returned"
-                    if gemini_response_object.prompt_feedback:
-                         details = f"Prompt Feedback: {gemini_response_object.prompt_feedback}"
+                    if tooling_response.prompt_feedback:
+                         details = f"Prompt Feedback: {tooling_response.prompt_feedback}"
                 else:
-                    candidate = gemini_response_object.candidates[0]
+                    candidate = tooling_response.candidates[0]
                     reason = candidate.finish_reason.name
                     if candidate.finish_reason.name == "SAFETY":
                         details = f"Safety Ratings: {candidate.safety_ratings}"
