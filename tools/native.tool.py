@@ -1,6 +1,8 @@
+import json
 import logging
 from config import Config
 from gemini_utils import GeminiConfigManager
+from gemini_utils import sanitize_response_for_logging
 from google.genai import client as genai_client
 from google.genai import types
 from tools import BaseTool
@@ -22,7 +24,7 @@ class NativeTool(BaseTool):
                     "This function takes no arguments. The system will automatically use the original user "
                     "request for the search or analysis. After this function is called, the system will "
                     "provide you with the result from the tool (e.g., search findings or URL summary). "
-                    "You should then use this information to formulate your response to the user."
+                    "You should then use this information to proceed with your response."
                 ),
                 parameters=types.Schema(type=types.Type.OBJECT, properties={})
             )
@@ -85,11 +87,19 @@ class NativeTool(BaseTool):
             if history_for_tooling_call:
                 contents_for_tooling_call.extend(history_for_tooling_call)
             contents_for_tooling_call.append(original_user_turn_content)
+            request_payload = sanitize_response_for_logging({
+                "model": self.config.MODEL_ID,
+                "contents": [c.dict() for c in contents_for_tooling_call],
+                "config": tooling_gen_config.dict()
+            })
+            logger.info(f"REQUEST to Gemini API (native_tools):\n{json.dumps(request_payload, indent=2)}")
             tooling_response = await gemini_client.aio.models.generate_content(
                 model=self.config.MODEL_ID,
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
+            sanitized_response = sanitize_response_for_logging(tooling_response.dict())
+            logger.info(f"RESPONSE from Gemini API (native_tools):\n{json.dumps(sanitized_response, indent=2)}")
             if not tooling_response.candidates:
                 details = f"Prompt Feedback: {tooling_response.prompt_feedback}" if tooling_response.prompt_feedback else "No details provided."
                 error_msg = f"Built-in tools call was blocked or failed. {details}"
@@ -111,7 +121,6 @@ class NativeTool(BaseTool):
                     response={"success": False, "error": error_msg}
                 ))
             tooling_text_result = response_extractor.extract_text(tooling_response)
-            logger.info(f"🛠️ Built-in tools call result:\n{tooling_text_result}")
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
                 response={"tool_output": tooling_text_result if tooling_text_result else "No textual output from tools."}

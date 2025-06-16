@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import logging
 import numpy as np
 import os
@@ -8,6 +9,7 @@ import soundfile
 import tempfile
 import wave
 from config import Config
+from gemini_utils import sanitize_response_for_logging
 from google.genai import client as genai_client
 from google.genai import types
 from tools import BaseTool
@@ -172,11 +174,19 @@ class TTSGenerator:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
+            request_payload = sanitize_response_for_logging({
+                "model": Config.MODEL_ID_TTS,
+                "contents": text_for_tts,
+                "config": speech_generation_config.dict()
+            })
+            logger.info(f"REQUEST to Gemini API (TTS):\n{json.dumps(request_payload, indent=2)}")
             gemini_response_object = await gemini_client.aio.models.generate_content(
                 model=Config.MODEL_ID_TTS,
                 contents=text_for_tts,
                 config=speech_generation_config
             )
+            sanitized_response = sanitize_response_for_logging(gemini_response_object.dict())
+            logger.info(f"RESPONSE from Gemini API (TTS):\n{json.dumps(sanitized_response, indent=2)}")
             if not gemini_response_object.candidates or gemini_response_object.candidates[0].finish_reason.name != "STOP":
                 reason = "Unknown"
                 details = ""
@@ -214,7 +224,6 @@ class TTSGenerator:
                     logger.error("❌ Confirmation: 0 bytes of PCM data were fed to ffmpeg.")
                 return None
             duration_secs, waveform_b64 = TTSGenerator._get_audio_duration_and_waveform(ogg_opus_bytes)
-            logger.info(f"🎤 OGG Opus generated successfully. Size: {len(ogg_opus_bytes)} bytes, Duration: {duration_secs:.2f}s.")
             return ogg_opus_bytes, duration_secs, waveform_b64
         except FileNotFoundError:
              logger.error(f"❌ ffmpeg command not found. Ensure FFMPEG_PATH ('{Config.FFMPEG_PATH}') is correct and ffmpeg is installed.")
@@ -246,9 +255,7 @@ class TTSTool(BaseTool):
                         "style": types.Schema(
                             type=types.Type.STRING,
                             description=(
-                                "Optional. Specify a speaking style like \"CHEERFUL\", \"SAD\", \"ANGRY\", \"EXCITED\", "
-                                "\"FRIENDLY\", \"HOPEFUL\", \"POLITE\", \"SERIOUS\", \"SOMBER\", \"WHISPERING\". "
-                                "If omitted, a neutral voice is used."
+                                "Optional. Specify a speaking style. If omitted, a neutral voice is used."
                             )
                         ),
                     },
@@ -290,6 +297,7 @@ class TTSTool(BaseTool):
             context.audio_data = ogg_audio_data
             context.audio_duration = audio_duration
             context.audio_waveform = audio_waveform_b64
+            context.is_final_output = True
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
                 response={"success": True, "action": "speech_generated", "duration_seconds": audio_duration}

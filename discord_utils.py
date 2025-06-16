@@ -3,6 +3,7 @@ import asyncio
 import base64
 import discord
 import io
+import json
 import logging
 import magic
 import mimetypes
@@ -218,20 +219,37 @@ class MessageSender:
                     upload_slot_payload = {"files": [{"filename": "voice_message.ogg", "file_size": len(audio_data), "id": "0", "is_clip": False}]}
                     upload_slot_headers = {"Authorization": f"Bot {Config.DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
                     attachment_metadata = None
+                    logger.info(f"REQUEST to Discord API (get_upload_slot):\nURL: {upload_slot_api_url}\n"
+                                f"Headers: {upload_slot_headers}\n"
+                                f"Payload:\n{json.dumps(upload_slot_payload, indent=2)}")
                     async with session.post(upload_slot_api_url, json=upload_slot_payload, headers=upload_slot_headers) as resp_slot:
                         if resp_slot.status == 200:
                             resp_slot_json = await resp_slot.json()
+                            logger.info(f"RESPONSE from Discord API (get_upload_slot):\nStatus: {resp_slot.status}\n"
+                                        f"JSON:\n{json.dumps(resp_slot_json, indent=2)}")
                             if resp_slot_json.get("attachments") and len(resp_slot_json["attachments"]) > 0:
                                 attachment_metadata = resp_slot_json["attachments"][0]
                             else:
-                                raise Exception(f"Invalid attachment slot response: {await resp_slot.text()}")
+                                raise Exception("Invalid attachment slot response from Discord API.")
                         else:
-                            raise Exception(f"Failed to get Discord upload slot. Status: {resp_slot.status}, Response: {await resp_slot.text()}")
+                            response_text = await resp_slot.text()
+                            logger.error(f"RESPONSE from Discord API (get_upload_slot) was not successful:\nStatus: {resp_slot.status}\n"
+                                         f"Body:\n{response_text}")
+                            raise Exception("Failed to get Discord upload slot.")
                     put_url = attachment_metadata["upload_url"]
+                    put_headers = {'Content-Type': 'audio/ogg'}
+                    logger.info(f"REQUEST to Discord CDN (put_audio):\nURL: {put_url}\n"
+                                f"Headers: {put_headers}\n"
+                                f"Body: Raw OGG audio data (size: {len(audio_data)} bytes)")
                     with open(temp_ogg_file_path_for_upload, 'rb') as file_to_put:
-                        async with session.put(put_url, data=file_to_put, headers={'Content-Type': 'audio/ogg'}) as resp_put:
+                        async with session.put(put_url, data=file_to_put, headers=put_headers) as resp_put:
                             if resp_put.status != 200:
-                                raise Exception(f"Failed to PUT audio to Discord CDN. Status: {resp_put.status}, Response: {await resp_put.text()}")
+                                response_text = await resp_put.text()
+                                logger.error(f"RESPONSE from Discord CDN (put_audio) was not successful:\nStatus: {resp_put.status}\n"
+                                             f"Body:\n{response_text}")
+                                raise Exception("Failed to PUT audio to Discord CDN.")
+                            else:
+                                logger.info(f"RESPONSE from Discord CDN (put_audio):\nStatus: {resp_put.status}")
                     discord_cdn_filename = attachment_metadata["upload_filename"]
                     send_message_api_url = f"https://discord.com/api/v10/channels/{channel_id_str}/messages"
                     send_message_payload = {
@@ -248,21 +266,25 @@ class MessageSender:
                         "allowed_mentions": {"parse": [], "replied_user": False}
                     }
                     send_message_headers = {"Authorization": f"Bot {Config.DISCORD_BOT_TOKEN}", "Content-Type": "application/json"}
+                    logger.info(f"REQUEST to Discord API (send_voice_message):\nURL: {send_message_api_url}\n"
+                                f"Headers: {send_message_headers}\n"
+                                f"Payload:\n{json.dumps(send_message_payload, indent=2)}")
                     async with session.post(send_message_api_url, json=send_message_payload, headers=send_message_headers) as resp_send:
+                        response_data = await resp_send.json()
+                        logger.info(f"RESPONSE from Discord API (send_voice_message):\nStatus: {resp_send.status}\n"
+                                    f"JSON:\n{json.dumps(response_data, indent=2)}")
                         if resp_send.status == 200 or resp_send.status == 201:
-                            response_data = await resp_send.json()
                             message_id = response_data.get("id")
                             if message_id:
                                 try:
                                     fetched_msg = await message_to_reply_to.channel.fetch_message(message_id)
                                     sent_native_voice_message_obj = fetched_msg
-                                    logger.info(f"🎤 Sent native Discord voice message.")
                                 except discord.HTTPException as e_fetch:
                                     logger.warning(f"🎤 Sent native voice message (ID: {message_id}), but failed to fetch Message object. Error: {e_fetch}")
                             else:
                                 raise Exception("Discord API reported success for voice message but returned no message ID.")
                         else:
-                            raise Exception(f"Discord API send voice message failed. Status: {resp_send.status}, Response: {await resp_send.text()}")
+                            raise Exception("Discord API send voice message failed.")
             except Exception as e:
                 logger.error(f"❌ Error sending native Discord voice message. Will attempt fallback if applicable.\nError:\n{e}", exc_info=True)
             finally:

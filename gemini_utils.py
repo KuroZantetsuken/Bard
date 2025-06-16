@@ -2,9 +2,11 @@ import aiohttp
 import asyncio
 import discord
 import io
+import json
 import logging
 from collections import defaultdict
 from config import Config
+from datetime import datetime
 from google.genai import client
 from google.genai import types
 from typing import Any
@@ -13,6 +15,34 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 logger = logging.getLogger("Bard")
+def sanitize_response_for_logging(data: Any) -> Any:
+    """
+    Recursively sanitizes an API response payload for logging.
+    - Converts datetime objects to ISO 8601 strings.
+    - Removes keys with None values.
+    - Replaces raw bytes with a placeholder string.
+    """
+    if data is None:
+        return None
+    if isinstance(data, datetime):
+        return data.isoformat()
+    if isinstance(data, bytes):
+        return f"<... {len(data)} bytes of binary data ...>"
+    if isinstance(data, dict):
+        cleaned_dict = {
+            key: sanitized_value
+            for key, value in data.items()
+            if (sanitized_value := sanitize_response_for_logging(value)) is not None
+        }
+        return cleaned_dict if cleaned_dict else None
+    if isinstance(data, list):
+        cleaned_list = [
+            sanitized_item
+            for item in data
+            if (sanitized_item := sanitize_response_for_logging(item)) is not None
+        ]
+        return cleaned_list if cleaned_list else None
+    return data
 class GeminiConfigManager:
     """Manages the generation configuration for Gemini API calls."""
     @staticmethod
@@ -56,6 +86,34 @@ class GeminiConfigManager:
         except AttributeError:
             logger.warning("⚠️ Gemini SDK version might not support 'thinking_config'. Proceeding without it.")
         return config
+    @staticmethod
+    def create_follow_up_config(
+        tool_declarations: Optional[List[types.FunctionDeclaration]] = None
+    ) -> types.GenerateContentConfig:
+        """
+        Creates a lightweight config for follow-up calls within a tool-use chain.
+        Crucially, it omits the system_instruction to reduce payload size.
+        """
+        tools_list = []
+        if tool_declarations:
+            custom_functions_tool = types.Tool(function_declarations=tool_declarations)
+            tools_list.append(custom_functions_tool)
+        safety_settings = GeminiConfigManager.get_base_safety_settings()
+        config = types.GenerateContentConfig(
+            temperature=1.0,
+            top_p=0.95,
+            max_output_tokens=Config.MAX_OUTPUT_TOKENS,
+            safety_settings=safety_settings,
+            tools=tools_list if tools_list else None,
+        )
+        try:
+            config.thinking_config = types.ThinkingConfig(
+                 include_thoughts=False,
+                 thinking_budget=Config.THINKING_BUDGET
+            )
+        except AttributeError:
+            logger.warning("⚠️ Gemini SDK version might not support 'thinking_config'. Proceeding without it.")
+        return config
 class ResponseExtractor:
     @staticmethod
     def extract_text(response: Any) -> str:
@@ -75,6 +133,8 @@ class ResponseExtractor:
                     texts.append(part.text)
             if texts:
                 return '\n'.join(texts).strip()
+            if any(part.function_call for part in content_obj.parts):
+                return ""
         logger.warning(f"⚠️ Failed to extract text from Gemini response of type {type(response)}. Response snippet: {str(response)[:200]}")
         return ""
 class AttachmentProcessor:
@@ -132,14 +192,20 @@ class AttachmentProcessor:
                 file_io.seek(0)
                 display_name = "".join(c if c.isalnum() or c in ['.', '-', '_'] else '_' for c in fname)
                 if not display_name: display_name = "uploaded_file"
+                upload_config = types.UploadFileConfig(
+                    mime_type=mime,
+                    display_name=display_name,
+                )
+                logger.info(f"REQUEST to Gemini File API (upload):\n"
+                            f"Config:\n{json.dumps(upload_config.dict(), indent=2)}\n"
+                            f"Body: Raw file data (name: {fname}, size: {file_io.getbuffer().nbytes} bytes)")
                 uploaded_gemini_file_obj = await gemini_client.aio.files.upload(
                     file=file_io,
-                    config=types.UploadFileConfig(
-                        mime_type=mime,
-                        display_name=display_name,
-                    )
+                    config=upload_config
                 )
-                logger.info(f"📎 Successfully uploaded '{fname}' to Gemini File API. URI: {uploaded_gemini_file_obj.uri}, Gemini Name: {uploaded_gemini_file_obj.name}")
+                sanitized_response = sanitize_response_for_logging(uploaded_gemini_file_obj.dict())
+                logger.info(f"RESPONSE from Gemini File API (upload):\n"
+                            f"{json.dumps(sanitized_response, indent=2)}")
                 new_file_data_to_cache = types.FileData(
                     mime_type=uploaded_gemini_file_obj.mime_type,
                     file_uri=uploaded_gemini_file_obj.uri

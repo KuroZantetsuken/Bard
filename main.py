@@ -3,6 +3,7 @@ import base64
 import discord
 import discord_utils
 import gemini_utils
+import json
 import logging
 import re
 from config import Config
@@ -75,7 +76,7 @@ class MessageProcessor:
                 parts.append(gemini_types.Part(text=textual_reply_ctx))
         if message.reference and message.reference.message_id and len(reply_chain_data) > 1:
             replied_to_msg_data = next((m for m in reversed(reply_chain_data) if m['message_obj'].id == message.reference.message_id), None)
-            if replied_to_msg_data and replied_to_msg_data['author_id'] != bot.user.id and replied_to_msg_data['attachments']:
+            if replied_to_msg_data and replied_to_msg_data['attachments']:
                 logger.info(f"📎 Processing {len(replied_to_msg_data['attachments'])} attachment(s) from replied-to message ID: {replied_to_msg_data['message_obj'].id}")
                 replied_attachments_gemini_parts = await attach_proc.process_discord_attachments(
                     gemini_client, replied_to_msg_data['attachments'], mime_detector
@@ -155,130 +156,102 @@ class MessageProcessor:
                 system_prompt_str = prompt_mgr.get_system_prompt()
                 tool_declarations = tool_reg.get_all_function_declarations() if tool_reg else []
                 main_gen_config = gemini_cfg_mgr.create_main_config(system_prompt_str, tool_declarations)
+                follow_up_gen_config = gemini_cfg_mgr.create_follow_up_config(tool_declarations)
                 contents_for_gemini_call: TypingList[gemini_types.Content] = []
-                if system_prompt_str and not main_gen_config.system_instruction:
-                    pass
                 contents_for_gemini_call.extend(history_for_session_init)
                 contents_for_gemini_call.append(user_turn_content)
                 logger.info(f"📥 Message received:\n{message.author.display_name}: {content_for_llm}")
+                request_payload = gemini_utils.sanitize_response_for_logging({
+                    "model": Config.MODEL_ID,
+                    "contents": [c.dict() for c in contents_for_gemini_call],
+                    "config": main_gen_config.dict()
+                })
+                logger.info(f"REQUEST to Gemini API (generate_content, initial):\n{json.dumps(request_payload, indent=2)}")
                 response_from_gemini = await gemini_client.aio.models.generate_content(
                     model=Config.MODEL_ID,
                     contents=contents_for_gemini_call,
                     config=main_gen_config,
                 )
-                if not response_from_gemini.candidates:
-                    logger.error(f"❌ Gemini response was blocked. Prompt Feedback: {response_from_gemini.prompt_feedback}")
-                    err_msg = "❌ Your request was blocked by the AI's safety filters. Please rephrase."
-                    bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
-                    if bot_resp: active_bot_responses[message.id] = bot_resp
-                    return
-                first_candidate = response_from_gemini.candidates[0]
-                has_function_calls = any(part.function_call for part in first_candidate.content.parts)
-                if first_candidate.finish_reason.name != "STOP" and not has_function_calls:
-                    logger.error(f"❌ Gemini generation stopped unexpectedly. Finish Reason: {first_candidate.finish_reason.name}. Safety Ratings: {first_candidate.safety_ratings}")
-                    err_msg = f"❌ The AI stopped responding unexpectedly (Reason: {first_candidate.finish_reason.name}). Please try again."
-                    bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
-                    if bot_resp: active_bot_responses[message.id] = bot_resp
-                    return
-                response_text_parts = []
-                function_calls_to_execute = []
                 tool_exec_context = ToolContext(
                     gemini_client=gemini_client, config=Config, user_id=message.author.id,
                     original_user_turn_content=user_turn_content,
                     history_for_tooling_call=history_for_session_init,
                     gemini_config_manager=gemini_cfg_mgr, response_extractor=resp_extractor,
                     audio_data=None, audio_duration=None, audio_waveform=None, image_data=None,
-                    image_filename=None
+                    image_filename=None, is_final_output=False,
                 )
-                model_response_content = first_candidate.content
-                if model_response_content.role != "model":
-                    model_response_content = gemini_types.Content(role="model", parts=model_response_content.parts)
-                current_session_history_entries.append(
-                    HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_response_content)
-                )
-                for part in model_response_content.parts:
-                    if part.text:
-                        response_text_parts.append(part.text)
-                    elif part.function_call:
-                        function_calls_to_execute.append(part.function_call)
-                if function_calls_to_execute:
-                    logger.info(f"⚙️ Model requested a function call. Executing...")
-                    function_response_parts_for_gemini: TypingList[gemini_types.Part] = []
-                    tool_history_parts_for_session = []
-                    for fc_obj in function_calls_to_execute:
-                        tool_history_parts_for_session.append(gemini_types.Part(function_call=fc_obj))
-                        function_response_part = await tool_reg.execute_function(
-                            fc_obj.name, dict(fc_obj.args) if fc_obj.args else {}, tool_exec_context
-                        )
-                        if function_response_part:
-                            function_response_parts_for_gemini.append(function_response_part)
-                            tool_history_parts_for_session.append(function_response_part)
-                        else:
-                            logger.error(f"❌ Execution of function {fc_obj.name} returned None.")
-                            err_resp = gemini_types.Part(function_response=gemini_types.FunctionResponse(
-                                name=fc_obj.name, response={"success": False, "error": "Tool execution failed to return a response."}
-                            ))
-                            function_response_parts_for_gemini.append(err_resp)
-                            tool_history_parts_for_session.append(err_resp)
-                    if tool_history_parts_for_session:
+                final_text_for_discord = ""
+                loop_count = 0
+                max_loops = 5
+                while loop_count < max_loops:
+                    loop_count += 1
+                    sanitized_response = gemini_utils.sanitize_response_for_logging(response_from_gemini.dict())
+                    logger.info(f"RESPONSE from Gemini API (loop {loop_count}):\n{json.dumps(sanitized_response, indent=2)}")
+                    if not response_from_gemini.candidates:
+                        logger.error(f"❌ Gemini response was blocked. Prompt Feedback: {response_from_gemini.prompt_feedback}")
+                        final_text_for_discord = "❌ Your request was blocked by the AI's safety filters. Please rephrase."
+                        break
+                    first_candidate = response_from_gemini.candidates[0]
+                    model_response_content = first_candidate.content
+                    if model_response_content.role != "model":
+                        model_response_content = gemini_types.Content(role="model", parts=model_response_content.parts)
+                    current_session_history_entries.append(
+                        HistoryEntry(timestamp=datetime.now(timezone.utc), content=model_response_content)
+                    )
+                    contents_for_gemini_call.append(model_response_content)
+                    has_function_calls = any(part.function_call for part in model_response_content.parts)
+                    if has_function_calls:
+                        logger.info(f"⚙️ Model requested function call(s). Executing...")
+                        function_calls_to_execute = [part.function_call for part in model_response_content.parts if part.function_call]
+                        tool_history_parts_for_session = []
+                        function_response_parts_for_gemini = []
+                        for fc_obj in function_calls_to_execute:
+                            tool_history_parts_for_session.append(gemini_types.Part(function_call=fc_obj))
+                            function_response_part = await tool_reg.execute_function(
+                                fc_obj.name, dict(fc_obj.args) if fc_obj.args else {}, tool_exec_context
+                            )
+                            if function_response_part:
+                                function_response_parts_for_gemini.append(function_response_part)
+                                tool_history_parts_for_session.append(function_response_part)
+                            else:
+                                logger.error(f"❌ Execution of function {fc_obj.name} returned None.")
+                                err_resp = gemini_types.Part(function_response=gemini_types.FunctionResponse(
+                                    name=fc_obj.name, response={"success": False, "error": "Tool execution failed to return a response."}
+                                ))
+                                function_response_parts_for_gemini.append(err_resp)
+                                tool_history_parts_for_session.append(err_resp)
+                        tool_turn_content = gemini_types.Content(role="tool", parts=tool_history_parts_for_session)
                         current_session_history_entries.append(
-                            HistoryEntry(timestamp=datetime.now(timezone.utc),
-                                         content=gemini_types.Content(role="tool", parts=tool_history_parts_for_session))
+                             HistoryEntry(timestamp=datetime.now(timezone.utc), content=tool_turn_content)
                         )
-                    if function_response_parts_for_gemini:
-                        logger.info(f"⚙️ Sending {len(function_response_parts_for_gemini)} function execution result(s) back to Gemini for summarization.")
-                        contents_for_gemini_call.append(model_response_content)
-                        contents_for_gemini_call.append(gemini_types.Content(role="tool", parts=function_response_parts_for_gemini))
-                        response_after_functions = await gemini_client.aio.models.generate_content(
+                        if tool_exec_context.get("is_final_output"):
+                             logger.info("✅ Tool produced a final media output. Bypassing further summarization.")
+                             text_from_model = resp_extractor.extract_text(model_response_content)
+                             final_text_for_discord = text_from_model if text_from_model else "I have completed your request."
+                             break
+                        contents_for_gemini_call.append(tool_turn_content)
+                        request_payload_follow_up = gemini_utils.sanitize_response_for_logging({
+                            "model": Config.MODEL_ID,
+                            "contents": [c.dict() for c in contents_for_gemini_call],
+                            "config": follow_up_gen_config.dict()
+                        })
+                        logger.info(f"REQUEST to Gemini API (follow_up, loop {loop_count}):\n{json.dumps(request_payload_follow_up, indent=2)}")
+                        response_from_gemini = await gemini_client.aio.models.generate_content(
                             model=Config.MODEL_ID,
                             contents=contents_for_gemini_call,
-                            config=main_gen_config
+                            config=follow_up_gen_config
                         )
-                        response_text_parts = []
-                        final_model_response_content_for_history: Optional[gemini_types.Content] = None
-                        if not response_after_functions.candidates:
-                            logger.error(f"❌ Gemini response after functions was blocked. Prompt Feedback: {response_after_functions.prompt_feedback}")
-                            response_text_parts.append("[Error: The AI's final response was blocked by safety filters.]")
+                        continue
+                    else:
+                        if first_candidate.finish_reason.name not in ("STOP", "MAX_TOKENS"):
+                            logger.error(f"❌ Gemini generation stopped unexpectedly. Finish Reason: {first_candidate.finish_reason.name}. Safety Ratings: {first_candidate.safety_ratings}")
+                            final_text_for_discord = f"❌ The AI stopped responding unexpectedly (Reason: {first_candidate.finish_reason.name}). Please try again."
                         else:
-                            candidate = response_after_functions.candidates[0]
-                            finish_reason = candidate.finish_reason.name
-                            if finish_reason not in ("STOP", "MAX_TOKENS"):
-                                logger.error(f"❌ Gemini generation stopped after functions. Finish Reason: {finish_reason}. Safety Ratings: {candidate.safety_ratings}")
-                                response_text_parts.append(f"[Error: The AI stopped responding unexpectedly (Reason: {finish_reason}).]")
-                            if candidate.content:
-                                model_content_from_candidate = candidate.content
-                                parts_for_history = list(model_content_from_candidate.parts) if hasattr(model_content_from_candidate, 'parts') and model_content_from_candidate.parts else []
-                                final_model_response_content_for_history = gemini_types.Content(role="model", parts=parts_for_history)
-                                if parts_for_history:
-                                    for part in parts_for_history:
-                                        if part.text:
-                                            response_text_parts.append(part.text)
-                                        elif part.function_call:
-                                            logger.warning(f"ℹ️ Model requesting additional function call ({part.function_call.name}) after initial results. Executing...")
-                                            follow_up_tool_history_parts = [gemini_types.Part(function_call=part.function_call)]
-                                            follow_up_resp_part = await tool_reg.execute_function(
-                                                part.function_call.name, dict(part.function_call.args) if part.function_call.args else {}, tool_exec_context
-                                            )
-                                            if follow_up_resp_part:
-                                                follow_up_tool_history_parts.append(follow_up_resp_part)
-                                            else:
-                                                 follow_up_tool_history_parts.append(gemini_types.Part(function_response=gemini_types.FunctionResponse(
-                                                    name=part.function_call.name, response={"success": False, "error": "Follow-up tool execution failed to return a response part."}
-                                                )))
-                                            current_session_history_entries.append(
-                                                HistoryEntry(timestamp=datetime.now(timezone.utc),
-                                                            content=gemini_types.Content(role="tool", parts=follow_up_tool_history_parts))
-                                            )
-                                            logger.info(f"⚙️ Follow-up function call ({part.function_call.name}) executed.")
-                                else:
-                                    logger.info("ℹ️ Response after functions: Model content has no actual parts to process (e.g., after TTS, this is often expected).")
-                            else:
-                                logger.warning("⚠️ No valid content object in Gemini's response after function execution (candidate.content is None).")
-                        if final_model_response_content_for_history:
-                             current_session_history_entries.append(
-                                HistoryEntry(timestamp=datetime.now(timezone.utc), content=final_model_response_content_for_history)
-                             )
-                final_text_for_discord = "\n".join(response_text_parts).strip()
+                            final_text_for_discord = resp_extractor.extract_text(response_from_gemini)
+                        break
+                if loop_count >= max_loops:
+                    logger.warning(f"⚠️ Exceeded max tool-use loops ({max_loops}). Terminating conversation.")
+                    final_text_for_discord = "I seem to be stuck in a loop. Let's start over. What would you like to do?"
                 final_audio_data = tool_exec_context.get("audio_data")
                 final_audio_duration = tool_exec_context.get("audio_duration", 0.0)
                 final_audio_waveform = tool_exec_context.get("audio_waveform", Config.WAVEFORM_PLACEHOLDER)

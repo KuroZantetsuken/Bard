@@ -1,9 +1,11 @@
 import base64
+import json
 import logging
 import os
 from config import Config
 from discord_utils import MimeDetector
 from gemini_utils import GeminiConfigManager
+from gemini_utils import sanitize_response_for_logging
 from google.genai import types
 from tools import BaseTool
 from tools import ToolContext
@@ -23,18 +25,16 @@ class CodeExecutionTool(BaseTool):
             types.FunctionDeclaration(
                 name="execute_python_code",
                 description=(
-                    "Executes Python code to solve a given task. You should provide a **natural language description** of the task to be performed. "
+                    "Executes Python code to solve a given task. Provide a **natural language description** of the task to be performed. "
                     "This tool will then generate, execute, and return the results. "
-                    "**You MUST NOT provide Python code in the 'task' argument.** "
-                    "You can read data from uploaded text and CSV files. You can generate plots and graphs using the `matplotlib` library, which will be returned as inline images."
-                    "Available libraries: `attrs`, `chess`, `contourpy`, `fpdf`, `geopandas`, `imageio`, `jinja2`, `joblib`, `jsonschema`, `jsonschema-specifications`, `lxml`, `matplotlib`, `mpmath`, `numpy`, `opencv-python`, `openpyxl`, `packaging`, `pandas`, `pillow`, `protobuf`, `pylatex`, `pyparsing`, `PyPDF2`, `python-dateutil`, `python-docx`, `python-pptx`, `reportlab`, `scikit-learn`, `scipy`, `seaborn`, `six`, `striprtf`, `sympy`, `tabulate`, `tensorflow`, `toolz`, `xlrd`"
+                    "You can use this to aid with logical requests that benefit from code execution. You have specific libraries for basic image editing, chess problem solving, and graph plotting."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "task": types.Schema(
                             type=types.Type.STRING,
-                            description="A clear and specific **natural language instruction** for the task to be accomplished. For example: 'Create a heart-shaped graph and save it to output.png.'"
+                            description="A clear and specific **natural language instruction** for the task to be accomplished."
                         ),
                         "has_file_input": types.Schema(
                             type=types.Type.BOOLEAN,
@@ -76,11 +76,19 @@ class CodeExecutionTool(BaseTool):
         contents_for_code_exec = [types.Content(role="user", parts=prompt_parts_for_exec)]
         logger.info(f"⚙️ CodeExecutionTool: Performing secondary Gemini call for code execution:\n{task_description}")
         try:
+            request_payload = sanitize_response_for_logging({
+                "model": self.config.MODEL_ID,
+                "contents": [c.dict() for c in contents_for_code_exec],
+                "config": code_exec_config.dict()
+            })
+            logger.info(f"REQUEST to Gemini API (code_execution):\n{json.dumps(request_payload, indent=2)}")
             response = await gemini_client.aio.models.generate_content(
                 model=self.config.MODEL_ID,
                 contents=contents_for_code_exec,
                 config=code_exec_config,
             )
+            sanitized_response = sanitize_response_for_logging(response.dict())
+            logger.info(f"RESPONSE from Gemini API (code_execution):\n{json.dumps(sanitized_response, indent=2)}")
             text_output = ""
             image_generated = False
             generated_filename = None
@@ -93,7 +101,7 @@ class CodeExecutionTool(BaseTool):
                         context.image_data = part.inline_data.data
                         context.image_filename = generated_filename
                         image_generated = True
-                        logger.info(f"✅ Found and processed inline_data image artifact (MIME: {mime_type}, Filename: {generated_filename}).")
+                        context.is_final_output = True
                     elif part.code_execution_result:
                         if part.code_execution_result.output:
                             text_output += part.code_execution_result.output + "\n"
