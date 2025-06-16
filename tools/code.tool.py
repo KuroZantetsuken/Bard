@@ -51,6 +51,7 @@ class CodeExecutionTool(BaseTool):
         """
         safety_settings = GeminiConfigManager.get_base_safety_settings()
         return types.GenerateContentConfig(
+            system_instruction=types.Content(parts=[types.Part(text="Your critical function is to always use code execution.")], role="system"),
             temperature=0.8,
             top_p=0.95,
             max_output_tokens=self.config.MAX_OUTPUT_TOKENS,
