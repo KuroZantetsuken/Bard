@@ -48,11 +48,32 @@ class GeminiConfigManager:
             logger.warning("⚠️ Gemini SDK version might not support 'thinking_config'. Proceeding without it.")
         return config
     @staticmethod
+    def create_code_execution_config() -> types.GenerateContentConfig:
+        """
+        Creates the Gemini generation configuration for a code execution call.
+        """
+        safety_settings = [
+            types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
+            for cat in [
+                types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                types.HarmCategory.HARM_CATEGORY_HARASSMENT
+            ]
+        ]
+        config = types.GenerateContentConfig(
+            temperature=0.8,
+            top_p=0.95,
+            max_output_tokens=Config.MAX_OUTPUT_TOKENS,
+            safety_settings=safety_settings,
+            tools=[types.Tool(code_execution=types.ToolCodeExecution())],
+        )
+        return config
+    @staticmethod
     def create_tooling_config() -> types.GenerateContentConfig:
         """
         Creates the Gemini generation configuration for the internal tooling call,
         enabling built-in tools like Google Search and URL Context.
-        The original system_instruction for this was "ALWAYS USE GOOGLE SEARCH AND URL CONTEXT TOOLS".
         """
         google_search_tool = types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())
         available_tools_for_native = [

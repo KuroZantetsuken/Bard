@@ -72,34 +72,47 @@ class YouTubeProcessor:
         return cleaned_content, youtube_parts
 class MessageSender:
     @staticmethod
-    async def _send_text_reply(message_to_reply_to: discord.Message, text_content: str) -> Optional[discord.Message]:
+    async def _send_text_reply(message_to_reply_to: discord.Message, text_content: str, file_to_attach: Optional[discord.File] = None) -> Optional[discord.Message]:
         primary_sent_message = None
         if not text_content or not text_content.strip():
-            text_content = "I processed your request but have no further text to add."
+
+            if file_to_attach:
+                text_content = ""
+            else:
+                text_content = "I processed your request but have no further text to add."
         if len(text_content) > Config.MAX_MESSAGE_LENGTH:
-            chunks = []
-            current_chunk = ""
-            paragraphs = text_content.split('\n\n')
-            for i, paragraph in enumerate(paragraphs):
-                paragraph_to_add = paragraph + ('\n\n' if i < len(paragraphs) - 1 else '')
-                if len(current_chunk) + len(paragraph_to_add) <= Config.MAX_MESSAGE_LENGTH:
-                    current_chunk += paragraph_to_add
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk.strip())
-                        current_chunk = ""
-                    if len(paragraph_to_add) > Config.MAX_MESSAGE_LENGTH:
-                        for k in range(0, len(paragraph_to_add), Config.MAX_MESSAGE_LENGTH):
-                            chunks.append(paragraph_to_add[k:k+Config.MAX_MESSAGE_LENGTH])
+
+            if file_to_attach:
+                warning_msg = "\n\n[Warning: Response truncated. The full response was too long to display with an attachment.]"
+                text_content = text_content[:Config.MAX_MESSAGE_LENGTH - len(warning_msg)] + warning_msg
+                logger.warning("Message with image was truncated as it exceeded MAX_MESSAGE_LENGTH.")
+                chunks = [text_content]
+            else:
+                chunks = []
+                current_chunk = ""
+                paragraphs = text_content.split('\n\n')
+                for i, paragraph in enumerate(paragraphs):
+                    paragraph_to_add = paragraph + ('\n\n' if i < len(paragraphs) - 1 else '')
+                    if len(current_chunk) + len(paragraph_to_add) <= Config.MAX_MESSAGE_LENGTH:
+                        current_chunk += paragraph_to_add
                     else:
-                        current_chunk = paragraph_to_add
-            if current_chunk.strip():
-                chunks.append(current_chunk.strip())
-            if not chunks : chunks = [text_content[:Config.MAX_MESSAGE_LENGTH]]
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                            current_chunk = ""
+                        if len(paragraph_to_add) > Config.MAX_MESSAGE_LENGTH:
+                            for k in range(0, len(paragraph_to_add), Config.MAX_MESSAGE_LENGTH):
+                                chunks.append(paragraph_to_add[k:k+Config.MAX_MESSAGE_LENGTH])
+                        else:
+                            current_chunk = paragraph_to_add
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                if not chunks : chunks = [text_content[:Config.MAX_MESSAGE_LENGTH]]
             for i, chunk in enumerate(chunks):
                 try:
+
+                    file_for_this_turn = file_to_attach if i == 0 else None
                     if i == 0:
-                        sent_msg = await message_to_reply_to.reply(chunk)
+                        sent_msg = await message_to_reply_to.reply(chunk, file=file_for_this_turn)
                         if not primary_sent_message: primary_sent_message = sent_msg
                     else:
                         await message_to_reply_to.channel.send(chunk)
@@ -107,7 +120,7 @@ class MessageSender:
                     logger.error(f"❌ Failed to send text chunk {i+1}/{len(chunks)}. Error: {e}", exc_info=True)
                     if i == 0:
                         try:
-                            sent_msg = await message_to_reply_to.channel.send(chunk)
+                            sent_msg = await message_to_reply_to.channel.send(chunk, file=file_for_this_turn)
                             if not primary_sent_message: primary_sent_message = sent_msg
                         except discord.HTTPException as e_chan:
                             logger.error(f"❌ Failed to send first chunk to channel directly. Error: {e_chan}", exc_info=True)
@@ -116,12 +129,12 @@ class MessageSender:
                  logger.info(f"📤 Sent multi-part text reply. First part ID: {primary_sent_message.id}")
         else:
             try:
-                sent_msg = await message_to_reply_to.reply(text_content)
+                sent_msg = await message_to_reply_to.reply(text_content, file=file_to_attach)
                 primary_sent_message = sent_msg
             except discord.HTTPException as e:
                 logger.error(f"❌ Failed to send reply. Attempting to send to channel directly.\nError:\n{e}", exc_info=True)
                 try:
-                    sent_msg = await message_to_reply_to.channel.send(text_content)
+                    sent_msg = await message_to_reply_to.channel.send(text_content, file=file_to_attach)
                     primary_sent_message = sent_msg
                 except discord.HTTPException as e_chan:
                     logger.error(f"❌ Failed to send to channel directly.\nError:\n{e_chan}", exc_info=True)
@@ -136,17 +149,17 @@ class MessageSender:
         audio_data: Optional[bytes] = None,
         duration_secs: float = 0.0,
         waveform_b64: str = Config.WAVEFORM_PLACEHOLDER,
+        image_data: Optional[bytes] = None,
         existing_bot_message_to_edit: Optional[discord.Message] = None
     ) -> Optional[discord.Message]:
         """
-        Sends a reply. Text is sent first (if any). Audio is then sent as native voice (if any).
-        If native voice fails, audio is sent as a file attachment.
-        Returns the 'primary' message (text message if sent, otherwise the voice/audio file message).
+        Sends a reply. Can handle text, image, and audio content.
         """
         primary_response_message: Optional[discord.Message] = None
         if existing_bot_message_to_edit:
+
             can_safely_edit = (
-                text_content and not audio_data and
+                text_content and not audio_data and not image_data and
                 not existing_bot_message_to_edit.attachments and
                 not (existing_bot_message_to_edit.flags and existing_bot_message_to_edit.flags.voice)
             )
@@ -162,10 +175,29 @@ class MessageSender:
                 logger.info(f"🗑️ Deleted old bot message (ID: {existing_bot_message_to_edit.id}) to allow resending.")
             except discord.HTTPException as e_del:
                 logger.warning(f"⚠️ Could not delete old bot message (ID: {existing_bot_message_to_edit.id}) for resend. Error: {e_del}", exc_info=False)
-        if text_content and text_content.strip():
-            primary_response_message = await MessageSender._send_text_reply(message_to_reply_to, text_content)
-            if not primary_response_message:
-                logger.error("❌ Failed to send text content. Audio sending will still be attempted if audio data is present.")
+
+        discord_file_to_send = None
+        temp_image_path = None
+        try:
+            if image_data:
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_image_file:
+                    temp_image_file.write(image_data)
+                    temp_image_path = temp_image_file.name
+                discord_file_to_send = discord.File(temp_image_path, filename="plot.png")
+                logger.info("📎 Prepared plot.png for sending.")
+
+            if text_content or discord_file_to_send:
+                primary_response_message = await MessageSender._send_text_reply(message_to_reply_to, text_content, discord_file_to_send)
+                if not primary_response_message:
+                    logger.error("❌ Failed to send text content or image. Audio sending will still be attempted if audio data is present.")
+
+        finally:
+            if temp_image_path and os.path.exists(temp_image_path):
+                try:
+                    os.unlink(temp_image_path)
+                except OSError as e:
+                    logger.warning(f"⚠️ Could not delete temporary image file {temp_image_path}: {e}")
+
         if audio_data:
             sent_native_voice_message_obj: Optional[discord.Message] = None
             temp_ogg_file_path_for_upload = None
@@ -257,8 +289,8 @@ class MessageSender:
                     if temp_ogg_path_regular and os.path.exists(temp_ogg_path_regular):
                         try: os.unlink(temp_ogg_path_regular)
                         except OSError: pass
-        if not primary_response_message and (text_content or audio_data):
-            logger.error("❌ All attempts to send content (text or audio) failed.")
+        if not primary_response_message and (text_content or audio_data or image_data):
+            logger.error("❌ All attempts to send content (text, image, or audio) failed.")
         return primary_response_message
 class ReplyChainProcessor:
     @staticmethod

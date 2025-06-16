@@ -17,7 +17,7 @@ class PromptManager:
             return "No tools are currently available."
         prompt_parts = ["# Available Functions",
                         "You have access to the following functions. Call them when appropriate. "
-                        "You can request multiple functions in a single turn if needed.\n"]
+                        "You can request multiple functions one after another if needed. Plan ahead for each function call.\n"]
         for decl in declarations:
             func_str = f"- `{decl.name}("
             params_list = []

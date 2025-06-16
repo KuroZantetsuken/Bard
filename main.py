@@ -4,6 +4,7 @@ import gemini_utils
 import discord_utils
 import discord
 import asyncio
+import base64
 from typing import List as TypingList, Optional, Tuple, Dict, Any
 from tool_registry import ToolRegistry, ToolContext
 from prompt_manager import PromptManager
@@ -38,11 +39,6 @@ class MessageProcessor:
         cleaned_content: str,
         reply_chain_data: TypingList[Dict[str, Any]]
     ) -> Tuple[TypingList[gemini_types.Part], bool]:
-        """
-        Constructs the list of parts (metadata, memories, text, files, YouTube) to send to Gemini.
-        Returns a tuple: (list_of_parts, is_substantively_empty_beyond_context_and_memory).
-        Relies on global/passed instances of utility classes.
-        """
         global prompt_mgr, tool_reg, yt_proc, attach_proc, mime_detector, bot
         guild = message.guild
         is_thread = isinstance(message.channel, discord.Thread)
@@ -184,7 +180,7 @@ class MessageProcessor:
                     original_user_turn_content=user_turn_content,
                     history_for_tooling_call=history_for_session_init,
                     gemini_config_manager=gemini_cfg_mgr, response_extractor=resp_extractor,
-                    audio_data=None, audio_duration=None, audio_waveform=None
+                    audio_data=None, audio_duration=None, audio_waveform=None, image_data=None
                 )
                 model_response_content = first_candidate.content
                 if model_response_content.role != "model":
@@ -198,7 +194,7 @@ class MessageProcessor:
                     elif part.function_call:
                         function_calls_to_execute.append(part.function_call)
                 if function_calls_to_execute:
-                    logger.info(f"⚙️ Model requested {len(function_calls_to_execute)} function call(s). Executing...")
+                    logger.info(f"⚙️ Model requested a function call. Executing...")
                     function_response_parts_for_gemini: TypingList[gemini_types.Part] = []
                     tool_history_parts_for_session = []
                     for fc_obj in function_calls_to_execute:
@@ -222,7 +218,7 @@ class MessageProcessor:
                                          content=gemini_types.Content(role="tool", parts=tool_history_parts_for_session))
                         )
                     if function_response_parts_for_gemini:
-                        logger.info(f"⚙️ Sending {len(function_response_parts_for_gemini)} function execution result(s) back to Gemini.")
+                        logger.info(f"⚙️ Sending {len(function_response_parts_for_gemini)} function execution result(s) back to Gemini for summarization.")
                         contents_for_gemini_call.append(model_response_content)
                         contents_for_gemini_call.append(gemini_types.Content(role="tool", parts=function_response_parts_for_gemini))
                         response_after_functions = await gemini_client.aio.models.generate_content(
@@ -244,16 +240,13 @@ class MessageProcessor:
                             if candidate.content:
                                 model_content_from_candidate = candidate.content
                                 parts_for_history = list(model_content_from_candidate.parts) if hasattr(model_content_from_candidate, 'parts') and model_content_from_candidate.parts else []
-                                final_model_response_content_for_history = gemini_types.Content(
-                                    role="model",
-                                    parts=parts_for_history
-                                )
+                                final_model_response_content_for_history = gemini_types.Content(role="model", parts=parts_for_history)
                                 if parts_for_history:
                                     for part in parts_for_history:
                                         if part.text:
                                             response_text_parts.append(part.text)
                                         elif part.function_call:
-                                            logger.warning(f"⚠️ Model attempted a function call ({part.function_call.name}) AFTER initial function results. Executing this follow-up.")
+                                            logger.warning(f"ℹ️ Model requesting additional function call ({part.function_call.name}) after initial results. Executing...")
                                             follow_up_tool_history_parts = [gemini_types.Part(function_call=part.function_call)]
                                             follow_up_resp_part = await tool_reg.execute_function(
                                                 part.function_call.name, dict(part.function_call.args) if part.function_call.args else {}, tool_exec_context
@@ -268,7 +261,7 @@ class MessageProcessor:
                                                 HistoryEntry(timestamp=datetime.now(timezone.utc),
                                                             content=gemini_types.Content(role="tool", parts=follow_up_tool_history_parts))
                                             )
-                                            logger.info(f"⚙️ Follow-up function call {part.function_call.name} executed. Its result is NOT sent back to LLM in this turn.")
+                                            logger.info(f"⚙️ Follow-up function call ({part.function_call.name}) executed.")
                                 else:
                                     logger.info("ℹ️ Response after functions: Model content has no actual parts to process (e.g., after TTS, this is often expected).")
                             else:
@@ -276,21 +269,23 @@ class MessageProcessor:
                         if final_model_response_content_for_history:
                              current_session_history_entries.append(
                                 HistoryEntry(timestamp=datetime.now(timezone.utc), content=final_model_response_content_for_history)
-                            )
+                             )
                 final_text_for_discord = "\n".join(response_text_parts).strip()
                 final_audio_data = tool_exec_context.get("audio_data")
                 final_audio_duration = tool_exec_context.get("audio_duration", 0.0)
                 final_audio_waveform = tool_exec_context.get("audio_waveform", Config.WAVEFORM_PLACEHOLDER)
-                if not final_text_for_discord and not final_audio_data:
-                    final_text_for_discord = "I processed your request but have no further text or audio to send."
+                final_image_data = tool_exec_context.get("image_data")
+                if not final_text_for_discord and not final_audio_data and not final_image_data:
+                    final_text_for_discord = "I processed your request but have no further text, audio, or images to send."
                 await chat_history_mgr.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
                 new_bot_msg = await msg_sender.send(
                     message,
                     final_text_for_discord if final_text_for_discord else None,
-                    final_audio_data,
-                    final_audio_duration,
-                    final_audio_waveform,
-                    bot_message_to_edit
+                    audio_data=final_audio_data,
+                    duration_secs=final_audio_duration,
+                    waveform_b64=final_audio_waveform,
+                    image_data=final_image_data,
+                    existing_bot_message_to_edit=bot_message_to_edit
                 )
                 if new_bot_msg:
                     active_bot_responses[message.id] = new_bot_msg

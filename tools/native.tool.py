@@ -34,6 +34,7 @@ class NativeTool(BaseTool):
         response_extractor_instance = context.get("response_extractor")
         original_user_turn_content = context.get("original_user_turn_content")
         history_for_tooling_call = context.get("history_for_tooling_call")
+        task_description = args.get("task")
         if not all([gemini_client_instance, gemini_cfg_mgr_instance, response_extractor_instance, original_user_turn_content, history_for_tooling_call is not None]):
             missing = [
                 name for name, var in {
@@ -50,14 +51,13 @@ class NativeTool(BaseTool):
                 name=function_name,
                 response={"success": False, "error": error_msg}
             ))
-        logger.info("🛠️ NativeTool: Performing secondary Gemini call for built-in tools.")
+        logger.info("🛠️ NativeTool: Performing secondary Gemini call for built-in tools: using original prompt")
         tooling_gen_config = gemini_cfg_mgr_instance.create_tooling_config()
         try:
             contents_for_tooling_call: TypingList[types.Content] = []
             if history_for_tooling_call:
                 contents_for_tooling_call.extend(history_for_tooling_call)
             contents_for_tooling_call.append(original_user_turn_content)
-            logger.info(f"🛠️ Tooling call 'contents' will have {len(contents_for_tooling_call)} Content items.")
             tooling_response = await gemini_client_instance.aio.models.generate_content(
                 model=self.config.MODEL_ID,
                 contents=contents_for_tooling_call,
@@ -78,7 +78,7 @@ class NativeTool(BaseTool):
                         details = f"Safety Ratings: {candidate.safety_ratings}"
                 logger.error(f"❌ Built-in tools call stopped by API. Finish Reason: {reason}. {details}")
                 return None
-            logger.info(f"🛠️ Built-in tools call result (extracted text): {tooling_text_result}")
+            logger.info(f"🛠️ Built-in tools call result:\n{tooling_text_result}")
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
                 response={"tool_output": tooling_text_result if tooling_text_result else "No textual output from tools."}

@@ -129,7 +129,7 @@ class TTSGenerator:
             logger.error("❌ Gemini client not initialized. Cannot generate TTS.")
             return None
         voice_style_info = f" Style: {style}," if style else ""
-        logger.info(f"🎤 Generating TTS. Voice: {Config.VOICE_NAME} {voice_style_info} Model: {Config.MODEL_ID_TTS}\nText:\n'{text_for_tts}")
+        logger.info(f"🎤 TTSTool: Performing secondary Gemini call for TTS generation. Voice: {Config.VOICE_NAME} {voice_style_info} Model: {Config.MODEL_ID_TTS}\nText:\n'{text_for_tts}")
         voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=Config.VOICE_NAME)}
         speech_generation_config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
