@@ -1,12 +1,17 @@
-import logging
-import io
-import discord
-import asyncio
 import aiohttp
-from typing import List, Optional, Dict, Tuple, Any
-from google.genai import types, client
-from config import Config
+import asyncio
+import discord
+import io
+import logging
 from collections import defaultdict
+from config import Config
+from google.genai import client
+from google.genai import types
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 logger = logging.getLogger("Bard")
 class GeminiConfigManager:
     """Manages the generation configuration for Gemini API calls."""

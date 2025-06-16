@@ -1,10 +1,15 @@
-import logging
 import base64
-from typing import Any, Dict, List as TypingList
-from tools import BaseTool, ToolContext
-from google.genai import types
-from gemini_utils import GeminiConfigManager
+import logging
+import os
 from config import Config
+from discord_utils import MimeDetector
+from gemini_utils import GeminiConfigManager
+from google.genai import types
+from tools import BaseTool
+from tools import ToolContext
+from typing import Any
+from typing import Dict
+from typing import List as TypingList
 logger = logging.getLogger("Bard")
 class CodeExecutionTool(BaseTool):
     """
@@ -78,12 +83,17 @@ class CodeExecutionTool(BaseTool):
             )
             text_output = ""
             image_generated = False
+            generated_filename = None
             if response.candidates:
                 for part in response.candidates[0].content.parts:
                     if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                        mime_type = part.inline_data.mime_type
+                        extension = MimeDetector.get_extension(mime_type)
+                        generated_filename = f"generated_image{extension}"
                         context.image_data = part.inline_data.data
+                        context.image_filename = generated_filename
                         image_generated = True
-                        logger.info(f"✅ Found and processed inline_data image artifact (MIME: {part.inline_data.mime_type}).")
+                        logger.info(f"✅ Found and processed inline_data image artifact (MIME: {mime_type}, Filename: {generated_filename}).")
                     elif part.code_execution_result:
                         if part.code_execution_result.output:
                             text_output += part.code_execution_result.output + "\n"
@@ -93,7 +103,7 @@ class CodeExecutionTool(BaseTool):
                  return types.Part(function_response=types.FunctionResponse(name=function_name, response={"success": False, "error": f"Code execution call failed: {feedback}"}))
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
-                response={"success": True, "output": text_output.strip(), "image_generated": image_generated}
+                response={"success": True, "output": text_output.strip(), "image_generated": image_generated, "filename": generated_filename}
             ))
         except Exception as e:
             logger.error(f"❌ Unhandled exception during CodeExecutionTool API call: {e}", exc_info=True)

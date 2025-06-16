@@ -1,8 +1,9 @@
-import os
 import logging
-from typing import Optional
-from datetime import datetime, timezone
+import os
 from config import Config
+from datetime import datetime
+from datetime import timezone
+from typing import Optional
 logger = logging.getLogger("Bard")
 TOOL_FUNCTIONS_PLACEHOLDER = "[TOOLS]"
 class PromptManager:

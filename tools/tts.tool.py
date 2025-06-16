@@ -1,17 +1,22 @@
-import wave
-import tempfile
-import soundfile
-import os
-import numpy as np
-import logging
-import io
-import base64
 import asyncio
-from typing import Any, Dict, List as TypingList, Tuple, Optional
-from tools import BaseTool, ToolContext
-from google.genai import types
-from google.genai import client as genai_client
+import base64
+import io
+import logging
+import numpy as np
+import os
+import soundfile
+import tempfile
+import wave
 from config import Config
+from google.genai import client as genai_client
+from google.genai import types
+from tools import BaseTool
+from tools import ToolContext
+from typing import Any
+from typing import Dict
+from typing import List as TypingList
+from typing import Optional
+from typing import Tuple
 logger = logging.getLogger("Bard")
 class TTSGenerator:
     """Generates speech audio using Gemini TTS and converts it to OGG Opus."""

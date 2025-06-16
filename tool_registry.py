@@ -1,13 +1,18 @@
-import os
-import logging
-import inspect
-import importlib.util
 import importlib
+import importlib.util
+import inspect
+import logging
+import os
 import sys
-from typing import Any, Dict, List, Optional, Type
-from tools import BaseTool, ToolContext
-from google.genai import types as gemini_types
 from config import Config
+from google.genai import types as gemini_types
+from tools import BaseTool
+from tools import ToolContext
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Type
 logger = logging.getLogger("Bard")
 class ToolRegistry:
     def __init__(self, config: Config):

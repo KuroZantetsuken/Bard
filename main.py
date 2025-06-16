@@ -1,19 +1,26 @@
-﻿import re
-import logging
-import gemini_utils
-import discord_utils
-import discord
-import asyncio
+﻿import asyncio
 import base64
-from typing import List as TypingList, Optional, Tuple, Dict, Any
-from tool_registry import ToolRegistry, ToolContext
-from prompt_manager import PromptManager
-from history_manager import ChatHistoryManager, HistoryEntry
-from google.genai import types as gemini_types
-from google.genai import client as genai_client
-from discord.ext import commands
-from datetime import datetime, timezone
+import discord
+import discord_utils
+import gemini_utils
+import logging
+import re
 from config import Config
+from datetime import datetime
+from datetime import timezone
+from discord.ext import commands
+from google.genai import client as genai_client
+from google.genai import types as gemini_types
+from history_manager import ChatHistoryManager
+from history_manager import HistoryEntry
+from prompt_manager import PromptManager
+from tool_registry import ToolContext
+from tool_registry import ToolRegistry
+from typing import Any
+from typing import Dict
+from typing import List as TypingList
+from typing import Optional
+from typing import Tuple
 logger = logging.getLogger("Bard")
 active_bot_responses: Dict[int, discord.Message] = {}
 gemini_client: Optional[genai_client.Client] = None
@@ -180,7 +187,8 @@ class MessageProcessor:
                     original_user_turn_content=user_turn_content,
                     history_for_tooling_call=history_for_session_init,
                     gemini_config_manager=gemini_cfg_mgr, response_extractor=resp_extractor,
-                    audio_data=None, audio_duration=None, audio_waveform=None, image_data=None
+                    audio_data=None, audio_duration=None, audio_waveform=None, image_data=None,
+                    image_filename=None
                 )
                 model_response_content = first_candidate.content
                 if model_response_content.role != "model":
@@ -275,6 +283,7 @@ class MessageProcessor:
                 final_audio_duration = tool_exec_context.get("audio_duration", 0.0)
                 final_audio_waveform = tool_exec_context.get("audio_waveform", Config.WAVEFORM_PLACEHOLDER)
                 final_image_data = tool_exec_context.get("image_data")
+                final_image_filename = tool_exec_context.get("image_filename")
                 if not final_text_for_discord and not final_audio_data and not final_image_data:
                     final_text_for_discord = "I processed your request but have no further text, audio, or images to send."
                 await chat_history_mgr.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
@@ -285,6 +294,7 @@ class MessageProcessor:
                     duration_secs=final_audio_duration,
                     waveform_b64=final_audio_waveform,
                     image_data=final_image_data,
+                    image_filename=final_image_filename,
                     existing_bot_message_to_edit=bot_message_to_edit
                 )
                 if new_bot_msg:

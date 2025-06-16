@@ -1,16 +1,19 @@
-import tempfile
-import re
-import os
-import magic
-import logging
-import io
-import discord
-import base64
-import asyncio
 import aiohttp
-from typing import List as TypingList, Tuple, Optional
-from google.genai import types as gemini_types
+import asyncio
+import base64
+import discord
+import io
+import logging
+import magic
+import mimetypes
+import os
+import re
+import tempfile
 from config import Config
+from google.genai import types as gemini_types
+from typing import List as TypingList
+from typing import Optional
+from typing import Tuple
 logger = logging.getLogger("Bard")
 class MimeDetector:
     @classmethod
@@ -34,6 +37,13 @@ class MimeDetector:
             logger.error(f"❌ Unexpected error during MIME detection with python-magic: {e}. "
                          "Falling back to 'application/octet-stream'.", exc_info=True)
             return 'application/octet-stream'
+    @classmethod
+    def get_extension(cls, mime_type: str) -> str:
+        """Guesses a file extension for a given MIME type, with a fallback."""
+        if not mime_type:
+            return '.bin'
+        ext = mimetypes.guess_extension(mime_type)
+        return ext if ext else '.bin'
 class YouTubeProcessor:
     PATTERNS = [
         re.compile(r'https?://(?:www\.)?youtube\.com/watch\?v=([\w-]+)(?:&\S+)?', re.IGNORECASE),
@@ -75,13 +85,11 @@ class MessageSender:
     async def _send_text_reply(message_to_reply_to: discord.Message, text_content: str, file_to_attach: Optional[discord.File] = None) -> Optional[discord.Message]:
         primary_sent_message = None
         if not text_content or not text_content.strip():
-
             if file_to_attach:
                 text_content = ""
             else:
                 text_content = "I processed your request but have no further text to add."
         if len(text_content) > Config.MAX_MESSAGE_LENGTH:
-
             if file_to_attach:
                 warning_msg = "\n\n[Warning: Response truncated. The full response was too long to display with an attachment.]"
                 text_content = text_content[:Config.MAX_MESSAGE_LENGTH - len(warning_msg)] + warning_msg
@@ -109,7 +117,6 @@ class MessageSender:
                 if not chunks : chunks = [text_content[:Config.MAX_MESSAGE_LENGTH]]
             for i, chunk in enumerate(chunks):
                 try:
-
                     file_for_this_turn = file_to_attach if i == 0 else None
                     if i == 0:
                         sent_msg = await message_to_reply_to.reply(chunk, file=file_for_this_turn)
@@ -150,6 +157,7 @@ class MessageSender:
         duration_secs: float = 0.0,
         waveform_b64: str = Config.WAVEFORM_PLACEHOLDER,
         image_data: Optional[bytes] = None,
+        image_filename: Optional[str] = None,
         existing_bot_message_to_edit: Optional[discord.Message] = None
     ) -> Optional[discord.Message]:
         """
@@ -157,7 +165,6 @@ class MessageSender:
         """
         primary_response_message: Optional[discord.Message] = None
         if existing_bot_message_to_edit:
-
             can_safely_edit = (
                 text_content and not audio_data and not image_data and
                 not existing_bot_message_to_edit.attachments and
@@ -175,29 +182,29 @@ class MessageSender:
                 logger.info(f"🗑️ Deleted old bot message (ID: {existing_bot_message_to_edit.id}) to allow resending.")
             except discord.HTTPException as e_del:
                 logger.warning(f"⚠️ Could not delete old bot message (ID: {existing_bot_message_to_edit.id}) for resend. Error: {e_del}", exc_info=False)
-
         discord_file_to_send = None
         temp_image_path = None
         try:
             if image_data:
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_image_file:
+                filename_for_discord = image_filename if image_filename else "plot.png"
+                _, suffix = os.path.splitext(filename_for_discord)
+                if not suffix:
+                    suffix = '.png'
+                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_image_file:
                     temp_image_file.write(image_data)
                     temp_image_path = temp_image_file.name
-                discord_file_to_send = discord.File(temp_image_path, filename="plot.png")
-                logger.info("📎 Prepared plot.png for sending.")
-
+                discord_file_to_send = discord.File(temp_image_path, filename=filename_for_discord)
+                logger.info(f"📎 Prepared {filename_for_discord} for sending.")
             if text_content or discord_file_to_send:
                 primary_response_message = await MessageSender._send_text_reply(message_to_reply_to, text_content, discord_file_to_send)
                 if not primary_response_message:
                     logger.error("❌ Failed to send text content or image. Audio sending will still be attempted if audio data is present.")
-
         finally:
             if temp_image_path and os.path.exists(temp_image_path):
                 try:
                     os.unlink(temp_image_path)
                 except OSError as e:
                     logger.warning(f"⚠️ Could not delete temporary image file {temp_image_path}: {e}")
-
         if audio_data:
             sent_native_voice_message_obj: Optional[discord.Message] = None
             temp_ogg_file_path_for_upload = None
