@@ -29,18 +29,18 @@ class NativeTool(BaseTool):
                 name=function_name,
                 response={"success": False, "error": f"Unknown function in NativeTool: {function_name}"}
             ))
-        gemini_client_instance = context.get("gemini_client")
-        gemini_cfg_mgr_instance = context.get("gemini_config_manager")
-        response_extractor_instance = context.get("response_extractor")
+        gemini_client = context.get("gemini_client")
+        gemini_cfg_mgr = context.get("gemini_config_manager")
+        response_extractor = context.get("response_extractor")
         original_user_turn_content = context.get("original_user_turn_content")
         history_for_tooling_call = context.get("history_for_tooling_call")
         task_description = args.get("task")
-        if not all([gemini_client_instance, gemini_cfg_mgr_instance, response_extractor_instance, original_user_turn_content, history_for_tooling_call is not None]):
+        if not all([gemini_client, gemini_cfg_mgr, response_extractor, original_user_turn_content, history_for_tooling_call is not None]):
             missing = [
                 name for name, var in {
-                    "gemini_client": gemini_client_instance,
-                    "gemini_config_manager": gemini_cfg_mgr_instance,
-                    "response_extractor": response_extractor_instance,
+                    "gemini_client": gemini_client,
+                    "gemini_config_manager": gemini_cfg_mgr,
+                    "response_extractor": response_extractor,
                     "original_user_turn_content": original_user_turn_content,
                     "history_for_tooling_call": "Provided" if history_for_tooling_call is not None else None
                 }.items() if var is None
@@ -52,18 +52,18 @@ class NativeTool(BaseTool):
                 response={"success": False, "error": error_msg}
             ))
         logger.info("🛠️ NativeTool: Performing secondary Gemini call for built-in tools: using original prompt")
-        tooling_gen_config = gemini_cfg_mgr_instance.create_tooling_config()
+        tooling_gen_config = gemini_cfg_mgr.create_tooling_config()
         try:
             contents_for_tooling_call: TypingList[types.Content] = []
             if history_for_tooling_call:
                 contents_for_tooling_call.extend(history_for_tooling_call)
             contents_for_tooling_call.append(original_user_turn_content)
-            tooling_response = await gemini_client_instance.aio.models.generate_content(
+            tooling_response = await gemini_client.aio.models.generate_content(
                 model=self.config.MODEL_ID,
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
-            tooling_text_result = response_extractor_instance.extract_text(tooling_response)
+            tooling_text_result = response_extractor.extract_text(tooling_response)
             if not tooling_response.candidates or tooling_response.candidates[0].finish_reason.name != "STOP":
                 reason = "Unknown"
                 details = ""

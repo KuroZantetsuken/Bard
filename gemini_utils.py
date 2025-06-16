@@ -154,12 +154,12 @@ class AttachmentProcessor:
             return None
     @staticmethod
     async def _upload_to_file_api(
-        gemini_client_instance: client.Client,
+        gemini_client: client.Client,
         attachment: discord.Attachment,
         mime_detector_cls
     ) -> Optional[types.Part]:
         """Uploads a single Discord attachment to Gemini File API, using a cache."""
-        if not gemini_client_instance:
+        if not gemini_client:
             logger.error("❌ Gemini client not initialized. Cannot process attachment for File API.")
             return types.Part(text=f"[Attachment: {attachment.filename} - Error: Gemini client not ready]")
         if attachment.id in AttachmentProcessor._gemini_file_cache:
@@ -181,7 +181,7 @@ class AttachmentProcessor:
                 file_io.seek(0)
                 display_name = "".join(c if c.isalnum() or c in ['.', '-', '_'] else '_' for c in fname)
                 if not display_name: display_name = "uploaded_file"
-                uploaded_gemini_file_obj = await gemini_client_instance.aio.files.upload(
+                uploaded_gemini_file_obj = await gemini_client.aio.files.upload(
                     file=file_io,
                     config=types.UploadFileConfig(
                         mime_type=mime,
@@ -201,7 +201,7 @@ class AttachmentProcessor:
                 return types.Part(text=f"[Attachment: {fname} - Error: Gemini File API Upload failed: {str(e)[:100]}]")
     @staticmethod
     async def process_discord_attachments(
-        gemini_client_instance: client.Client,
+        gemini_client: client.Client,
         attachments: List[discord.Attachment],
         mime_detector_cls
     ) -> List[types.Part]:
@@ -211,7 +211,7 @@ class AttachmentProcessor:
         gemini_parts: List[types.Part] = []
         upload_tasks = []
         for att_obj in attachments:
-            upload_tasks.append(AttachmentProcessor._upload_to_file_api(gemini_client_instance, att_obj, mime_detector_cls))
+            upload_tasks.append(AttachmentProcessor._upload_to_file_api(gemini_client, att_obj, mime_detector_cls))
         results = await asyncio.gather(*upload_tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):

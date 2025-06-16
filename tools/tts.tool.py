@@ -117,7 +117,7 @@ class TTSGenerator:
         return b"".join(ogg_chunks)
     @staticmethod
     async def generate_speech_ogg(
-        gemini_client_instance: genai_client.Client,
+        gemini_client: genai_client.Client,
         text_for_tts: str,
         style: Optional[str] = None
     ) -> Optional[Tuple[bytes, float, str]]:
@@ -125,7 +125,7 @@ class TTSGenerator:
         Generates speech audio in OGG Opus format from text using Gemini TTS,
         feeding PCM data from the API response directly to ffmpeg for conversion.
         """
-        if not gemini_client_instance:
+        if not gemini_client:
             logger.error("❌ Gemini client not initialized. Cannot generate TTS.")
             return None
         voice_style_info = f" Style: {style}," if style else ""
@@ -167,7 +167,7 @@ class TTSGenerator:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            gemini_response_object = await gemini_client_instance.aio.models.generate_content(
+            gemini_response_object = await gemini_client.aio.models.generate_content(
                 model=Config.MODEL_ID_TTS,
                 contents=text_for_tts,
                 config=speech_generation_config
@@ -257,8 +257,8 @@ class TTSTool(BaseTool):
                 name=function_name,
                 response={"success": False, "error": f"Unknown function in TTSTool: {function_name}"}
             ))
-        gemini_client_instance = context.get("gemini_client")
-        if not gemini_client_instance:
+        gemini_client = context.get("gemini_client")
+        if not gemini_client:
             logger.error("❌ TTSTool: gemini_client not found in context.")
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
@@ -279,7 +279,7 @@ class TTSTool(BaseTool):
                 tts_prompt_text = f"In a {safe_style} tone, say: {text_to_speak_arg}"
             else:
                 logger.warning(f"🎤 Style argument '{style_arg}' was sanitized to empty. Using neutral tone.")
-        tts_result = await TTSGenerator.generate_speech_ogg(gemini_client_instance, tts_prompt_text, style=style_arg)
+        tts_result = await TTSGenerator.generate_speech_ogg(gemini_client, tts_prompt_text, style=style_arg)
         if tts_result:
             ogg_audio_data, audio_duration, audio_waveform_b64 = tts_result
             context.audio_data = ogg_audio_data
