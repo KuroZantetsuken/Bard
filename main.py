@@ -252,6 +252,9 @@ class MessageProcessor:
                 if loop_count >= max_loops:
                     logger.warning(f"⚠️ Exceeded max tool-use loops ({max_loops}). Terminating conversation.")
                     final_text_for_discord = "I seem to be stuck in a loop. Let's start over. What would you like to do?"
+                grounding_sources_from_context = tool_exec_context.get("grounding_sources_md")
+                if grounding_sources_from_context and final_text_for_discord:
+                    final_text_for_discord = f"{final_text_for_discord.strip()}\n\n{grounding_sources_from_context}"
                 final_audio_data = tool_exec_context.get("audio_data")
                 final_audio_duration = tool_exec_context.get("audio_duration", 0.0)
                 final_audio_waveform = tool_exec_context.get("audio_waveform", Config.WAVEFORM_PLACEHOLDER)
