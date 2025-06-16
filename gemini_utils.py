@@ -11,6 +11,18 @@ logger = logging.getLogger("Bard")
 class GeminiConfigManager:
     """Manages the generation configuration for Gemini API calls."""
     @staticmethod
+    def get_base_safety_settings() -> List[types.SafetySetting]:
+        """Returns a list of base safety settings to disable all harm categories."""
+        return [
+            types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
+            for cat in [
+                types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                types.HarmCategory.HARM_CATEGORY_HARASSMENT
+            ]
+        ]
+    @staticmethod
     def create_main_config(
         system_instruction_str: str,
         tool_declarations: Optional[List[types.FunctionDeclaration]] = None
@@ -22,15 +34,7 @@ class GeminiConfigManager:
         if tool_declarations:
             custom_functions_tool = types.Tool(function_declarations=tool_declarations)
             tools_list.append(custom_functions_tool)
-        safety_settings = [
-            types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
-            for cat in [
-                types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                types.HarmCategory.HARM_CATEGORY_HARASSMENT
-            ]
-        ]
+        safety_settings = GeminiConfigManager.get_base_safety_settings()
         config = types.GenerateContentConfig(
             system_instruction=system_instruction_str if system_instruction_str else None,
             temperature=1.0,
@@ -46,64 +50,6 @@ class GeminiConfigManager:
             )
         except AttributeError:
             logger.warning("⚠️ Gemini SDK version might not support 'thinking_config'. Proceeding without it.")
-        return config
-    @staticmethod
-    def create_code_execution_config() -> types.GenerateContentConfig:
-        """
-        Creates the Gemini generation configuration for a code execution call.
-        """
-        safety_settings = [
-            types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
-            for cat in [
-                types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                types.HarmCategory.HARM_CATEGORY_HARASSMENT
-            ]
-        ]
-        config = types.GenerateContentConfig(
-            temperature=0.8,
-            top_p=0.95,
-            max_output_tokens=Config.MAX_OUTPUT_TOKENS,
-            safety_settings=safety_settings,
-            tools=[types.Tool(code_execution=types.ToolCodeExecution())],
-        )
-        return config
-    @staticmethod
-    def create_tooling_config() -> types.GenerateContentConfig:
-        """
-        Creates the Gemini generation configuration for the internal tooling call,
-        enabling built-in tools like Google Search and URL Context.
-        """
-        google_search_tool = types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())
-        available_tools_for_native = [
-            types.Tool(google_search=types.GoogleSearch()),
-            types.Tool(url_context=types.UrlContext()),
-        ]
-        safety_settings = [
-            types.SafetySetting(category=cat, threshold=types.HarmBlockThreshold.BLOCK_NONE)
-            for cat in [
-                types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                types.HarmCategory.HARM_CATEGORY_HARASSMENT
-            ]
-        ]
-        config = types.GenerateContentConfig(
-            system_instruction=types.Content(parts=[types.Part(text="Your critical function is to always search the internet or analyze URLs for extra information.")], role="system"),
-            temperature=1.0,
-            top_p=0.95,
-            max_output_tokens=Config.MAX_OUTPUT_TOKENS,
-            safety_settings=safety_settings,
-            tools=available_tools_for_native,
-        )
-        try:
-            config.thinking_config = types.ThinkingConfig(
-                 include_thoughts=False,
-                 thinking_budget=Config.THINKING_BUDGET
-            )
-        except AttributeError:
-            logger.warning("⚠️ Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it.")
         return config
 class ResponseExtractor:
     @staticmethod

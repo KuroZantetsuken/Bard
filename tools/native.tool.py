@@ -3,6 +3,7 @@ from typing import Any, Dict, List as TypingList
 from tools import BaseTool, ToolContext
 from google.genai import types
 from google.genai import client as genai_client
+from gemini_utils import GeminiConfigManager
 from config import Config
 logger = logging.getLogger("Bard")
 class NativeTool(BaseTool):
@@ -23,6 +24,32 @@ class NativeTool(BaseTool):
                 parameters=types.Schema(type=types.Type.OBJECT, properties={})
             )
         ]
+    def _create_tooling_config(self) -> types.GenerateContentConfig:
+        """
+        Creates the Gemini generation configuration for the internal tooling call,
+        enabling built-in tools like Google Search and URL Context.
+        """
+        available_tools = [
+            types.Tool(google_search=types.GoogleSearch()),
+            types.Tool(url_context=types.UrlContext()),
+        ]
+        safety_settings = GeminiConfigManager.get_base_safety_settings()
+        config = types.GenerateContentConfig(
+            system_instruction=types.Content(parts=[types.Part(text="Your critical function is to always search the internet or analyze URLs for extra information.")], role="system"),
+            temperature=1.0,
+            top_p=0.95,
+            max_output_tokens=self.config.MAX_OUTPUT_TOKENS,
+            safety_settings=safety_settings,
+            tools=available_tools,
+        )
+        try:
+            config.thinking_config = types.ThinkingConfig(
+                 include_thoughts=False,
+                 thinking_budget=self.config.THINKING_BUDGET
+            )
+        except AttributeError:
+            logger.warning("⚠️ Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it.")
+        return config
     async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         if function_name != "use_built_in_tools":
             return types.Part(function_response=types.FunctionResponse(
@@ -30,16 +57,13 @@ class NativeTool(BaseTool):
                 response={"success": False, "error": f"Unknown function in NativeTool: {function_name}"}
             ))
         gemini_client = context.get("gemini_client")
-        gemini_cfg_mgr = context.get("gemini_config_manager")
         response_extractor = context.get("response_extractor")
         original_user_turn_content = context.get("original_user_turn_content")
         history_for_tooling_call = context.get("history_for_tooling_call")
-        task_description = args.get("task")
-        if not all([gemini_client, gemini_cfg_mgr, response_extractor, original_user_turn_content, history_for_tooling_call is not None]):
+        if not all([gemini_client, response_extractor, original_user_turn_content, history_for_tooling_call is not None]):
             missing = [
                 name for name, var in {
                     "gemini_client": gemini_client,
-                    "gemini_config_manager": gemini_cfg_mgr,
                     "response_extractor": response_extractor,
                     "original_user_turn_content": original_user_turn_content,
                     "history_for_tooling_call": "Provided" if history_for_tooling_call is not None else None
@@ -52,7 +76,7 @@ class NativeTool(BaseTool):
                 response={"success": False, "error": error_msg}
             ))
         logger.info("🛠️ NativeTool: Performing secondary Gemini call for built-in tools: using original prompt")
-        tooling_gen_config = gemini_cfg_mgr.create_tooling_config()
+        tooling_gen_config = self._create_tooling_config()
         try:
             contents_for_tooling_call: TypingList[types.Content] = []
             if history_for_tooling_call:

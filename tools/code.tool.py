@@ -3,6 +3,7 @@ import base64
 from typing import Any, Dict, List as TypingList
 from tools import BaseTool, ToolContext
 from google.genai import types
+from gemini_utils import GeminiConfigManager
 from config import Config
 logger = logging.getLogger("Bard")
 class CodeExecutionTool(BaseTool):
@@ -39,15 +40,26 @@ class CodeExecutionTool(BaseTool):
                 )
             )
         ]
+    def _create_code_execution_config(self) -> types.GenerateContentConfig:
+        """
+        Creates the Gemini generation configuration for a code execution call.
+        """
+        safety_settings = GeminiConfigManager.get_base_safety_settings()
+        return types.GenerateContentConfig(
+            temperature=0.8,
+            top_p=0.95,
+            max_output_tokens=self.config.MAX_OUTPUT_TOKENS,
+            safety_settings=safety_settings,
+            tools=[types.Tool(code_execution=types.ToolCodeExecution())],
+        )
     async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         gemini_client = context.get("gemini_client")
-        gemini_cfg_mgr = context.get("gemini_config_manager")
         task_description = args.get("task")
-        if not all([gemini_client, gemini_cfg_mgr, task_description]):
+        if not all([gemini_client, task_description]):
             error_msg = "CodeExecutionTool: Missing required context or 'task' argument."
             logger.error(f"❌ {error_msg}")
             return types.Part(function_response=types.FunctionResponse(name=function_name, response={"success": False, "error": error_msg}))
-        code_exec_config = gemini_cfg_mgr.create_code_execution_config()
+        code_exec_config = self._create_code_execution_config()
         prompt_parts_for_exec = [types.Part(text=task_description)]
         if args.get("has_file_input"):
             original_user_turn = context.get("original_user_turn_content")
