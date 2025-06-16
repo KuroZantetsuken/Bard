@@ -100,22 +100,20 @@ class PromptManager:
                                              channel_name: str, channel_id: int,
                                              is_thread: bool, thread_parent_name: Optional[str]) -> str:
         """Generates the metadata header for each message sent to the AI."""
-        user_mention = f"<@{message_author_id}>"
-        user_str = f"{message_author_display_name} (@{message_author_name}, ID: {message_author_id})"
+        user_str = f"Display Name: {message_author_display_name}, Username: {message_author_name}, ID: {message_author_id})"
         if guild_id:
-            guild_name_str = f"{guild_name} (ID: {guild_id})"
+            guild_name_str = f"Server: {guild_name}, ID: {guild_id}"
             if is_thread:
-                channel_name_str = f"{thread_parent_name}/{channel_name} (ID: {channel_id})"
+                channel_name_str = f"Thread: {thread_parent_name}, Channel: {channel_name}, ID: {channel_id}"
             else:
-                channel_name_str = f"{channel_name} (ID: {channel_id})"
+                channel_name_str = f"Channel: {channel_name}, ID: {channel_id}"
         else:
-            guild_name_str = 'N/A (Direct Message)'
+            guild_name_str = 'Server: N/A (Direct Message)'
             channel_name_str = f"Direct Message with {message_author_display_name} (Channel ID: {channel_id})"
         metadata_content = f"""[DYNAMIC_CONTEXT:START]
 Timestamp: {datetime.now(timezone.utc).isoformat()}
-Guild: {guild_name_str}
-Channel: {channel_name_str}
-User: {user_str}
-User Mention: {user_mention}
+{guild_name_str}
+{channel_name_str}
+{user_str}
 [DYNAMIC_CONTEXT:END]"""
         return metadata_content
