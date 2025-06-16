@@ -109,17 +109,15 @@ class NativeTool(BaseTool):
                     response={"success": False, "error": error_msg}
                 ))
             candidate = tooling_response.candidates[0]
-            finish_reason = candidate.finish_reason.name
-            if finish_reason not in ("STOP", "MAX_TOKENS"):
-                details = ""
-                if finish_reason == "SAFETY":
-                    details = f"Safety Ratings: {candidate.safety_ratings}"
-                error_msg = f"Built-in tools call stopped unexpectedly. Reason: {finish_reason}. {details}".strip()
-                logger.error(f"❌ {error_msg}")
+            if not candidate.finish_reason:
+                error_msg = "Built-in tools call returned an incomplete response (missing finish reason)."
+                logger.error(f"❌ {error_msg} Candidate: {candidate}")
                 return types.Part(function_response=types.FunctionResponse(
                     name=function_name,
                     response={"success": False, "error": error_msg}
                 ))
+            finish_reason = candidate.finish_reason.name
+            if finish_reason not in ("STOP", "MAX_TOKENS"):
             if candidate.grounding_metadata and hasattr(candidate.grounding_metadata, 'grounding_chunks'):
                 chunks = candidate.grounding_metadata.grounding_chunks
                 if chunks:
