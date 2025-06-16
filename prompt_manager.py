@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from config import Config
 logger = logging.getLogger("Bard")
-TOOL_FUNCTIONS_PLACEHOLDER = "[DYNAMIC_TOOL_FUNCTIONS_PLACEHOLDER]"
+TOOL_FUNCTIONS_PLACEHOLDER = "[TOOLS]"
 class PromptManager:
     def __init__(self, config: Config, tool_registry
                  ):
