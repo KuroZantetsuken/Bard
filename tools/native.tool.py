@@ -90,21 +90,27 @@ class NativeTool(BaseTool):
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
-            tooling_text_result = response_extractor.extract_text(tooling_response)
-            if not tooling_response.candidates or tooling_response.candidates[0].finish_reason.name != "STOP":
-                reason = "Unknown"
+            if not tooling_response.candidates:
+                details = f"Prompt Feedback: {tooling_response.prompt_feedback}" if tooling_response.prompt_feedback else "No details provided."
+                error_msg = f"Built-in tools call was blocked or failed. {details}"
+                logger.error(f"❌ {error_msg}")
+                return types.Part(function_response=types.FunctionResponse(
+                    name=function_name,
+                    response={"success": False, "error": error_msg}
+                ))
+            candidate = tooling_response.candidates[0]
+            finish_reason = candidate.finish_reason.name
+            if finish_reason not in ("STOP", "MAX_TOKENS"):
                 details = ""
-                if not tooling_response.candidates:
-                    reason = "No candidates returned"
-                    if tooling_response.prompt_feedback:
-                         details = f"Prompt Feedback: {tooling_response.prompt_feedback}"
-                else:
-                    candidate = tooling_response.candidates[0]
-                    reason = candidate.finish_reason.name
-                    if candidate.finish_reason.name == "SAFETY":
-                        details = f"Safety Ratings: {candidate.safety_ratings}"
-                logger.error(f"❌ Built-in tools call stopped by API. Finish Reason: {reason}. {details}")
-                return None
+                if finish_reason == "SAFETY":
+                    details = f"Safety Ratings: {candidate.safety_ratings}"
+                error_msg = f"Built-in tools call stopped unexpectedly. Reason: {finish_reason}. {details}".strip()
+                logger.error(f"❌ {error_msg}")
+                return types.Part(function_response=types.FunctionResponse(
+                    name=function_name,
+                    response={"success": False, "error": error_msg}
+                ))
+            tooling_text_result = response_extractor.extract_text(tooling_response)
             logger.info(f"🛠️ Built-in tools call result:\n{tooling_text_result}")
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
