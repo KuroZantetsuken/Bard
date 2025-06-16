@@ -7,15 +7,16 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 - **History:** Short-term memory per server.
     - Only accessible in the respective server, by any user.
     - Saved locally.
-    - Reset with `!reset @Bot`.
+    - Reset with `!reset`.
 - **Function Calling:** Uses Gemini's function calling feature for robust tool usage.
     - **Memory:** Long-term memory per user.
         - Only accessible by the respective user, in any server.
         - Saved locally.
-        - Reset with `!forget @Bot`.
-    - **Text-to-Speech:** Can generate native Discord voice messages. Supports different speech styles.
+        - Reset with `!forget`.
+    - **Text-to-Speech:** Generate native Discord voice messages. Supports different speech styles.
         - Request using natural language.
-    - **Google Search & URL Context:** Accesses Google Search or web URLs using native tools.
+    - **Google Search & URL Context:** Access Google Search or web URLs using native tools.
+    - **Code Execution:** Generate and run Python code to aid responses.
 - **Context-Aware:** Understands message reply chains along with any attachments.
 - **Dynamic:** Adapts its responses if the user edits or deletes their messages.
 
