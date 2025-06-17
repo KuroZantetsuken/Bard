@@ -23,7 +23,7 @@ from typing import List as TypingList
 from typing import Optional
 from typing import Tuple
 logger = logging.getLogger("Bard")
-active_bot_responses: Dict[int, discord.Message] = {}
+active_bot_responses: Dict[int, TypingList[discord.Message]] = {}
 gemini_client: Optional[genai_client.Client] = None
 chat_history_mgr: Optional[ChatHistoryManager] = None
 prompt_mgr: Optional[PromptManager] = None
@@ -102,7 +102,7 @@ class MessageProcessor:
              logger.warning("⚠️ No substantive parts built for Gemini beyond initial metadata. Message may be ignored if no history.")
         return final_parts, is_substantively_empty
     @staticmethod
-    async def process(message: discord.Message, bot_message_to_edit: Optional[discord.Message] = None):
+    async def process(message: discord.Message, bot_messages_to_edit: Optional[TypingList[discord.Message]] = None):
         global chat_history_mgr, prompt_mgr, tool_reg, gemini_client, bot
         global msg_sender, reply_chain_proc, resp_extractor, gemini_cfg_mgr
         global active_bot_responses
@@ -114,8 +114,8 @@ class MessageProcessor:
             deleted_msg = "No active chat history found to clear."
             if await chat_history_mgr.delete_history(guild_id_for_history, user_id_for_dm_history):
                 deleted_msg = "🧹 Chat history has been cleared!"
-            bot_resp = await msg_sender.send(message, deleted_msg, existing_bot_message_to_edit=bot_message_to_edit)
-            if bot_resp: active_bot_responses[message.id] = bot_resp
+            bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+            if bot_resps: active_bot_responses[message.id] = bot_resps
             return
         if message.content.strip().lower().startswith(f"{bot.command_prefix}forget"):
             deleted_msg = "No memories found for you to forget."
@@ -124,8 +124,8 @@ class MessageProcessor:
                     deleted_msg = f"🧠 All your memories with me have been forgotten, {message.author.display_name}."
             else:
                 deleted_msg = "Memory management is currently unavailable."
-            bot_resp = await msg_sender.send(message, deleted_msg, existing_bot_message_to_edit=bot_message_to_edit)
-            if bot_resp: active_bot_responses[message.id] = bot_resp
+            bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+            if bot_resps: active_bot_responses[message.id] = bot_resps
             return
         async with message.channel.typing():
             try:
@@ -141,13 +141,13 @@ class MessageProcessor:
                 )
                 if is_substantively_empty and not history_for_session_init:
                     logger.info("💬 Message is empty and no history. Sending default greeting.")
-                    bot_resp = await msg_sender.send(message, "Hello! How can I help you today?", existing_bot_message_to_edit=bot_message_to_edit)
-                    if bot_resp: active_bot_responses[message.id] = bot_resp
+                    bot_resps = await msg_sender.send(message, "Hello! How can I help you today?", existing_bot_messages_to_edit=bot_messages_to_edit)
+                    if bot_resps: active_bot_responses[message.id] = bot_resps
                     return
                 if not gemini_prompt_parts:
                     logger.error("❌ No prompt parts were built for Gemini. Aborting.")
-                    bot_resp = await msg_sender.send(message, "❌ I couldn't prepare your request.", existing_bot_message_to_edit=bot_message_to_edit)
-                    if bot_resp: active_bot_responses[message.id] = bot_resp
+                    bot_resps = await msg_sender.send(message, "❌ I couldn't prepare your request.", existing_bot_messages_to_edit=bot_messages_to_edit)
+                    if bot_resps: active_bot_responses[message.id] = bot_resps
                     return
                 user_turn_content = gemini_types.Content(role="user", parts=gemini_prompt_parts)
                 current_session_history_entries.append(
@@ -263,7 +263,7 @@ class MessageProcessor:
                 if not final_text_for_discord and not final_audio_data and not final_image_data:
                     final_text_for_discord = "I processed your request but have no further text, audio, or images to send."
                 await chat_history_mgr.save_history(guild_id_for_history, user_id_for_dm_history, current_session_history_entries)
-                new_bot_msg = await msg_sender.send(
+                new_bot_msgs = await msg_sender.send(
                     message,
                     final_text_for_discord if final_text_for_discord else None,
                     audio_data=final_audio_data,
@@ -271,18 +271,18 @@ class MessageProcessor:
                     waveform_b64=final_audio_waveform,
                     image_data=final_image_data,
                     image_filename=final_image_filename,
-                    existing_bot_message_to_edit=bot_message_to_edit
+                    existing_bot_messages_to_edit=bot_messages_to_edit
                 )
-                if new_bot_msg:
-                    active_bot_responses[message.id] = new_bot_msg
+                if new_bot_msgs:
+                    active_bot_responses[message.id] = new_bot_msgs
                 elif message.id in active_bot_responses:
                     active_bot_responses.pop(message.id, None)
             except Exception as e:
                 logger.error(f"❌ Message processing pipeline error for user {message.author.name}: {e}", exc_info=True)
                 err_msg = "❌ I encountered an error processing your request."
-                bot_resp = await msg_sender.send(message, err_msg, existing_bot_message_to_edit=bot_message_to_edit)
-                if bot_resp: active_bot_responses[message.id] = bot_resp
-                elif message.id in active_bot_responses and bot_message_to_edit:
+                bot_resps = await msg_sender.send(message, err_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+                if bot_resps: active_bot_responses[message.id] = bot_resps
+                elif message.id in active_bot_responses and bot_messages_to_edit:
                     active_bot_responses.pop(message.id, None)
 @bot.event
 async def on_ready():
@@ -351,29 +351,31 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     is_command_after = after.content.lower().strip().startswith(f"{bot.command_prefix}reset") or \
                        after.content.lower().strip().startswith(f"{bot.command_prefix}forget")
     should_process_after = is_dm_after or is_mentioned_after or is_reply_to_bot_after or is_command_after
-    existing_bot_response_msg = active_bot_responses.get(after.id)
+    existing_bot_response_msgs = active_bot_responses.get(after.id)
     if not should_process_after:
-        if existing_bot_response_msg:
-            logger.info(f"🗑️ Edited message (ID: {after.id}) no longer qualifies. Deleting previous bot response (ID: {existing_bot_response_msg.id}).")
-            try:
-                await existing_bot_response_msg.delete()
-            except discord.HTTPException as e_del:
-                logger.warning(f"⚠️ Could not delete previous bot response {existing_bot_response_msg.id}: {e_del}")
-            finally:
-                active_bot_responses.pop(after.id, None)
+        if existing_bot_response_msgs:
+            logger.info(f"🗑️ Edited message (ID: {after.id}) no longer qualifies. Deleting {len(existing_bot_response_msgs)} previous bot response(s).")
+            for msg in existing_bot_response_msgs:
+                try:
+                    await msg.delete()
+                except discord.HTTPException as e_del:
+                    logger.warning(f"⚠️ Could not delete previous bot response {msg.id}: {e_del}")
+            active_bot_responses.pop(after.id, None)
         return
     logger.info(f"📥 Edited message (ID: {after.id}) qualifies and is substantive. Reprocessing.")
-    await MessageProcessor.process(after, bot_message_to_edit=existing_bot_response_msg)
+    await MessageProcessor.process(after, bot_messages_to_edit=existing_bot_response_msgs)
 @bot.event
 async def on_message_delete(message: discord.Message):
     if message.id in active_bot_responses:
-        bot_response_to_delete = active_bot_responses.pop(message.id, None)
-        if bot_response_to_delete:
-            try:
-                await bot_response_to_delete.delete()
-                logger.info(f"🗑️ Bot response (ID: {bot_response_to_delete.id}) deleted because original user message (ID: {message.id}) was deleted.")
-            except discord.HTTPException as e:
-                logger.warning(f"⚠️ Failed to delete bot response (ID: {bot_response_to_delete.id}) for deleted user message. Error: {e}")
+        bot_responses_to_delete = active_bot_responses.pop(message.id, None)
+        if bot_responses_to_delete:
+            deleted_ids = ", ".join([str(m.id) for m in bot_responses_to_delete])
+            logger.info(f"🗑️ Deleting {len(bot_responses_to_delete)} bot response(s) (IDs: {deleted_ids}) because original user message (ID: {message.id}) was deleted.")
+            for bot_response in bot_responses_to_delete:
+                try:
+                    await bot_response.delete()
+                except discord.HTTPException as e:
+                    logger.warning(f"⚠️ Failed to delete bot response (ID: {bot_response.id}) for deleted user message. Error: {e}")
 def validate_env_vars():
     """Validates essential environment variables."""
     if not Config.DISCORD_BOT_TOKEN:
