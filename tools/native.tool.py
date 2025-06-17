@@ -118,21 +118,21 @@ class NativeTool(BaseTool):
                 ))
             finish_reason = candidate.finish_reason.name
             if finish_reason not in ("STOP", "MAX_TOKENS"):
-            if candidate.grounding_metadata and hasattr(candidate.grounding_metadata, 'grounding_chunks'):
-                chunks = candidate.grounding_metadata.grounding_chunks
-                if chunks:
-                    source_links = []
-                    unique_sources = {}
-                    for chunk in chunks:
-                        if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri') and hasattr(chunk.web, 'title') and chunk.web.uri and chunk.web.title:
-                            if chunk.web.uri not in unique_sources:
-                                title = chunk.web.title.replace(']', '').replace('[', '')
-                                unique_sources[chunk.web.uri] = f"[{title}](<{chunk.web.uri}>)"
-                    if unique_sources:
-                        source_links = list(unique_sources.values())
-                        grounding_sources_md = "-# " + ", ".join(source_links)
-                        setattr(context, "grounding_sources_md", grounding_sources_md)
-                        logger.info(f"📚 Extracted {len(source_links)} unique grounding source(s) to be appended to final response.")
+                if candidate.grounding_metadata and hasattr(candidate.grounding_metadata, 'grounding_chunks'):
+                    chunks = candidate.grounding_metadata.grounding_chunks
+                    if chunks:
+                        source_links = []
+                        unique_sources = {}
+                        for chunk in chunks:
+                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri') and hasattr(chunk.web, 'title') and chunk.web.uri and chunk.web.title:
+                                if chunk.web.uri not in unique_sources:
+                                    title = chunk.web.title.replace(']', '').replace('[', '')
+                                    unique_sources[chunk.web.uri] = f"[{title}](<{chunk.web.uri}>)"
+                        if unique_sources:
+                            source_links = list(unique_sources.values())
+                            grounding_sources_md = "-# " + ", ".join(source_links)
+                            setattr(context, "grounding_sources_md", grounding_sources_md)
+                            logger.info(f"📚 Extracted {len(source_links)} unique grounding source(s) to be appended to final response.")
             tooling_text_result = response_extractor.extract_text(tooling_response)
             return types.Part(function_response=types.FunctionResponse(
                 name=function_name,
