@@ -404,7 +404,7 @@ def setup_logging_config():
     console_handler.addFilter(JsonPayloadFilter())
     app_logger.addHandler(console_handler)
     try:
-        file_handler = logging.FileHandler('.log', mode='a', encoding='utf-8')
+        file_handler = logging.FileHandler('.log', mode='w', encoding='utf-8')
         detailed_file_formatter = logging.Formatter(
             '%(asctime)s [%(levelname)-5s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s'
         )
