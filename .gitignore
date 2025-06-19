@@ -1,6 +1,7 @@
 .env
 .venv
 .log
+.patch
 history
 memories
 __pycache__

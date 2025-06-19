@@ -163,8 +163,8 @@ class MessageProcessor:
                 logger.info(f"📥 Message received:\n{message.author.display_name}: {content_for_llm}")
                 request_payload = gemini_utils.sanitize_response_for_logging({
                     "model": Config.MODEL_ID,
-                    "contents": [c.dict() for c in contents_for_gemini_call],
-                    "config": main_gen_config.dict()
+                    "contents": [c.model_dump() for c in contents_for_gemini_call],
+                    "config": main_gen_config.model_dump()
                 })
                 logger.info(f"REQUEST to Gemini API (generate_content, initial):\n{json.dumps(request_payload, indent=2)}")
                 response_from_gemini = await gemini_client.aio.models.generate_content(
@@ -185,7 +185,7 @@ class MessageProcessor:
                 max_loops = 5
                 while loop_count < max_loops:
                     loop_count += 1
-                    sanitized_response = gemini_utils.sanitize_response_for_logging(response_from_gemini.dict())
+                    sanitized_response = gemini_utils.sanitize_response_for_logging(response_from_gemini.model_dump())
                     logger.info(f"RESPONSE from Gemini API (loop {loop_count}):\n{json.dumps(sanitized_response, indent=2)}")
                     if not response_from_gemini.candidates:
                         logger.error(f"❌ Gemini response was blocked. Prompt Feedback: {response_from_gemini.prompt_feedback}")
@@ -232,8 +232,8 @@ class MessageProcessor:
                         contents_for_gemini_call.append(tool_turn_content)
                         request_payload_follow_up = gemini_utils.sanitize_response_for_logging({
                             "model": Config.MODEL_ID,
-                            "contents": [c.dict() for c in contents_for_gemini_call],
-                            "config": follow_up_gen_config.dict()
+                            "contents": [c.model_dump() for c in contents_for_gemini_call],
+                            "config": follow_up_gen_config.model_dump()
                         })
                         logger.info(f"REQUEST to Gemini API (follow_up, loop {loop_count}):\n{json.dumps(request_payload_follow_up, indent=2)}")
                         response_from_gemini = await gemini_client.aio.models.generate_content(
@@ -385,6 +385,11 @@ def validate_env_vars():
     logger.info("✅ Environment variables validated.")
 def setup_logging_config():
     """Configures logging for the application."""
+    class JsonPayloadFilter(logging.Filter):
+        """Prevents log records containing JSON API payloads from being displayed in the console."""
+        def filter(self, record):
+            msg = record.getMessage()
+            return not (msg.startswith("REQUEST to") or msg.startswith("RESPONSE from"))
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
     logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
@@ -396,6 +401,7 @@ def setup_logging_config():
     console_handler = logging.StreamHandler()
     console_formatter = logging.Formatter('%(message)s')
     console_handler.setFormatter(console_formatter)
+    console_handler.addFilter(JsonPayloadFilter())
     app_logger.addHandler(console_handler)
     try:
         file_handler = logging.FileHandler('.log', mode='a', encoding='utf-8')
