@@ -242,8 +242,9 @@ class TTSTool(BaseTool):
             types.FunctionDeclaration(
                 name="speak_message",
                 description=(
-                    "Use this if the user asks for a voice/audio response, or if you decide a spoken response is best. "
-                    "Only use this tool once per turn. "
+                    "Purpose: generate speech using a text input. "
+                    "Results: generated audio file. "
+                    "Restrictions: only use this once after as the last tool if the user requests audio or a spoken message."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,

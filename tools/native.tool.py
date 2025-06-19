@@ -19,12 +19,10 @@ class NativeTool(BaseTool):
             types.FunctionDeclaration(
                 name="use_built_in_tools",
                 description=(
-                    "Use this function when you need to access Google Search for current information or "
-                    "analyze the content of a web URL provided by the user. "
-                    "This function takes no arguments. The system will automatically use the original user "
-                    "request for the search or analysis. After this function is called, the system will "
-                    "provide you with the result from the tool (e.g., search findings or URL summary). "
-                    "You should then use this information to proceed with your response."
+                    "Purpose: crawl web URLs or execute Google searches "
+                    "Arguments: original user request is automatically passed through. "
+                    "Results: summary of the URL or Google search. "
+                    "Restrictions: only use this when the request includes a URL or requires sourcing data you don't have access to."
                 ),
                 parameters=types.Schema(type=types.Type.OBJECT, properties={})
             )
@@ -40,7 +38,7 @@ class NativeTool(BaseTool):
         ]
         safety_settings = GeminiConfigManager.get_base_safety_settings()
         config = types.GenerateContentConfig(
-            system_instruction=types.Content(parts=[types.Part(text="Your critical function is to always search the internet or analyze URLs for extra information.")], role="system"),
+            system_instruction=types.Content(parts=[types.Part(text="Critical directive: search the internet or analyze URLs and provide a verbose summary.")], role="system"),
             temperature=1.0,
             top_p=0.95,
             max_output_tokens=self.config.MAX_OUTPUT_TOKENS,

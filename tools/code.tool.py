@@ -14,10 +14,6 @@ from typing import Dict
 from typing import List as TypingList
 logger = logging.getLogger("Bard")
 class CodeExecutionTool(BaseTool):
-    """
-    A tool to allow the Gemini model to generate and execute Python code in a sandboxed environment.
-    This tool makes a secondary call to the Gemini API with the code_execution tool enabled.
-    """
     def __init__(self, config: Config):
         self.config = config
     def get_function_declarations(self) -> TypingList[types.FunctionDeclaration]:
@@ -25,24 +21,12 @@ class CodeExecutionTool(BaseTool):
             types.FunctionDeclaration(
                 name="execute_python_code",
                 description=(
-                    "Executes Python code to solve a given task. Provide a **natural language description** of the task to be performed. "
-                    "This tool will then generate, execute, and return the results. "
-                    "You can use this to aid with logical requests that benefit from code execution. You have specific libraries for basic image editing, chess problem solving, and graph plotting."
+                    "Purpose: executes Python code with built-in libraries. "
+                    "Arguments: original user request is automatically passed through. "
+                    "Results: an image or summary of the executed Python code. "
+                    "Restrictions: only use this to aid with logical requests that benefit from code execution or to generate simple images."
                 ),
-                parameters=types.Schema(
-                    type=types.Type.OBJECT,
-                    properties={
-                        "task": types.Schema(
-                            type=types.Type.STRING,
-                            description="A clear and specific **natural language instruction** for the task to be accomplished."
-                        ),
-                        "has_file_input": types.Schema(
-                            type=types.Type.BOOLEAN,
-                            description="Set to 'true' if the user's prompt includes a file attachment that the code needs to operate on."
-                        )
-                    },
-                    required=["task"],
-                )
+                parameters=types.Schema(type=types.Type.OBJECT, properties={})
             )
         ]
     def _create_code_execution_config(self) -> types.GenerateContentConfig:
@@ -51,8 +35,8 @@ class CodeExecutionTool(BaseTool):
         """
         safety_settings = GeminiConfigManager.get_base_safety_settings()
         return types.GenerateContentConfig(
-            system_instruction=types.Content(parts=[types.Part(text="Your critical function is to always use code execution.")], role="system"),
-            temperature=0.8,
+            system_instruction=types.Content(parts=[types.Part(text="Critical directive: generate and execute Python code and provide a verbose summary or the generated image.")], role="system"),
+            temperature=1.0,
             top_p=0.95,
             max_output_tokens=self.config.MAX_OUTPUT_TOKENS,
             safety_settings=safety_settings,
@@ -60,22 +44,22 @@ class CodeExecutionTool(BaseTool):
         )
     async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         gemini_client = context.get("gemini_client")
-        task_description = args.get("task")
-        if not all([gemini_client, task_description]):
-            error_msg = "CodeExecutionTool: Missing required context or 'task' argument."
+        original_user_turn_content = context.get("original_user_turn_content")
+        history_for_tooling_call = context.get("history_for_tooling_call")
+        if not gemini_client:
+            error_msg = "CodeExecutionTool: Missing 'gemini_client' from context."
+            logger.error(f"❌ {error_msg}")
+            return types.Part(function_response=types.FunctionResponse(name=function_name, response={"success": False, "error": error_msg}))
+        if not original_user_turn_content:
+            error_msg = "CodeExecutionTool: Missing 'original_user_turn_content' from context. Cannot proceed without the user's request."
             logger.error(f"❌ {error_msg}")
             return types.Part(function_response=types.FunctionResponse(name=function_name, response={"success": False, "error": error_msg}))
         code_exec_config = self._create_code_execution_config()
-        prompt_parts_for_exec = [types.Part(text=task_description)]
-        if args.get("has_file_input"):
-            original_user_turn = context.get("original_user_turn_content")
-            if original_user_turn:
-                file_parts = [p for p in original_user_turn.parts if p.file_data]
-                if file_parts:
-                    prompt_parts_for_exec.extend(file_parts)
-                    logger.info(f"⚙️ Injected {len(file_parts)} file(s) into the code execution context.")
-        contents_for_code_exec = [types.Content(role="user", parts=prompt_parts_for_exec)]
-        logger.info(f"⚙️ CodeExecutionTool: Performing secondary Gemini call for code execution:\n{task_description}")
+        contents_for_code_exec: TypingList[types.Content] = []
+        if history_for_tooling_call:
+            contents_for_code_exec.extend(history_for_tooling_call)
+        contents_for_code_exec.append(original_user_turn_content)
+        logger.info(f"⚙️ CodeExecutionTool: Performing secondary Gemini call for code execution using original user request context.")
         try:
             request_payload = sanitize_response_for_logging({
                 "model": self.config.MODEL_ID,

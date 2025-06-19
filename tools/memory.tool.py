@@ -137,8 +137,9 @@ class MemoryTool(BaseTool):
             types.FunctionDeclaration(
                 name="add_user_memory",
                 description=(
-                    "Stores a piece of information (memory) about the user that they have stated or implied. "
-                    "After calling this, formulate a chat response acknowledging the memory was saved."
+                    "Purpose: store a piece of information about the user that they have stated or implied. "
+                    "Results: this function has no output, generate an appropriate response depending on the result. "
+                    "Restrictions: only use this if the user asks you to remember something or implies a fact about themselves."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
@@ -154,15 +155,16 @@ class MemoryTool(BaseTool):
             types.FunctionDeclaration(
                 name="remove_user_memory",
                 description=(
-                    "Removes a previously stored memory for the user, identified by its ID. Memory IDs are provided when listing memories "
-                    "or can be inferred from context. After calling this, formulate a chat response acknowledging the memory was removed."
+                    "Purpose: remove a previously stored information about the user. "
+                    "Results: this function has no output, generate an appropriate response depending on the result. "
+                    "Restrictions: only use this if the user asks you to forget something or implies a fact about themselves that contradict existing information."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "memory_id": types.Schema(
                             type=types.Type.INTEGER,
-                            description="The unique numerical identifier of the memory to be removed."
+                            description="The unique numerical identifier of the memory to be removed. Infer this from the memories listed in your context."
                         ),
                     },
                     required=["memory_id"],
