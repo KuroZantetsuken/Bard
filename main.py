@@ -10,6 +10,7 @@ from config import Config
 from datetime import datetime
 from datetime import timezone
 from discord.ext import commands
+from functools import partial
 from google.genai import client as genai_client
 from google.genai import types as gemini_types
 from history_manager import ChatHistoryManager
@@ -32,6 +33,7 @@ tool_reg: Optional[ToolRegistry] = None
 msg_sender: Optional[discord_utils.MessageSender] = None
 reply_chain_proc: Optional[discord_utils.ReplyChainProcessor] = None
 yt_proc: Optional[discord_utils.YouTubeProcessor] = None
+generic_vid_proc: Optional[discord_utils.GenericVideoProcessor] = None
 mime_detector: Optional[discord_utils.MimeDetector] = None
 attach_proc: Optional[gemini_utils.AttachmentProcessor] = None
 gemini_cfg_mgr: Optional[gemini_utils.GeminiConfigManager] = None
@@ -57,7 +59,7 @@ class MessageProcessor:
         cleaned_content: str,
         reply_chain_data: TypingList[Dict[str, Any]]
     ) -> Tuple[TypingList[gemini_types.Part], bool]:
-        global prompt_mgr, tool_reg, yt_proc, attach_proc, mime_detector, bot
+        global prompt_mgr, tool_reg, yt_proc, generic_vid_proc, attach_proc, mime_detector, bot
         guild = message.guild
         is_thread = isinstance(message.channel, discord.Thread)
         thread_parent_name = message.channel.parent.name if is_thread and hasattr(message.channel.parent, 'name') else None
@@ -94,8 +96,23 @@ class MessageProcessor:
                 parts.extend(p for p in replied_attachments_gemini_parts if p)
         content_after_yt, yt_file_data_parts = yt_proc.process_content(cleaned_content)
         parts.extend(yt_file_data_parts)
-        user_message_text_to_add = content_after_yt.strip()
-        current_message_has_files = bool(message.attachments or yt_file_data_parts)
+        content_to_process_further = content_after_yt
+        all_urls_in_content = generic_vid_proc.extract_urls(content_to_process_further)
+        non_youtube_urls = [url for url in all_urls_in_content if not yt_proc.is_youtube_url(url)]
+        processed_video_urls = set()
+        if non_youtube_urls:
+            for url in non_youtube_urls:
+                if url in processed_video_urls: continue
+                gemini_part = await generic_vid_proc.process_url(
+                    url, content_to_process_further, gemini_client
+                )
+                if gemini_part:
+                    parts.append(gemini_part)
+                    content_to_process_further = content_to_process_further.replace(url, "")
+                    processed_video_urls.add(url)
+                    logger.info(f"✅ Successfully processed and added generic video from URL: {url}")
+        user_message_text_to_add = content_to_process_further.strip()
+        current_message_has_files = bool(message.attachments or yt_file_data_parts or processed_video_urls)
         if user_message_text_to_add:
             parts.append(gemini_types.Part(text=f"User Message: {user_message_text_to_add}"))
         elif current_message_has_files:
@@ -107,7 +124,7 @@ class MessageProcessor:
             )
             parts.extend(p for p in current_attachments_gemini_parts if p)
         final_parts = [p for p in parts if p is not None]
-        is_substantively_empty = not (user_message_text_to_add or message.attachments or yt_file_data_parts)
+        is_substantively_empty = not (user_message_text_to_add or message.attachments or yt_file_data_parts or processed_video_urls)
         if not final_parts or (len(final_parts) == 1 and final_parts[0].text == metadata_header_str and is_substantively_empty):
              logger.warning("⚠️ No substantive parts built for Gemini beyond initial metadata. Message may be ignored if no history.")
         return final_parts, is_substantively_empty
@@ -181,11 +198,14 @@ class MessageProcessor:
                     "config": main_gen_config.model_dump()
                 })
                 logger.info(f"REQUEST to Gemini API (generate_content, initial):\n{json.dumps(request_payload, indent=2)}")
-                response_from_gemini = await gemini_client.aio.models.generate_content(
+                loop = asyncio.get_running_loop()
+                blocking_gemini_call = partial(
+                    gemini_client.models.generate_content,
                     model=Config.MODEL_ID,
                     contents=contents_for_gemini_call,
-                    config=main_gen_config,
+                    config=main_gen_config
                 )
+                response_from_gemini = await loop.run_in_executor(None, blocking_gemini_call)
                 tool_exec_context = ToolContext(
                     gemini_client=gemini_client, config=Config, user_id=message.author.id,
                     original_user_turn_content=user_turn_content,
@@ -250,11 +270,13 @@ class MessageProcessor:
                             "config": follow_up_gen_config.model_dump()
                         })
                         logger.info(f"REQUEST to Gemini API (follow_up, loop {loop_count}):\n{json.dumps(request_payload_follow_up, indent=2)}")
-                        response_from_gemini = await gemini_client.aio.models.generate_content(
+                        blocking_gemini_follow_up_call = partial(
+                            gemini_client.models.generate_content,
                             model=Config.MODEL_ID,
                             contents=contents_for_gemini_call,
                             config=follow_up_gen_config
                         )
+                        response_from_gemini = await loop.run_in_executor(None, blocking_gemini_follow_up_call)
                         continue
                     else:
                         if first_candidate.finish_reason.name not in ("STOP", "MAX_TOKENS"):
@@ -498,7 +520,7 @@ def setup_logging_config():
 def initialize_components():
     """Initializes global components like clients and managers."""
     global gemini_client, chat_history_mgr, prompt_mgr, tool_reg
-    global msg_sender, reply_chain_proc, yt_proc, mime_detector, attach_proc
+    global msg_sender, reply_chain_proc, yt_proc, generic_vid_proc, mime_detector, attach_proc
     global gemini_cfg_mgr, resp_extractor
     try:
         gemini_client = genai_client.Client(api_key=Config.GEMINI_API_KEY)
@@ -512,6 +534,7 @@ def initialize_components():
     msg_sender = discord_utils.MessageSender()
     reply_chain_proc = discord_utils.ReplyChainProcessor()
     yt_proc = discord_utils.YouTubeProcessor()
+    generic_vid_proc = discord_utils.GenericVideoProcessor()
     mime_detector = discord_utils.MimeDetector()
     attach_proc = gemini_utils.AttachmentProcessor()
     gemini_cfg_mgr = gemini_utils.GeminiConfigManager()

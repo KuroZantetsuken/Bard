@@ -8,6 +8,7 @@ from collections import defaultdict
 from config import Config
 from datetime import datetime
 from google.genai import client
+from google.genai import errors as genai_errors
 from google.genai import types
 from typing import Any
 from typing import Dict
@@ -43,6 +44,61 @@ def sanitize_response_for_logging(data: Any) -> Any:
         ]
         return cleaned_list if cleaned_list else None
     return data
+async def upload_media_bytes_to_file_api(
+    gemini_client: client.Client,
+    data_bytes: bytes,
+    display_name: str,
+    mime_type: str
+) -> Optional[types.Part]:
+    """
+    Uploads raw media bytes to the Gemini File API, waits for it to become ACTIVE,
+    and returns a Gemini Part.
+    """
+    if not gemini_client:
+        logger.error("❌ Gemini client not initialized. Cannot upload media bytes to File API.")
+        return types.Part(text=f"[Attachment: {display_name} - Error: Gemini client not ready]")
+    try:
+        file_io = io.BytesIO(data_bytes)
+        safe_display_name = "".join(c if c.isalnum() or c in ['.', '-', '_'] else '_' for c in display_name)
+        if not safe_display_name: safe_display_name = "uploaded_file"
+        upload_config = types.UploadFileConfig(
+            mime_type=mime_type,
+            display_name=safe_display_name,
+        )
+        logger.info(f"REQUEST to Gemini File API (upload):\n"
+                    f"Config:\n{json.dumps(upload_config.dict(), indent=2)}\n"
+                    f"Body: Raw file data (name: {display_name}, size: {len(data_bytes)} bytes)")
+        uploaded_file = await gemini_client.aio.files.upload(
+            file=file_io,
+            config=upload_config
+        )
+        sanitized_response = sanitize_response_for_logging(uploaded_file.dict())
+        logger.info(f"RESPONSE from Gemini File API (upload):\n"
+                    f"{json.dumps(sanitized_response, indent=2)}")
+        if uploaded_file.state.name == "PROCESSING":
+            logger.info(f"📎 File '{uploaded_file.name}' is PROCESSING. Polling until ACTIVE...")
+            polling_start_time = asyncio.get_event_loop().time()
+            max_polling_time = 120
+            while uploaded_file.state.name == "PROCESSING":
+                if asyncio.get_event_loop().time() - polling_start_time > max_polling_time:
+                    logger.error(f"❌ File '{uploaded_file.name}' polling timed out after {max_polling_time}s.")
+                    raise TimeoutError(f"File processing timed out for {uploaded_file.name}")
+                await asyncio.sleep(2)
+                uploaded_file = await gemini_client.aio.files.get(name=uploaded_file.name)
+                logger.info(f"📎 Polling status for '{uploaded_file.name}': {uploaded_file.state.name}")
+        if uploaded_file.state.name != "ACTIVE":
+            error_msg = f"File '{uploaded_file.name}' did not become ACTIVE. Final state: {uploaded_file.state.name}."
+            logger.error(f"❌ {error_msg}")
+            return types.Part(text=f"[Attachment: {display_name} - Error: {error_msg}]")
+        logger.info(f"✅ File '{uploaded_file.name}' is ACTIVE and ready for use.")
+        new_file_data = types.FileData(
+            mime_type=uploaded_file.mime_type,
+            file_uri=uploaded_file.uri
+        )
+        return types.Part(file_data=new_file_data)
+    except Exception as e:
+        logger.error(f"❌ Error uploading or processing file '{display_name}' (MIME: {mime_type}) in File API: {e}", exc_info=True)
+        return types.Part(text=f"[Attachment: {display_name} - Error: Gemini File API operation failed: {str(e)[:100]}]")
 class GeminiConfigManager:
     """Manages the generation configuration for Gemini API calls."""
     @staticmethod
@@ -145,8 +201,8 @@ class AttachmentProcessor:
     async def _download_attachment_data(
         attachment: discord.Attachment,
         mime_detector_cls
-    ) -> Optional[Tuple[io.BytesIO, str, str]]:
-        """Downloads attachment, detects MIME, returns (BytesIO, mime_type, filename)."""
+    ) -> Optional[Tuple[bytes, str, str]]:
+        """Downloads attachment, detects MIME, returns (bytes, mime_type, filename)."""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(attachment.url) as response:
@@ -156,7 +212,7 @@ class AttachmentProcessor:
                         if not mime_type or mime_type == 'application/octet-stream' or mime_type == 'unknown/unknown':
                             detected_mime = mime_detector_cls.detect(data)
                             mime_type = detected_mime
-                        return io.BytesIO(data), mime_type, attachment.filename
+                        return data, mime_type, attachment.filename
                     else:
                         logger.warning(f"⚠️ Failed to download attachment {attachment.filename} from {attachment.url}. HTTP Status: {response.status}")
                         return None
@@ -187,35 +243,12 @@ class AttachmentProcessor:
             prepared_data = await AttachmentProcessor._download_attachment_data(attachment, mime_detector_cls)
             if not prepared_data:
                 return types.Part(text=f"[Attachment: {attachment.filename} - Error: Download or preparation failed]")
-            file_io, mime, fname = prepared_data
-            try:
-                file_io.seek(0)
-                display_name = "".join(c if c.isalnum() or c in ['.', '-', '_'] else '_' for c in fname)
-                if not display_name: display_name = "uploaded_file"
-                upload_config = types.UploadFileConfig(
-                    mime_type=mime,
-                    display_name=display_name,
-                )
-                logger.info(f"REQUEST to Gemini File API (upload):\n"
-                            f"Config:\n{json.dumps(upload_config.dict(), indent=2)}\n"
-                            f"Body: Raw file data (name: {fname}, size: {file_io.getbuffer().nbytes} bytes)")
-                uploaded_gemini_file_obj = await gemini_client.aio.files.upload(
-                    file=file_io,
-                    config=upload_config
-                )
-                sanitized_response = sanitize_response_for_logging(uploaded_gemini_file_obj.dict())
-                logger.info(f"RESPONSE from Gemini File API (upload):\n"
-                            f"{json.dumps(sanitized_response, indent=2)}")
-                new_file_data_to_cache = types.FileData(
-                    mime_type=uploaded_gemini_file_obj.mime_type,
-                    file_uri=uploaded_gemini_file_obj.uri
-                )
-                AttachmentProcessor._gemini_file_cache[attachment.id] = new_file_data_to_cache
+            data_bytes, mime, fname = prepared_data
+            uploaded_part = await upload_media_bytes_to_file_api(gemini_client, data_bytes, fname, mime)
+            if uploaded_part and uploaded_part.file_data:
+                AttachmentProcessor._gemini_file_cache[attachment.id] = uploaded_part.file_data
                 logger.info(f"📎 Cached Gemini File API data for attachment ID {attachment.id}.")
-                return types.Part(file_data=new_file_data_to_cache)
-            except Exception as e:
-                logger.error(f"❌ Error uploading file '{fname}' (MIME: {mime}) to Gemini File API: {e}", exc_info=True)
-                return types.Part(text=f"[Attachment: {fname} - Error: Gemini File API Upload failed: {str(e)[:100]}]")
+            return uploaded_part
     @staticmethod
     async def process_discord_attachments(
         gemini_client: client.Client,

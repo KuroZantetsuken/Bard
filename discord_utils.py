@@ -10,8 +10,13 @@ import mimetypes
 import os
 import re
 import tempfile
+import yt_dlp
+from collections import defaultdict
 from config import Config
+from gemini_utils import upload_media_bytes_to_file_api
+from google.genai import client as genai_client
 from google.genai import types as gemini_types
+from typing import Dict
 from typing import List as TypingList
 from typing import Optional
 from typing import Tuple
@@ -62,6 +67,9 @@ class YouTubeProcessor:
                 found_urls.append(match.group(0))
         return list(set(found_urls))
     @classmethod
+    def is_youtube_url(cls, url: str) -> bool:
+        return any(pattern.match(url) for pattern in cls.PATTERNS)
+    @classmethod
     def process_content(cls, content: str) -> Tuple[str, TypingList[gemini_types.Part]]:
         urls = cls.extract_urls(content)
         if not urls:
@@ -79,8 +87,74 @@ class YouTubeProcessor:
             cleaned_content = cleaned_content.replace(url, "")
         cleaned_content = re.sub(r'\s+', ' ', cleaned_content).strip()
         if youtube_parts:
-            logger.info(f"🎬 Identified {len(youtube_parts)} YouTube video link(s) for model processing.")
+            logger.info(f"🎬 Identified {len(youtube_parts)} YouTube video link(s) for native model processing.")
         return cleaned_content, youtube_parts
+class GenericVideoProcessor:
+    URL_REGEX = re.compile(r'https?://[^\s/$.?#].[^\s]*', re.IGNORECASE)
+    _video_url_cache: Dict[str, gemini_types.FileData] = {}
+    _video_url_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+    @staticmethod
+    def extract_urls(text: str) -> TypingList[str]:
+        return GenericVideoProcessor.URL_REGEX.findall(text)
+    @classmethod
+    async def process_url(
+        cls, url: str, prompt_text: str, gemini_client: genai_client.Client
+    ) -> Optional[gemini_types.Part]:
+        """
+        Processes a video from a URL by piping it from yt-dlp to the Gemini API.
+        Uses a cache to avoid redundant downloads and uploads.
+        """
+        cache_key = url
+        if cache_key in cls._video_url_cache:
+            cached_file_data = cls._video_url_cache[cache_key]
+            logger.info(f"🎬 Cache HIT for video {cache_key}. Using URI: {cached_file_data.file_uri}")
+            return gemini_types.Part(file_data=cached_file_data)
+        lock = cls._video_url_locks[cache_key]
+        async with lock:
+            if cache_key in cls._video_url_cache:
+                cached_file_data = cls._video_url_cache[cache_key]
+                logger.info(f"🎬 Cache HIT (after lock) for video {cache_key}. Using URI: {cached_file_data.file_uri}")
+                return gemini_types.Part(file_data=cached_file_data)
+            logger.info(f"🎬 Cache MISS for {cache_key}. Piping video from yt-dlp to Gemini.")
+            ydl_command = [
+                'yt-dlp', url,
+                '-f', 'worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst',
+                '-o', '-',
+                '--quiet',
+            ]
+            process = None
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *ydl_command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                video_bytes, stderr_bytes = await process.communicate()
+                if process.returncode != 0:
+                    logger.error(f"❌ yt-dlp failed for URL {url} with code {process.returncode}.\n"
+                                 f"Stderr:\n{stderr_bytes.decode(errors='ignore')}")
+                    return None
+                if not video_bytes:
+                    logger.error(f"❌ yt-dlp ran successfully for URL {url} but produced no output.")
+                    return None
+                logger.info(f"✅ Successfully streamed {len(video_bytes)} bytes from yt-dlp for URL: {url}")
+                display_name = os.path.basename(url.split('?')[0]) or "streamed_video.mp4"
+                gemini_part = await upload_media_bytes_to_file_api(
+                    gemini_client, video_bytes, display_name, "video/mp4"
+                )
+                if gemini_part and gemini_part.file_data:
+                    cls._video_url_cache[cache_key] = gemini_part.file_data
+                    logger.info(f"🎬 Cached Gemini File API data for video key: {cache_key}.")
+                return gemini_part
+            except FileNotFoundError:
+                logger.error("❌ yt-dlp not found. It must be installed and in the system's PATH.")
+                return None
+            except Exception as e:
+                logger.error(f"❌ Unexpected error processing video stream from {url}: {e}", exc_info=True)
+                if process and process.returncode is None:
+                    process.kill()
+                    await process.wait()
+                return None
 class MessageSender:
     @staticmethod
     async def _send_text_reply(message_to_reply_to: discord.Message, text_content: str, file_to_attach: Optional[discord.File] = None) -> TypingList[discord.Message]:

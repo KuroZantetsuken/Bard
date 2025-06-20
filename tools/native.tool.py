@@ -22,7 +22,7 @@ class NativeTool(BaseTool):
                     "Purpose: crawl web URLs or execute Google searches "
                     "Arguments: original user request is automatically passed through. "
                     "Results: summary of the URL or Google search. "
-                    "Restrictions: only use this when the request includes a URL or requires sourcing data you don't have access to."
+                    "Restrictions: only use this when the request includes a non-video URL or requires sourcing data you don't have access to."
                 ),
                 parameters=types.Schema(type=types.Type.OBJECT, properties={})
             )
