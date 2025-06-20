@@ -24,6 +24,7 @@ from typing import Optional
 from typing import Tuple
 logger = logging.getLogger("Bard")
 active_bot_responses: Dict[int, TypingList[discord.Message]] = {}
+active_processing_tasks: Dict[int, asyncio.Task] = {}
 gemini_client: Optional[genai_client.Client] = None
 chat_history_mgr: Optional[ChatHistoryManager] = None
 prompt_mgr: Optional[PromptManager] = None
@@ -39,6 +40,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+def _task_done_callback(task: asyncio.Task, message_id: int):
+    """A callback to clean up a task from the registry once it's complete."""
+    active_processing_tasks.pop(message_id, None)
+    try:
+        if not task.cancelled() and (exc := task.exception()):
+            logger.error(f"❌ Unhandled exception in task for message {message_id}:", exc_info=exc)
+    except asyncio.CancelledError:
+        pass
 class MessageProcessor:
     """Handles processing of incoming Discord messages and interaction with Gemini."""
     @staticmethod
@@ -106,29 +115,29 @@ class MessageProcessor:
         global chat_history_mgr, prompt_mgr, tool_reg, gemini_client, bot
         global msg_sender, reply_chain_proc, resp_extractor, gemini_cfg_mgr
         global active_bot_responses
-        content_for_llm = message.content.strip()
-        guild_id_for_history = message.guild.id if message.guild else None
-        user_id_for_dm_history = message.author.id if guild_id_for_history is None else None
-        memory_manager_instance = tool_reg.get_memory_manager() if tool_reg else None
-        if message.content.strip().lower().startswith(f"{bot.command_prefix}reset"):
-            deleted_msg = "No active chat history found to clear."
-            if await chat_history_mgr.delete_history(guild_id_for_history, user_id_for_dm_history):
-                deleted_msg = "🧹 Chat history has been cleared!"
-            bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
-            if bot_resps: active_bot_responses[message.id] = bot_resps
-            return
-        if message.content.strip().lower().startswith(f"{bot.command_prefix}forget"):
-            deleted_msg = "No memories found for you to forget."
-            if memory_manager_instance:
-                if await memory_manager_instance.delete_all_memories(message.author.id):
-                    deleted_msg = f"🧠 All your memories with me have been forgotten, {message.author.display_name}."
-            else:
-                deleted_msg = "Memory management is currently unavailable."
-            bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
-            if bot_resps: active_bot_responses[message.id] = bot_resps
-            return
-        async with message.channel.typing():
-            try:
+        try:
+            content_for_llm = message.content.strip()
+            guild_id_for_history = message.guild.id if message.guild else None
+            user_id_for_dm_history = message.author.id if guild_id_for_history is None else None
+            memory_manager_instance = tool_reg.get_memory_manager() if tool_reg else None
+            if message.content.strip().lower().startswith(f"{bot.command_prefix}reset"):
+                deleted_msg = "No active chat history found to clear."
+                if await chat_history_mgr.delete_history(guild_id_for_history, user_id_for_dm_history):
+                    deleted_msg = "🧹 Chat history has been cleared!"
+                bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+                if bot_resps: active_bot_responses[message.id] = bot_resps
+                return
+            if message.content.strip().lower().startswith(f"{bot.command_prefix}forget"):
+                deleted_msg = "No memories found for you to forget."
+                if memory_manager_instance:
+                    if await memory_manager_instance.delete_all_memories(message.author.id):
+                        deleted_msg = f"🧠 All your memories with me have been forgotten, {message.author.display_name}."
+                else:
+                    deleted_msg = "Memory management is currently unavailable."
+                bot_resps = await msg_sender.send(message, deleted_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+                if bot_resps: active_bot_responses[message.id] = bot_resps
+                return
+            async with message.channel.typing():
                 loaded_history_entries: TypingList[HistoryEntry] = await chat_history_mgr.load_history(guild_id_for_history, user_id_for_dm_history)
                 history_for_session_init: TypingList[gemini_types.Content] = [
                     entry.content for entry in loaded_history_entries
@@ -277,13 +286,16 @@ class MessageProcessor:
                     active_bot_responses[message.id] = new_bot_msgs
                 elif message.id in active_bot_responses:
                     active_bot_responses.pop(message.id, None)
-            except Exception as e:
-                logger.error(f"❌ Message processing pipeline error for user {message.author.name}: {e}", exc_info=True)
-                err_msg = "❌ I encountered an error processing your request."
-                bot_resps = await msg_sender.send(message, err_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
-                if bot_resps: active_bot_responses[message.id] = bot_resps
-                elif message.id in active_bot_responses and bot_messages_to_edit:
-                    active_bot_responses.pop(message.id, None)
+        except asyncio.CancelledError:
+            logger.info(f"✅ Processing task for message {message.id} was cancelled successfully.")
+            return
+        except Exception as e:
+            logger.error(f"❌ Message processing pipeline error for user {message.author.name}: {e}", exc_info=True)
+            err_msg = "❌ I encountered an error processing your request."
+            bot_resps = await msg_sender.send(message, err_msg, existing_bot_messages_to_edit=bot_messages_to_edit)
+            if bot_resps: active_bot_responses[message.id] = bot_resps
+            elif message.id in active_bot_responses and bot_messages_to_edit:
+                active_bot_responses.pop(message.id, None)
 @bot.event
 async def on_ready():
     logger.info(f"🎉 Logged in as {bot.user.name} (ID: {bot.user.id})")
@@ -327,7 +339,13 @@ async def on_message(message: discord.Message):
     is_command = message.content.lower().strip().startswith(f"{bot.command_prefix}reset") or \
                  message.content.lower().strip().startswith(f"{bot.command_prefix}forget")
     if is_dm or is_mentioned or is_reply_to_bot or is_command:
-        await MessageProcessor.process(message)
+        if message.id in active_processing_tasks:
+            logger.warning(f"⚠️ A processing task already exists for new message {message.id}. This is unexpected. Cancelling old task.")
+            old_task = active_processing_tasks.pop(message.id)
+            old_task.cancel()
+        task = asyncio.create_task(MessageProcessor.process(message))
+        active_processing_tasks[message.id] = task
+        task.add_done_callback(lambda t: _task_done_callback(t, message.id))
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
     if after.author == bot.user or after.author.bot:
@@ -337,6 +355,10 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
        not before.embeds and after.embeds and \
        not any(e.type == 'gifv' for e in after.embeds):
         return
+    if after.id in active_processing_tasks:
+        logger.info(f"✏️ Message {after.id} was edited while being processed. Cancelling in-flight task.")
+        task_to_cancel = active_processing_tasks.pop(after.id)
+        task_to_cancel.cancel()
     is_dm_after = isinstance(after.channel, discord.DMChannel)
     is_mentioned_after = bot.user.mentioned_in(after) if bot.user else False
     is_reply_to_bot_after = False
@@ -362,10 +384,16 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
                     logger.warning(f"⚠️ Could not delete previous bot response {msg.id}: {e_del}")
             active_bot_responses.pop(after.id, None)
         return
-    logger.info(f"📥 Edited message (ID: {after.id}) qualifies and is substantive. Reprocessing.")
-    await MessageProcessor.process(after, bot_messages_to_edit=existing_bot_response_msgs)
+    logger.info(f"📥 Edited message (ID: {after.id}) qualifies. Reprocessing.")
+    task = asyncio.create_task(MessageProcessor.process(after, bot_messages_to_edit=existing_bot_response_msgs))
+    active_processing_tasks[after.id] = task
+    task.add_done_callback(lambda t: _task_done_callback(t, after.id))
 @bot.event
 async def on_message_delete(message: discord.Message):
+    if message.id in active_processing_tasks:
+        logger.info(f"🗑️ Original message {message.id} was deleted. Cancelling in-flight processing task.")
+        task_to_cancel = active_processing_tasks.pop(message.id)
+        task_to_cancel.cancel()
     if message.id in active_bot_responses:
         bot_responses_to_delete = active_bot_responses.pop(message.id, None)
         if bot_responses_to_delete:
