@@ -126,6 +126,8 @@ class MessageSender:
                         sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk)
                     if sent_msg_for_chunk:
                         sent_messages.append(sent_msg_for_chunk)
+                        try: await sent_msg_for_chunk.add_reaction(Config.RETRY_EMOJI)
+                        except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to message {sent_msg_for_chunk.id}: {e_react}")
                 except discord.HTTPException as e:
                     logger.error(f"❌ Failed to send text chunk {i+1}/{len(chunks)}. Error: {e}", exc_info=True)
                     if i == 0:
@@ -133,6 +135,8 @@ class MessageSender:
                             sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk, file=file_for_this_turn)
                             if sent_msg_for_chunk:
                                 sent_messages.append(sent_msg_for_chunk)
+                                try: await sent_msg_for_chunk.add_reaction(Config.RETRY_EMOJI)
+                                except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to message {sent_msg_for_chunk.id}: {e_react}")
                         except discord.HTTPException as e_chan:
                             logger.error(f"❌ Failed to send first chunk to channel directly. Error: {e_chan}", exc_info=True)
                             return sent_messages
@@ -150,6 +154,8 @@ class MessageSender:
                     logger.error(f"❌ Failed to send to channel directly.\nError:\n{e_chan}", exc_info=True)
             if sent_msg:
                 sent_messages.append(sent_msg)
+                try: await sent_msg.add_reaction(Config.RETRY_EMOJI)
+                except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to message {sent_msg.id}: {e_react}")
                 logger.info(f"📤 Sent text reply:\n{text_content}")
         return sent_messages
     @staticmethod
@@ -180,6 +186,8 @@ class MessageSender:
                 try:
                     edited_message = await existing_bot_messages_to_edit[0].edit(content=text_content)
                     logger.info(f"✏️ Edited existing bot message with text. ID: {edited_message.id}")
+                    try: await edited_message.add_reaction(Config.RETRY_EMOJI)
+                    except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to edited message {edited_message.id}: {e_react}")
                     return [edited_message]
                 except discord.HTTPException as e:
                     logger.warning(f"⚠️ Failed to edit text-only bot message (ID: {existing_bot_messages_to_edit[0].id}). Error: {e}. Will delete and resend.", exc_info=False)
@@ -300,6 +308,8 @@ class MessageSender:
                     try: os.unlink(temp_ogg_file_path_for_upload)
                     except OSError: pass
             if sent_native_voice_message_obj:
+                try: await sent_native_voice_message_obj.add_reaction(Config.RETRY_EMOJI)
+                except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to voice message {sent_native_voice_message_obj.id}: {e_react}")
                 all_sent_messages.append(sent_native_voice_message_obj)
             else:
                 logger.info("🎤 Native voice send unsuccessful or unconfirmed, attempting to send audio as file attachment.")
@@ -316,6 +326,8 @@ class MessageSender:
                         sent_audio_file_message_fallback = await message_to_reply_to.reply(file=discord_file)
                     if sent_audio_file_message_fallback:
                         logger.info(f"📎 Sent voice response as .ogg file attachment (fallback). ID: {sent_audio_file_message_fallback.id}")
+                        try: await sent_audio_file_message_fallback.add_reaction(Config.RETRY_EMOJI)
+                        except discord.HTTPException as e_react: logger.warning(f"⚠️ Could not add retry reaction to fallback audio message {sent_audio_file_message_fallback.id}: {e_react}")
                         all_sent_messages.append(sent_audio_file_message_fallback)
                 except discord.HTTPException as e_file:
                     logger.error(f"❌ Failed to send .ogg file as attachment (fallback). Error: {e_file}", exc_info=True)

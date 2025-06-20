@@ -39,6 +39,7 @@ resp_extractor: Optional[gemini_utils.ResponseExtractor] = None
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
+intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 def _task_done_callback(task: asyncio.Task, message_id: int):
     """A callback to clean up a task from the registry once it's complete."""
@@ -111,7 +112,11 @@ class MessageProcessor:
              logger.warning("⚠️ No substantive parts built for Gemini beyond initial metadata. Message may be ignored if no history.")
         return final_parts, is_substantively_empty
     @staticmethod
-    async def process(message: discord.Message, bot_messages_to_edit: Optional[TypingList[discord.Message]] = None):
+    async def process(
+        message: discord.Message,
+        bot_messages_to_edit: Optional[TypingList[discord.Message]] = None,
+        reaction_to_remove: Optional[Tuple[discord.Reaction, discord.User]] = None
+    ):
         global chat_history_mgr, prompt_mgr, tool_reg, gemini_client, bot
         global msg_sender, reply_chain_proc, resp_extractor, gemini_cfg_mgr
         global active_bot_responses
@@ -286,6 +291,13 @@ class MessageProcessor:
                     active_bot_responses[message.id] = new_bot_msgs
                 elif message.id in active_bot_responses:
                     active_bot_responses.pop(message.id, None)
+            if reaction_to_remove:
+                reaction, user = reaction_to_remove
+                try:
+                    await reaction.remove(user)
+                    logger.info(f"🔄 Removed retry reaction from user {user.name} on message {reaction.message.id}.")
+                except discord.HTTPException as e_rem:
+                    logger.warning(f"⚠️ Failed to remove retry reaction for user {user.name} from message {reaction.message.id}: {e_rem}")
         except asyncio.CancelledError:
             logger.info(f"✅ Processing task for message {message.id} was cancelled successfully.")
             return
@@ -404,6 +416,42 @@ async def on_message_delete(message: discord.Message):
                     await bot_response.delete()
                 except discord.HTTPException as e:
                     logger.warning(f"⚠️ Failed to delete bot response (ID: {bot_response.id}) for deleted user message. Error: {e}")
+@bot.event
+async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
+    if user.bot or reaction.message.author != bot.user or str(reaction.emoji) != Config.RETRY_EMOJI:
+        return
+    original_message_id = None
+    for msg_id, bot_msgs in active_bot_responses.items():
+        if reaction.message.id in [m.id for m in bot_msgs]:
+            original_message_id = msg_id
+            break
+    if not original_message_id:
+        logger.debug(f"Reaction on message {reaction.message.id} not found in active response cache. Ignoring.")
+        return
+    try:
+        original_message = await reaction.message.channel.fetch_message(original_message_id)
+    except discord.NotFound:
+        logger.warning(f"Could not find original message {original_message_id} for retry reaction. It might have been deleted.")
+        return
+    except discord.HTTPException as e:
+        logger.error(f"Failed to fetch original message {original_message_id} for retry reaction: {e}")
+        return
+    if original_message.author.id != user.id:
+        logger.debug(f"User {user.name} reacted to retry, but original author was {original_message.author.name}. Ignoring.")
+        return
+    logger.info(f"🔄 Retry triggered for message {original_message.id} by reaction from {user.name}.")
+    if original_message.id in active_processing_tasks:
+        logger.warning(f"A processing task already exists for retry message {original_message.id}. Cancelling old task.")
+        old_task = active_processing_tasks.pop(original_message.id)
+        old_task.cancel()
+    bot_messages_to_edit = active_bot_responses.get(original_message.id)
+    task = asyncio.create_task(MessageProcessor.process(
+        original_message,
+        bot_messages_to_edit=bot_messages_to_edit,
+        reaction_to_remove=(reaction, user)
+    ))
+    active_processing_tasks[original_message.id] = task
+    task.add_done_callback(lambda t: _task_done_callback(t, original_message.id))
 def validate_env_vars():
     """Validates essential environment variables."""
     if not Config.DISCORD_BOT_TOKEN:

@@ -13,6 +13,8 @@ class Config:
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # Prebuilt voice name for text-to-speech
     VOICE_NAME = "Kore"
+    # Emoji used to trigger a re-run of a prompt
+    RETRY_EMOJI = '🔄'
     # Length used to trim responses (characters)
     MAX_MESSAGE_LENGTH = 2000
     # Max depth for fetching reply chains (messages)
