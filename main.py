@@ -350,7 +350,7 @@ async def on_message(message: discord.Message):
             logger.debug(f"🔍 Error checking message reference: {e_ref}")
     is_command = message.content.lower().strip().startswith(f"{bot.command_prefix}reset") or \
                  message.content.lower().strip().startswith(f"{bot.command_prefix}forget")
-    if is_dm or is_mentioned or is_reply_to_bot or is_command:
+    if is_dm or is_mentioned or is_command:
         if message.id in active_processing_tasks:
             logger.warning(f"⚠️ A processing task already exists for new message {message.id}. This is unexpected. Cancelling old task.")
             old_task = active_processing_tasks.pop(message.id)
@@ -384,7 +384,7 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         except Exception: pass
     is_command_after = after.content.lower().strip().startswith(f"{bot.command_prefix}reset") or \
                        after.content.lower().strip().startswith(f"{bot.command_prefix}forget")
-    should_process_after = is_dm_after or is_mentioned_after or is_reply_to_bot_after or is_command_after
+    should_process_after = is_dm_after or is_mentioned_after or is_command_after
     existing_bot_response_msgs = active_bot_responses.get(after.id)
     if not should_process_after:
         if existing_bot_response_msgs:
