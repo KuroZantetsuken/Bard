@@ -8,7 +8,7 @@ class Config:
     # Gemini API key
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     # Text generation model
-    MODEL_ID = "gemini-2.5-flash-preview-05-20"
+    MODEL_ID = "gemini-2.5-flash"
     # Specific model for text-to-speech
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # Prebuilt voice name for text-to-speech
