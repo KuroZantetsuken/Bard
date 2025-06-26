@@ -9,10 +9,10 @@ from google.genai import types as gemini_types
 from tools import BaseTool
 from tools import ToolContext
 from typing import Any
-from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Type
+from typing import Dict
 logger = logging.getLogger("Bard")
 class ToolRegistry:
     def __init__(self, config: Config):
@@ -42,10 +42,11 @@ class ToolRegistry:
                         logger.error(f"❌ Could not create module from spec for '{logical_module_name}'. Skipping.")
                         continue
                     sys.modules[logical_module_name] = module
+                    assert spec.loader is not None, f"ModuleSpec loader is None for {logical_module_name}"
                     spec.loader.exec_module(module)
                     for attribute_name in dir(module):
                         attribute = getattr(module, attribute_name)
-                        if inspect.isclass(attribute) and \
+                        if inspect.isclass(attribute) and inspect.isclass(BaseTool) and \
                            issubclass(attribute, BaseTool) and \
                            attribute is not BaseTool:
                             try:

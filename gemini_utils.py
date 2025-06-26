@@ -10,7 +10,7 @@ from datetime import datetime
 from google.genai import client
 from google.genai import errors as genai_errors
 from google.genai import types
-from typing import Any
+from typing import Any, cast
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -68,29 +68,58 @@ async def upload_media_bytes_to_file_api(
         logger.info(f"REQUEST to Gemini File API (upload):\n"
                     f"Config:\n{json.dumps(upload_config.dict(), indent=2)}\n"
                     f"Body: Raw file data (name: {display_name}, size: {len(data_bytes)} bytes)")
-        uploaded_file = await gemini_client.aio.files.upload(
+        uploaded_file_result = await gemini_client.aio.files.upload(
             file=file_io,
             config=upload_config
         )
-        sanitized_response = sanitize_response_for_logging(uploaded_file.dict())
-        logger.info(f"RESPONSE from Gemini File API (upload):\n"
-                    f"{json.dumps(sanitized_response, indent=2)}")
-        if uploaded_file.state.name == "PROCESSING":
-            logger.info(f"📎 File '{uploaded_file.name}' is PROCESSING. Polling until ACTIVE...")
-            polling_start_time = asyncio.get_event_loop().time()
-            max_polling_time = 120
-            while uploaded_file.state.name == "PROCESSING":
-                if asyncio.get_event_loop().time() - polling_start_time > max_polling_time:
-                    logger.error(f"❌ File '{uploaded_file.name}' polling timed out after {max_polling_time}s.")
-                    raise TimeoutError(f"File processing timed out for {uploaded_file.name}")
-                await asyncio.sleep(2)
-                uploaded_file = await gemini_client.aio.files.get(name=uploaded_file.name)
-                logger.info(f"📎 Polling status for '{uploaded_file.name}': {uploaded_file.state.name}")
-        if uploaded_file.state.name != "ACTIVE":
-            error_msg = f"File '{uploaded_file.name}' did not become ACTIVE. Final state: {uploaded_file.state.name}."
+        if uploaded_file_result is None or uploaded_file_result.name is None:
+            error_msg = f"File '{display_name}' upload failed or returned an invalid file object (name was None)."
             logger.error(f"❌ {error_msg}")
             return types.Part(text=f"[Attachment: {display_name} - Error: {error_msg}]")
-        logger.info(f"✅ File '{uploaded_file.name}' is ACTIVE and ready for use.")
+        active_uploaded_file: types.File = uploaded_file_result
+
+        sanitized_response = sanitize_response_for_logging(active_uploaded_file.dict())
+        logger.info(f"RESPONSE from Gemini File API (upload):\n"
+                    f"{json.dumps(sanitized_response, indent=2)}")
+        active_file_state = cast(types.FileState, active_uploaded_file.state)
+        active_file_state_name = cast(str, active_file_state.name)
+
+        logger.info(f"📎 Initial upload state for '{active_uploaded_file.name}': {active_file_state_name}")
+
+        if active_file_state_name == "PROCESSING":
+            logger.info(f"📎 File '{active_uploaded_file.name}' is PROCESSING. Polling until ACTIVE...")
+            polling_start_time = asyncio.get_event_loop().time()
+            max_polling_time = 120
+            while active_file_state_name == "PROCESSING":
+                if asyncio.get_event_loop().time() - polling_start_time > max_polling_time:
+                    logger.error(f"❌ File '{active_uploaded_file.name}' polling timed out after {max_polling_time}s.")
+                    raise TimeoutError(f"File processing timed out for {active_uploaded_file.name}")
+                await asyncio.sleep(2)
+                if active_uploaded_file.name is None:
+                    error_msg = f"File '{display_name}' name became None during polling before get call."
+                    logger.error(f"❌ {error_msg}")
+                    return types.Part(text=f"[Attachment: {display_name} - Error: {error_msg}]")
+
+                uploaded_file_get_result = await gemini_client.aio.files.get(name=active_uploaded_file.name)
+                if uploaded_file_get_result is None or uploaded_file_get_result.name is None:
+                    error_msg = f"File '{display_name}' get failed or returned an invalid file object (name was None) during polling."
+                    logger.error(f"❌ {error_msg}")
+                    return types.Part(text=f"[Attachment: {display_name} - Error: {error_msg}]")
+                active_uploaded_file = uploaded_file_get_result
+                active_file_state = cast(types.FileState, active_uploaded_file.state)
+                active_file_state_name = cast(str, active_file_state.name)
+
+                logger.info(f"📎 Polling status for '{active_uploaded_file.name}': {active_file_state_name}")
+        if active_file_state_name != "ACTIVE":
+            error_msg = f"File '{active_uploaded_file.name}' did not become ACTIVE. Final state: {active_file_state_name}."
+            logger.error(f"❌ {error_msg}")
+            return types.Part(text=f"[Attachment: {display_name} - Error: {error_msg}]")
+        logger.info(f"✅ File '{active_uploaded_file.name}' is ACTIVE and ready for use.")
+        new_file_data = types.FileData(
+            mime_type=active_uploaded_file.mime_type,
+            file_uri=active_uploaded_file.uri
+        )
+        return types.Part(file_data=new_file_data)
         new_file_data = types.FileData(
             mime_type=uploaded_file.mime_type,
             file_uri=uploaded_file.uri
@@ -264,9 +293,12 @@ class AttachmentProcessor:
             upload_tasks.append(AttachmentProcessor._upload_to_file_api(gemini_client, att_obj, mime_detector_cls))
         results = await asyncio.gather(*upload_tasks, return_exceptions=True)
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, types.Part):
+                gemini_parts.append(result)
+            elif isinstance(result, Exception):
                 logger.error(f"❌ Attachment processing task failed: {result}", exc_info=result)
                 gemini_parts.append(types.Part(text="[Attachment: Processing failed for one file]"))
             elif result is not None:
-                gemini_parts.append(result)
+                logger.warning(f"⚠️ Unexpected non-Part, non-Exception result from attachment processing: {type(result)}")
+                gemini_parts.append(types.Part(text="[Attachment: Unexpected processing result]"))
         return gemini_parts

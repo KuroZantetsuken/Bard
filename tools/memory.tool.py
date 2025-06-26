@@ -195,6 +195,12 @@ class MemoryTool(BaseTool):
                 ))
         elif function_name == "remove_user_memory":
             id_arg = args.get("memory_id")
+            if id_arg is None:
+                logger.warning("🧠 'remove_user_memory' called without 'memory_id'.")
+                return types.Part(function_response=types.FunctionResponse(
+                    name=function_name,
+                    response={"success": False, "error": "Missing memory_id argument."}
+                ))
             try:
                 mem_id = int(id_arg)
                 success = await self.memory_manager.remove_memory(user_id, mem_id)

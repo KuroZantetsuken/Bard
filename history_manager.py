@@ -134,14 +134,15 @@ class ChatHistoryManager:
         for entry in entries_to_save:
             content_item = entry.content
             parts_list = []
-            for part in content_item.parts:
+            for part in content_item.parts or []:
                 if part.text is not None:
                     parts_list.append({"text": part.text})
                 elif part.inline_data is not None:
+                    encoded_data = base64.b64encode(part.inline_data.data if part.inline_data.data is not None else b'').decode('utf-8')
                     parts_list.append({
                         "inline_data": {
                             "mime_type": part.inline_data.mime_type,
-                            "data": base64.b64encode(part.inline_data.data).decode('utf-8')
+                            "data": encoded_data
                         }
                     })
                 elif part.file_data is not None:

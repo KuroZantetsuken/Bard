@@ -195,7 +195,10 @@ class MessageSender:
                 try:
                     file_for_this_turn = file_to_attach if i == 0 else None
                     if i == 0:
-                        sent_msg_for_chunk = await message_to_reply_to.reply(chunk, file=file_for_this_turn)
+                        if file_for_this_turn:
+                            sent_msg_for_chunk = await message_to_reply_to.reply(chunk, file=file_for_this_turn)
+                        else:
+                            sent_msg_for_chunk = await message_to_reply_to.reply(chunk)
                     else:
                         sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk)
                     if sent_msg_for_chunk:
@@ -206,7 +209,10 @@ class MessageSender:
                     logger.error(f"❌ Failed to send text chunk {i+1}/{len(chunks)}. Error: {e}", exc_info=True)
                     if i == 0:
                         try:
-                            sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk, file=file_for_this_turn)
+                            if file_for_this_turn:
+                                sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk, file=file_for_this_turn)
+                            else:
+                                sent_msg_for_chunk = await message_to_reply_to.channel.send(chunk)
                             if sent_msg_for_chunk:
                                 sent_messages.append(sent_msg_for_chunk)
                                 try: await sent_msg_for_chunk.add_reaction(Config.RETRY_EMOJI)
@@ -219,11 +225,17 @@ class MessageSender:
         else:
             sent_msg = None
             try:
-                sent_msg = await message_to_reply_to.reply(text_content, file=file_to_attach)
+                if file_to_attach:
+                    sent_msg = await message_to_reply_to.reply(text_content, file=file_to_attach)
+                else:
+                    sent_msg = await message_to_reply_to.reply(text_content)
             except discord.HTTPException as e:
                 logger.error(f"❌ Failed to send reply. Attempting to send to channel directly.\nError:\n{e}", exc_info=True)
                 try:
-                    sent_msg = await message_to_reply_to.channel.send(text_content, file=file_to_attach)
+                    if file_to_attach:
+                        sent_msg = await message_to_reply_to.channel.send(text_content, file=file_to_attach)
+                    else:
+                        sent_msg = await message_to_reply_to.channel.send(text_content)
                 except discord.HTTPException as e_chan:
                     logger.error(f"❌ Failed to send to channel directly.\nError:\n{e_chan}", exc_info=True)
             if sent_msg:
@@ -285,7 +297,8 @@ class MessageSender:
                 discord_file_to_send = discord.File(temp_image_path, filename=filename_for_discord)
                 logger.info(f"📎 Prepared {filename_for_discord} for sending.")
             if text_content or discord_file_to_send:
-                text_and_image_messages = await MessageSender._send_text_reply(message_to_reply_to, text_content, discord_file_to_send)
+                text_content_for_send = text_content if text_content is not None else ""
+                text_and_image_messages = await MessageSender._send_text_reply(message_to_reply_to, text_content_for_send, discord_file_to_send)
                 if text_and_image_messages:
                     all_sent_messages.extend(text_and_image_messages)
                 else:

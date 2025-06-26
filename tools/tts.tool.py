@@ -30,16 +30,22 @@ class TTSGenerator:
         """
         try:
             with io.BytesIO(audio_bytes) as audio_io:
-                audio_data, samplerate = soundfile.read(audio_io)
+                logger.info(f"🎤 TTSTool: Audio bytes length: {len(audio_bytes)}")
+                audio_data_samplerate = soundfile.read(audio_io)
+                if audio_data_samplerate is None:
+                    logger.error("❌ soundfile.read returned None.")
+                    return 1.0, Config.WAVEFORM_PLACEHOLDER
+                audio_data, samplerate = audio_data_samplerate
             duration_secs = len(audio_data) / float(samplerate)
             mono_audio_data = np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
             num_samples = len(mono_audio_data)
             if num_samples == 0:
                 return duration_secs, Config.WAVEFORM_PLACEHOLDER
-            if np.issubdtype(mono_audio_data.dtype, np.integer):
-                 mono_audio_data = mono_audio_data / np.iinfo(mono_audio_data.dtype).max
-            elif np.issubdtype(mono_audio_data.dtype, np.floating) and np.max(np.abs(mono_audio_data)) > 1.0:
-                mono_audio_data = mono_audio_data / np.max(np.abs(mono_audio_data))
+            if not np.issubdtype(mono_audio_data.dtype, np.floating):
+                mono_audio_data = mono_audio_data.astype(np.float32)
+            max_abs_val = np.max(np.abs(mono_audio_data))
+            if max_abs_val > 1.0:
+                mono_audio_data = mono_audio_data / max_abs_val
             step = max(1, num_samples // max_waveform_points)
             waveform_raw_bytes = bytearray()
             for i in range(0, num_samples, step):
@@ -128,15 +134,18 @@ class TTSGenerator:
         text_for_tts: str,
         style: Optional[str] = None
     ) -> Optional[Tuple[bytes, float, str]]:
+        logger.info("🎤 TTSTool: Entering generate_speech_ogg")
         """
         Generates speech audio in OGG Opus format from text using Gemini TTS,
         feeding PCM data from the API response directly to ffmpeg for conversion.
         """
         if not gemini_client:
             logger.error("❌ Gemini client not initialized. Cannot generate TTS.")
+            logger.info("🎤 TTSTool: Gemini client not initialized.")
             return None
         voice_style_info = f" Style: {style}," if style else ""
-        logger.info(f"🎤 TTSTool: Performing secondary Gemini call for TTS generation. Voice: {Config.VOICE_NAME} {voice_style_info} Model: {Config.MODEL_ID_TTS}\nText:\n'{text_for_tts}")
+        log_message = f"🎤 TTSTool: Performing secondary Gemini call for TTS generation. Voice: {Config.VOICE_NAME} {voice_style_info} Model: {Config.MODEL_ID_TTS}\nText:\n'{text_for_tts}"
+        logger.info(log_message)
         voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=Config.VOICE_NAME)}
         speech_generation_config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
@@ -168,37 +177,49 @@ class TTSGenerator:
         ffmpeg_command = [Config.FFMPEG_PATH, '-y'] + ffmpeg_input_args + ffmpeg_output_args
         ffmpeg_process = None
         try:
+            logger.info(f"🎤 TTSTool: Creating ffmpeg process with command: {ffmpeg_command}")
             ffmpeg_process = await asyncio.create_subprocess_exec(
                 *ffmpeg_command,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
+            logger.info("🎤 TTSTool: ffmpeg process created.")
             request_payload = sanitize_response_for_logging({
                 "model": Config.MODEL_ID_TTS,
                 "contents": text_for_tts,
                 "config": speech_generation_config.dict()
             })
             logger.info(f"REQUEST to Gemini API (TTS):\n{json.dumps(request_payload, indent=2)}")
+            logger.info("🎤 TTSTool: Sending request to Gemini API for TTS generation.")
             gemini_response_object = await gemini_client.aio.models.generate_content(
                 model=Config.MODEL_ID_TTS,
                 contents=text_for_tts,
                 config=speech_generation_config
             )
+            logger.info("🎤 TTSTool: Received response from Gemini API for TTS generation.")
             sanitized_response = sanitize_response_for_logging(gemini_response_object.dict())
             logger.info(f"RESPONSE from Gemini API (TTS):\n{json.dumps(sanitized_response, indent=2)}")
-            if not gemini_response_object.candidates or gemini_response_object.candidates[0].finish_reason.name != "STOP":
-                reason = "Unknown"
-                details = ""
-                if not gemini_response_object.candidates:
-                    reason = "No candidates returned"
-                    if gemini_response_object.prompt_feedback:
-                         details = f"Prompt Feedback: {gemini_response_object.prompt_feedback}"
-                else:
-                    candidate = gemini_response_object.candidates[0]
-                    reason = candidate.finish_reason.name
-                    if candidate.finish_reason.name == "SAFETY":
+            reason = "Unknown"
+            details = ""
+            candidate = None
+
+            if not gemini_response_object.candidates:
+                reason = "No candidates returned"
+                if gemini_response_object.prompt_feedback:
+                    details = f"Prompt Feedback: {gemini_response_object.prompt_feedback}"
+            else:
+                candidate = gemini_response_object.candidates[0]
+                finish_reason = candidate.finish_reason
+
+                if finish_reason is None:
+                    reason = "No finish reason provided"
+                elif finish_reason.name != "STOP":
+                    reason = finish_reason.name
+                    if finish_reason.name == "SAFETY":
                         details = f"Safety Ratings: {candidate.safety_ratings}"
+
+            if candidate is None or (candidate.finish_reason is None or candidate.finish_reason.name != "STOP"):
                 logger.error(f"❌ TTS generation stopped by API. Finish Reason: {reason}. {details}")
                 if ffmpeg_process and ffmpeg_process.returncode is None:
                     ffmpeg_process.terminate()
@@ -211,6 +232,7 @@ class TTSGenerator:
                 TTSGenerator._read_ffmpeg_stdout(ffmpeg_process)
             )
             bytes_fed_to_ffmpeg, ogg_opus_bytes = await asyncio.gather(feed_task, read_task)
+            logger.info("🎤 TTSTool: Finished feeding data to ffmpeg and reading output.")
             return_code = await ffmpeg_process.wait()
             if return_code != 0:
                 stderr_data = await ffmpeg_process.stderr.read() if ffmpeg_process.stderr else b''
@@ -224,6 +246,7 @@ class TTSGenerator:
                     logger.error("❌ Confirmation: 0 bytes of PCM data were fed to ffmpeg.")
                 return None
             duration_secs, waveform_b64 = TTSGenerator._get_audio_duration_and_waveform(ogg_opus_bytes)
+            logger.info("🎤 TTSTool: Successfully generated audio duration and waveform.")
             return ogg_opus_bytes, duration_secs, waveform_b64
         except FileNotFoundError:
              logger.error(f"❌ ffmpeg command not found. Ensure FFMPEG_PATH ('{Config.FFMPEG_PATH}') is correct and ffmpeg is installed.")
@@ -231,6 +254,7 @@ class TTSGenerator:
         except Exception as e:
             logger.error(f"❌ TTS generation or OGG conversion pipeline error.\nError:\n{e}", exc_info=True)
             if ffmpeg_process and ffmpeg_process.returncode is None:
+                logger.info("🎤 TTSTool: Killing ffmpeg process due to exception.")
                 ffmpeg_process.kill()
                 await ffmpeg_process.wait()
             return None

@@ -18,6 +18,8 @@ try:
     if _base_tool_module is None:
         raise ImportError(f"Could not create module from spec for '{base_tool_module_name}'.")
     sys.modules[base_tool_module_name] = _base_tool_module
+    if spec.loader is None:
+        raise ImportError(f"Could not find loader for module '{base_tool_module_name}'.")
     spec.loader.exec_module(_base_tool_module)
     BaseTool = _base_tool_module.BaseTool
     ToolContext = _base_tool_module.ToolContext
@@ -31,4 +33,4 @@ except Exception as e:
         f"An unexpected error occurred while trying to load '{base_tool_filename}' as module '{base_tool_module_name}'. "
         f"File: '{base_tool_filepath}'. Original error: {e}"
     ) from e
-__all__ = ['BaseTool', 'ToolContext']
+__all__ = ["BaseTool", "ToolContext"]

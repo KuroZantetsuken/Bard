@@ -2,6 +2,7 @@
 .venv
 .log
 .patch
+.vscode
 history
 memories
 __pycache__
