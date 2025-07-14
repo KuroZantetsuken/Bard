@@ -3,6 +3,7 @@
 .log
 .patch
 .vscode
+logs
 history
 memories
 __pycache__

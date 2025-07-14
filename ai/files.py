@@ -1,0 +1,261 @@
+import asyncio
+import logging
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
+
+import aiohttp
+from google.genai import types as gemini_types
+
+from ai.core import GeminiCore
+from bot.types import VideoMetadata
+from config import Config
+from tools.base import AttachmentProcessorProtocol
+from utilities.media import MimeDetector
+from utilities.video import VideoProcessor
+
+# Initialize logger for the attachment files module.
+logger = logging.getLogger("Bard")
+
+
+class AttachmentProcessor(AttachmentProcessorProtocol):
+    """
+    Processes and uploads various types of media (images, videos) to the Gemini File API.
+    Manages a cache for uploaded files and handles video processing logic.
+    """
+
+    # Cache for Gemini File API uploaded files to avoid re-uploading the same content.
+    _gemini_file_cache: Dict[str, gemini_types.FileData] = {}
+    # Locks to prevent race conditions during concurrent file uploads.
+    _upload_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    def __init__(self, gemini_core: GeminiCore):
+        """
+        Initializes the AttachmentProcessor.
+
+        Args:
+            gemini_core: An instance of GeminiCore for interacting with the Gemini API.
+        """
+        self.gemini_core = gemini_core
+        self.video_processor = VideoProcessor()
+
+    async def upload_media_bytes(
+        self, data_bytes: bytes, display_name: str, mime_type: str
+    ) -> gemini_types.Part:
+        """
+        Uploads media bytes to the Gemini File API if not already cached,
+        and returns a Gemini Part object referencing the uploaded file.
+
+        Args:
+            data_bytes: The raw bytes of the media file.
+            display_name: A human-readable name for the file.
+            mime_type: The MIME type of the media file.
+
+        Returns:
+            A gemini_types.Part object with file_data or text indicating an error.
+        """
+        cache_key = f"{display_name}_{len(data_bytes)}"
+        if cache_key in self._gemini_file_cache:
+            return gemini_types.Part(file_data=self._gemini_file_cache[cache_key])
+
+        # Acquire a lock to prevent multiple uploads of the same file concurrently.
+        async with self._upload_locks[cache_key]:
+            # Double-check cache after acquiring lock.
+            if cache_key in self._gemini_file_cache:
+                return gemini_types.Part(file_data=self._gemini_file_cache[cache_key])
+
+            try:
+                gemini_part = await self.gemini_core.upload_media_bytes(
+                    data_bytes, display_name, mime_type
+                )
+                if gemini_part.file_data:
+                    self._gemini_file_cache[cache_key] = gemini_part.file_data
+                return gemini_part
+            except Exception as e:
+                logger.error(
+                    f"Error during media upload for '{display_name}': {e}",
+                    exc_info=True,
+                )
+                return gemini_types.Part(text=f"[Attachment Error: {display_name}]")
+
+    async def process_image_url(self, url: str) -> Optional[gemini_types.Part]:
+        """
+        Downloads an image from a given URL and processes it for Gemini.
+
+        Args:
+            url: The URL of the image.
+
+        Returns:
+            An optional Gemini types.Part object representing the processed image.
+        """
+        try:
+            async with aiohttp.ClientSession() as session, session.get(url) as response:
+                if response.status != 200:
+                    logger.warning(
+                        f"Failed to fetch image from {url}: Status {response.status}"
+                    )
+                    return None
+                data = await response.read()
+                mime_type = MimeDetector.detect(data)
+                if not mime_type.startswith("image/"):
+                    logger.warning(
+                        f"URL {url} did not resolve to an image. Detected MIME type: {mime_type}"
+                    )
+                    return None
+                return await self.upload_media_bytes(data, "image", mime_type)
+        except Exception as e:
+            logger.error(f"Error processing image URL {url}: {e}", exc_info=True)
+            return None
+
+    async def _get_video_processing_details(
+        self, url: str
+    ) -> Tuple[Optional[str], List[str], Optional[VideoMetadata], Optional[str]]:
+        """
+        Fetches video information and determines the processing strategy (full video or audio only).
+
+        Args:
+            url: The URL of the video.
+
+        Returns:
+            A tuple containing:
+            - stream_url (Optional[str]): The URL to stream the video/audio.
+            - ffmpeg_args (List[str]): FFmpeg arguments for processing.
+            - video_metadata (Optional[VideoMetadata]): Extracted video metadata.
+            - mime_type (Optional[str]): The MIME type of the processed content.
+        """
+        info_dict = await self.video_processor.get_video_info(url)
+        if not info_dict or not info_dict.get("duration"):
+            logger.debug(f"No video info or duration found for {url}.")
+            return None, [], None, None
+
+        video_metadata = self.video_processor._create_video_metadata(url, info_dict)
+
+        if video_metadata.is_youtube:
+            # For YouTube, Gemini handles the URL directly; no streaming/processing needed by bot.
+            logger.debug(f"YouTube video detected for {url}. Returning URL directly.")
+            return (
+                url,
+                [],
+                video_metadata,
+                "video/mp4",
+            )  # Default MIME type for YouTube URL
+
+        duration = video_metadata.duration_seconds or 0
+        estimated_tokens = (duration * Config.VIDEO_TOKEN_COST_PER_SECOND) + (
+            duration * Config.AUDIO_TOKEN_COST_PER_SECOND
+        )
+
+        format_selector = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        ffmpeg_args: List[str] = []
+        mime_type = "video/mp4"
+
+        if estimated_tokens >= Config.MAX_VIDEO_TOKENS_FOR_FULL_PROCESSING:
+            # If estimated token cost is too high, process only audio.
+            format_selector = "bestaudio[ext=m4a]/bestaudio"
+            ffmpeg_args = [
+                "-vn",  # No video.
+                "-acodec",
+                "libmp3lame",  # Audio codec.
+                "-q:a",
+                "2",  # Variable bitrate quality (VBR).
+                "-f",
+                "mp3",  # Output format.
+                "pipe:1",  # Output to stdout.
+            ]
+            mime_type = "audio/mpeg"
+            logger.debug(
+                f"Video {url} estimated tokens {estimated_tokens} exceeds limit. Processing audio only."
+            )
+        else:
+            logger.debug(
+                f"Video {url} estimated tokens {estimated_tokens} within limit. Processing full video."
+            )
+
+        stream_url = await self.video_processor.get_stream_url(url, format_selector)
+
+        return stream_url, ffmpeg_args, video_metadata, mime_type
+
+    async def _process_video_url(
+        self, url: str
+    ) -> Tuple[Optional[gemini_types.Part], Optional[VideoMetadata]]:
+        """
+        Processes a video from a URL using the VideoProcessor.
+
+        Args:
+            url: The URL of the video.
+
+        Returns:
+            A tuple containing:
+            - Optional[gemini_types.Part]: The Gemini part representing the processed video/audio.
+            - Optional[VideoMetadata]: The extracted video metadata.
+        """
+        (
+            stream_url,
+            ffmpeg_args,
+            video_metadata,
+            mime_type,
+        ) = await self._get_video_processing_details(url)
+
+        if not video_metadata:  # No video info or YouTube video handled directly.
+            return None, None
+
+        if video_metadata.is_youtube:
+            # For YouTube URLs, create a file_data part directly with the URL.
+            return (
+                gemini_types.Part(file_data=gemini_types.FileData(file_uri=url)),
+                video_metadata,
+            )
+
+        if not stream_url:
+            logger.warning(f"Could not get stream URL for {url}.")
+            return None, video_metadata
+
+        if not mime_type:
+            logger.warning(f"MIME type not determined for {url}.")
+            return None, video_metadata
+
+        media_bytes = await self.video_processor.stream_media(stream_url, ffmpeg_args)
+        if not media_bytes:
+            logger.warning(f"Could not stream media for {url}.")
+            return None, video_metadata
+
+        display_name = (
+            f"video_{video_metadata.duration_seconds}s"
+            if video_metadata.duration_seconds
+            else "video_unknown_duration"
+        )
+        return (
+            await self.upload_media_bytes(media_bytes, display_name, mime_type),
+            video_metadata,
+        )
+
+    async def check_and_process_url(
+        self, url: str
+    ) -> Tuple[
+        Optional[gemini_types.Part],
+        Optional[gemini_types.Part],
+        Optional[VideoMetadata],
+        Optional[str],
+    ]:
+        """
+        Checks if a URL points to a video or an image, processes it accordingly,
+        and returns the appropriate Gemini parts and metadata.
+
+        Args:
+            url: The URL to check and process.
+
+        Returns:
+            A tuple containing:
+            - video_part (Optional[gemini_types.Part]): The Gemini part for a video, if detected.
+            - image_part (Optional[gemini_types.Part]): The Gemini part for an image, if detected.
+            - video_metadata (Optional[VideoMetadata]): Metadata for a video, if detected.
+            - remaining_url (Optional[str]): The URL if it's neither a video nor an image.
+        """
+        video_part, video_metadata = await self._process_video_url(url)
+        if video_part:
+            return video_part, None, video_metadata, None
+
+        image_part = await self.process_image_url(url)
+        if image_part:
+            return None, image_part, None, None
+
+        return None, None, None, url

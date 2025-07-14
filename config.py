@@ -1,49 +1,115 @@
+import logging
 import os
+
 from dotenv import load_dotenv
+
+# Initialize logger for configuration messages.
+logger = logging.getLogger(__name__)
+
+
 class Config:
-    """Stores all configuration constants for the bot."""
+    """
+    Manages all application-wide configuration settings and environment variables.
+    Loads settings from .env file and provides access to various constants.
+    """
+
+    # Load environment variables from a .env file into the system environment.
     load_dotenv()
-    # Discord bot token from developer portal
+
+    # --- Core Bot Settings ---
+    # The Discord bot token, retrieved from environment variables.
     DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-    # Gemini API key
+    # The command prefix for bot commands (e.g., !reset).
+    COMMAND_PREFIX = "!"
+    # The emoji used to trigger a re-run of a prompt.
+    RETRY_EMOJI = "🔄"
+    # A custom status message for the Discord bot.
+    CUSTOM_STATUS = "Listening for your questions"
+    # Maximum allowed characters per message in Discord.
+    MAX_DISCORD_MESSAGE_LENGTH = 2000
+    # Discord message flag to suppress embeds and indicate a voice message.
+    DISCORD_VOICE_MESSAGE_FLAG = 8192
+
+    # --- Gemini AI Model Settings ---
+    # The API key for the Gemini AI, retrieved from environment variables.
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    # Text generation model
+    # The primary model identifier for text generation.
     MODEL_ID = "gemini-2.5-flash"
-    # Specific model for text-to-speech
+    # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
-    # Prebuilt voice name for text-to-speech
+    # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
-    # Emoji used to trigger a re-run of a prompt
-    RETRY_EMOJI = '🔄'
-    # Length used to trim responses (characters)
-    MAX_MESSAGE_LENGTH = 2000
-    # Max depth for fetching reply chains (messages)
+
+    # --- AI Interaction and Limits ---
+    # The maximum depth for fetching reply chains in Discord.
     MAX_REPLY_DEPTH = 10
-    # Budget for Gemini's thinking process (tokens)
+    # The token budget for Gemini's internal "thinking" process when using tools.
     THINKING_BUDGET = 2048
-    # Max tokens for Gemini's response
+    # The maximum number of tokens for a generated response from Gemini.
     MAX_OUTPUT_TOKENS = 65536
-    # Sample rate used for text-to-speech (Hz)
-    TTS_SAMPLE_RATE = 24000
-    # Audio channels used in text-to-speech
-    TTS_CHANNELS = 1
-    # Sampling width for waveform generation (bytes)
-    TTS_SAMPLE_WIDTH = 2
-    # Fallback waveform for Discord voice messages if generation fails
-    WAVEFORM_PLACEHOLDER = "FzYACgAAAAAAACQAAAAAAAA="
-    # FFMPEG path
-    FFMPEG_PATH = "ffmpeg"
-    # Directory to load .prompt.md files from (folder)
-    PROMPT_DIR = "prompts"
-    # Directory to save and load .history.json files (folder)
-    HISTORY_DIR = "history"
-    # Directory to save and load .memory.json files (folder)
-    MEMORY_DIR = "memories"
-    # Directory where tool modules are located (folder)
-    TOOLS_DIR = "tools"
-    # Max number of user + assistant turn pairs (e.g., 16 turns = 32 content entries)
-    MAX_HISTORY_TURNS = 0
-    # Max age of turns considered for history (minutes) - 0 for disabled
-    MAX_HISTORY_AGE = 0
-    # Max number of memories to store and load per user
+    # A global timeout in seconds for external tool execution.
+    TOOL_TIMEOUT_SECONDS = 30
+    # The maximum number of estimated tokens for video content. If a video's estimated token
+    # cost exceeds this limit, only its audio track and metadata will be sent to the model.
+    # Otherwise, the full video content (visuals and audio) will be sent.
+    MAX_VIDEO_TOKENS_FOR_FULL_PROCESSING = 10000
+    # Estimated token cost per second for video content (visual data).
+    VIDEO_TOKEN_COST_PER_SECOND = 258
+    # Estimated token cost per second for audio content (speech data).
+    AUDIO_TOKEN_COST_PER_SECOND = 32
+
+    # --- History and Memory Settings ---
+    # The maximum number of conversational turns (user + assistant) to keep in short-term history.
+    MAX_HISTORY_TURNS = 16
+    # The maximum age (in minutes) for a turn to be considered for history. 0 disables this check.
+    MAX_HISTORY_AGE = 5
+    # The maximum number of long-term memories to store per user. 0 disables this check.
     MAX_MEMORIES = 32
+
+    # --- File and Path Settings ---
+    # The path to the FFmpeg executable.
+    FFMPEG_PATH = "ffmpeg"
+    # The path to the yt-dlp executable.
+    YTDLP_PATH = "yt-dlp"
+    # The directory where prompt templates (.prompt.md) are stored.
+    PROMPT_DIR = "prompts"
+    # The directory where log files are saved.
+    LOG_DIR = "logs"
+    # The directory for storing short-term chat history (.history.json).
+    HISTORY_DIR = "history"
+    # The directory for storing long-term user memories (.memory.json).
+    MEMORY_DIR = "memories"
+    # The directory where tool modules are located.
+    TOOLS_DIR = "tools"
+
+    # --- Logging Configuration ---
+    # Enable or disable logging to the console.
+    LOG_CONSOLE_ENABLED = True
+    # The minimum level for console logs (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    LOG_CONSOLE_LEVEL = "INFO"
+    # Enable or disable logging to a file.
+    LOG_FILE_ENABLED = True
+    # The minimum level for file logs (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    LOG_FILE_LEVEL = "DEBUG"
+    # The maximum age in days for log files before they are pruned. 0 disables this check.
+    LOG_FILE_MAX_AGE_DAYS = 7
+    # The maximum number of log files to keep. 0 disables pruning.
+    LOG_FILE_MAX_COUNT = 10
+    # Enable or disable automatic log pruning on application startup.
+    LOG_PRUNE_ON_STARTUP = True
+
+    @classmethod
+    def validate_env_vars(cls):
+        """
+        Validates the presence of essential environment variables required for the bot's operation.
+        Raises a ValueError if any required variable is not set.
+        """
+        if not cls.DISCORD_BOT_TOKEN:
+            raise ValueError("DISCORD_BOT_TOKEN is not set.")
+
+        if not cls.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY is not set.")
+
+
+# Validate essential environment variables immediately upon module import.
+Config.validate_env_vars()
