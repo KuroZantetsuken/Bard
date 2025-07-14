@@ -3,8 +3,6 @@ import io
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-import numpy as np
-import soundfile
 from google.genai import types
 
 from config import Config
@@ -49,6 +47,10 @@ class TTSGenerator(BaseTool):
         Returns:
             A tuple containing the duration of the audio in seconds and the base64 encoded waveform string.
         """
+        # Lazy import numpy and soundfile to reduce startup time
+        import numpy as np
+        import soundfile
+
         try:
             with io.BytesIO(audio_bytes) as audio_io:
                 audio_data, samplerate = soundfile.read(audio_io)  # type: ignore

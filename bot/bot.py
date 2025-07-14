@@ -8,8 +8,6 @@ from bot.container import Container
 from bot.handlers import BotHandlers
 from config import Config
 
-# Initialize configuration.
-config = Config()
 # Initialize logger for the bot module.
 logger = logging.getLogger("Bard")
 
@@ -20,6 +18,9 @@ async def run():
     configures dependency injection, registers event handlers and commands,
     and starts the Discord connection.
     """
+    Config.load_and_validate()
+    config = Config()
+
     if not config.DISCORD_BOT_TOKEN:
         raise ValueError(
             "DISCORD_BOT_TOKEN is not set. Please check your configuration."

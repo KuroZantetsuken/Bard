@@ -80,7 +80,9 @@ class Container:
         if service_name not in self.services:
             if service_name not in self._service_factories:
                 raise ValueError(f"Unknown service: {service_name}")
+            logger.debug(f"Creating service: {service_name}")
             self.services[service_name] = self._service_factories[service_name]()
+            logger.debug(f"Service created: {service_name}")
         return self.services[service_name]
 
     def _create_gemini_client(self) -> GeminiCore:

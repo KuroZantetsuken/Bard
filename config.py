@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 # Initialize logger for configuration messages.
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Bard")
 
 
 class Config:
@@ -12,9 +12,6 @@ class Config:
     Manages all application-wide configuration settings and environment variables.
     Loads settings from .env file and provides access to various constants.
     """
-
-    # Load environment variables from a .env file into the system environment.
-    load_dotenv()
 
     # --- Core Bot Settings ---
     # The Discord bot token, retrieved from environment variables.
@@ -99,17 +96,13 @@ class Config:
     LOG_PRUNE_ON_STARTUP = True
 
     @classmethod
-    def validate_env_vars(cls):
+    def load_and_validate(cls):
         """
-        Validates the presence of essential environment variables required for the bot's operation.
-        Raises a ValueError if any required variable is not set.
+        Loads environment variables and validates their presence.
+        This method should be called explicitly after logging is configured.
         """
+        load_dotenv()
         if not cls.DISCORD_BOT_TOKEN:
             raise ValueError("DISCORD_BOT_TOKEN is not set.")
-
         if not cls.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is not set.")
-
-
-# Validate essential environment variables immediately upon module import.
-Config.validate_env_vars()
