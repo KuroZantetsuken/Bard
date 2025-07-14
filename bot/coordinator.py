@@ -63,6 +63,7 @@ class Coordinator:
             bot_messages_to_edit: Optional list of bot messages that can be edited.
             reaction_to_remove: Optional tuple containing a Reaction and User to remove after processing.
         """
+        logger.info(f"Processing message ID: {message.id} from user: {message.author}")
         try:
             async with message.channel.typing():
                 # Process command first. If a command is handled, stop further processing.
@@ -73,19 +74,25 @@ class Coordinator:
                     bot_messages_to_edit,
                 )
                 if was_handled:
+                    logger.info(
+                        f"Command handled for message ID: {message.id}. No further AI processing."
+                    )
                     return
 
                 # Parse the incoming message into a structured context.
+                logger.debug(f"Parsing message content for message ID: {message.id}")
                 parsed_context: ParsedMessageContext = await self.message_parser.parse(
                     message
                 )
 
                 # Delegate to the AIConversation to generate a response.
+                logger.debug(f"Starting AI conversation for message ID: {message.id}")
                 final_ai_response: FinalAIResponse = await self.ai_conversation.run(
                     parsed_context
                 )
 
                 # Send the AI's response back to Discord.
+                logger.debug(f"Sending AI response for message ID: {message.id}")
                 bot_messages = await self.message_sender.send(
                     message_to_reply_to=message,
                     text_content=final_ai_response.text_content,

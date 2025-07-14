@@ -49,6 +49,7 @@ class ParsedMessageContext:
 
     original_message: discord.Message
     cleaned_content: str
+    guild: Optional[discord.Guild] = None
     reply_content: Optional[str] = None
     all_media_parts: List[Dict[str, Any]] = field(default_factory=list)
     discord_context: Optional[DiscordContext] = None

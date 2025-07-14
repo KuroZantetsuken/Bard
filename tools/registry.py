@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from google.genai import types as gemini_types
 
 from config import Config
+from utilities.logging import prettify_json_for_logging
 
 from .base import (
     AttachmentProcessorProtocol,
@@ -218,9 +219,9 @@ class ToolRegistry:
         self, function_name: str, args: Dict[str, Any], context: ToolContext
     ) -> Optional[gemini_types.Part]:
         """
-        Executes a specified tool function.
-        It looks up the tool responsible for the function and calls its `execute_tool` method.
-        Includes a timeout mechanism for tool execution.
+        Executes a specified tool function and ensures the result is a `gemini_types.Part`.
+        It looks up the tool, calls its `execute_tool` method, handles timeouts,
+        and wraps the result in a `Part` if necessary.
 
         Args:
             function_name: The name of the function to execute.
@@ -230,6 +231,9 @@ class ToolRegistry:
         Returns:
             An optional Gemini types.Part object containing the result of the function execution.
         """
+        logger.info(
+            f"Executing tool function: {function_name} with args: {prettify_json_for_logging(args)}"
+        )
         tool_class_name = self.function_to_tool_map.get(function_name)
         if not tool_class_name:
             logger.error(f"No registered tool found for function: {function_name}.")
@@ -261,7 +265,26 @@ class ToolRegistry:
                 tool_instance.execute_tool(function_name, args, context),
                 timeout=context.config.TOOL_TIMEOUT_SECONDS,
             )
-            return result
+            # Ensure the result is always a Part object
+            if isinstance(result, gemini_types.FunctionResponse):
+                return gemini_types.Part(function_response=result)
+            elif isinstance(result, gemini_types.Part):
+                return result
+            else:
+                # Log an unexpected return type and return a structured error
+                logger.error(
+                    f"Tool '{tool_class_name}' function '{function_name}' returned an unexpected type: {type(result)}"
+                )
+                return gemini_types.Part(
+                    function_response=gemini_types.FunctionResponse(
+                        name=function_name,
+                        response={
+                            "success": False,
+                            "error": f"Tool returned an unexpected type: {type(result)}",
+                        },
+                    )
+                )
+
         except asyncio.TimeoutError:
             logger.error(
                 f"Function '{function_name}' in tool '{tool_class_name}' timed out after {context.config.TOOL_TIMEOUT_SECONDS} seconds."

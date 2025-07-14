@@ -11,6 +11,7 @@ from typing import (
 )
 
 from google.genai import types
+import discord
 
 # Initialize logger for the base tools module.
 logger = logging.getLogger("Bard")
@@ -95,9 +96,23 @@ class AttachmentProcessorProtocol(Protocol):
 
     @abstractmethod
     async def upload_media_bytes(
-        self, data_bytes: bytes, display_name: str, mime_type: str
+        self,
+        data_bytes: bytes,
+        display_name: str,
+        mime_type: str,
+        original_url: Optional[str] = None,
     ) -> types.Part:
         """Uploads raw media bytes to the Gemini File API."""
+        ...
+
+    @abstractmethod
+    async def process_image_url(self, url: str) -> Optional[types.Part]:
+        """Downloads an image from a given URL and processes it for Gemini."""
+        ...
+
+    @abstractmethod
+    def get_original_url(self, gemini_file_uri: str) -> Optional[str]:
+        """Retrieves the original public URL associated with a Gemini File API URI."""
         ...
 
 
@@ -166,6 +181,7 @@ class ToolContext:
         ffmpeg_wrapper: FFmpegWrapperProtocol,
         mime_detector: MimeDetectorProtocol,
         full_conversation_for_tooling: Optional[List[Any]] = None,
+        guild: Optional[discord.Guild] = None,
         **kwargs: Any,
     ):
         """
@@ -180,6 +196,7 @@ class ToolContext:
             ffmpeg_wrapper: An object implementing FFmpegWrapperProtocol.
             mime_detector: An object implementing MimeDetectorProtocol.
             full_conversation_for_tooling: Optional; the full conversation history for tool context.
+            guild: Optional; the Discord guild object.
             **kwargs: Additional keyword arguments for flexible context data.
         """
         self.config = config
@@ -201,6 +218,7 @@ class ToolContext:
         self.tool_response_data: Dict[str, Any] = {}
         self.grounding_sources_md: Optional[str] = None
         self.full_conversation_for_tooling = full_conversation_for_tooling
+        self.guild = guild
         self.__dict__.update(kwargs)
 
     def _validate_service(self, service: Any, protocol: type) -> None:
@@ -227,7 +245,6 @@ class ToolContext:
         Args:
             key: The key of the value to retrieve.
             default: The default value to return if the key is not found.
-
         Returns:
             The value associated with the key, or the default value.
         """
@@ -250,6 +267,27 @@ class BaseTool(ABC):
             context: The ToolContext object providing shared resources and data.
         """
         self.context = context
+
+    def function_response_success(
+        self, function_name: str, message: str, **kwargs: Any
+    ) -> types.FunctionResponse:
+        """
+        Creates a successful FunctionResponse object.
+        """
+        return types.FunctionResponse(
+            name=function_name,
+            response={"status": "success", "message": message, **kwargs},
+        )
+
+    def function_response_error(
+        self, function_name: str, error_message: str
+    ) -> types.FunctionResponse:
+        """
+        Creates a failed FunctionResponse object.
+        """
+        return types.FunctionResponse(
+            name=function_name, response={"status": "error", "message": error_message}
+        )
 
     @abstractmethod
     def get_function_declarations(self) -> List[types.FunctionDeclaration]:

@@ -195,6 +195,7 @@ class MessageParser:
         parsed_message_context = ParsedMessageContext(
             original_message=message,
             cleaned_content=cleaned_content,
+            guild=message.guild,
             reply_content=cleaned_reply_chain_text,
             discord_context=discord_context,
             attachments_data=combined_attachments_data,

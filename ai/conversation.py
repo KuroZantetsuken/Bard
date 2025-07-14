@@ -69,6 +69,13 @@ class AIConversation:
             tool_response_part: The Gemini types.Part object from a tool's response.
             tool_context: The shared ToolContext to store extracted data.
         """
+        # Ensure that tool_response_part is a gemini_types.Part
+        if not isinstance(tool_response_part, gemini_types.Part):
+            logger.warning(
+                f"Expected gemini_types.Part, but received {type(tool_response_part)}. Skipping processing."
+            )
+            return
+
         if tool_response_part.inline_data:
             mime_type = tool_response_part.inline_data.mime_type
             data = tool_response_part.inline_data.data
@@ -178,6 +185,8 @@ class AIConversation:
         tool_context = self.tool_registry.shared_tool_context
         if tool_context is None:
             raise ValueError("ToolContext not initialized in ToolRegistry.")
+
+        tool_context.guild = parsed_context.guild
 
         # Load existing chat history for the user/guild.
         history_entries = await self.chat_history_manager.load_history(

@@ -75,7 +75,7 @@ class BotHandlers(commands.Cog):
             # Set bot user ID in components that need it.
             self.discord_event_handler.bot_user_id = self.bot.user.id
             self.message_parser.bot_user_id = self.bot.user.id
-            logger.info(f"Bot user ID set to {self.bot.user.id}.")
+            logger.debug(f"Bot user ID set to {self.bot.user.id}.")
 
             try:
                 await self.bot.change_presence(

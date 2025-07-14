@@ -11,6 +11,7 @@ from bot.types import VideoMetadata
 from config import Config
 from tools.base import AttachmentProcessorProtocol
 from utilities.media import MimeDetector
+from utilities.parser import extract_image_url_from_html
 from utilities.video import VideoProcessor
 
 # Initialize logger for the attachment files module.
@@ -27,6 +28,8 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
     _gemini_file_cache: Dict[str, gemini_types.FileData] = {}
     # Locks to prevent race conditions during concurrent file uploads.
     _upload_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+    # Stores the original public URL for Gemini File API URIs.
+    _original_urls: Dict[str, str] = {}
 
     def __init__(self, gemini_core: GeminiCore):
         """
@@ -39,7 +42,11 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
         self.video_processor = VideoProcessor()
 
     async def upload_media_bytes(
-        self, data_bytes: bytes, display_name: str, mime_type: str
+        self,
+        data_bytes: bytes,
+        display_name: str,
+        mime_type: str,
+        original_url: Optional[str] = None,
     ) -> gemini_types.Part:
         """
         Uploads media bytes to the Gemini File API if not already cached,
@@ -49,6 +56,7 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
             data_bytes: The raw bytes of the media file.
             display_name: A human-readable name for the file.
             mime_type: The MIME type of the media file.
+            original_url: The original public URL of the media, if applicable.
 
         Returns:
             A gemini_types.Part object with file_data or text indicating an error.
@@ -69,6 +77,10 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
                 )
                 if gemini_part.file_data:
                     self._gemini_file_cache[cache_key] = gemini_part.file_data
+                    if original_url:
+                        self._original_urls[gemini_part.file_data.file_uri] = (
+                            original_url
+                        )
                 return gemini_part
             except Exception as e:
                 logger.error(
@@ -80,31 +92,72 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
     async def process_image_url(self, url: str) -> Optional[gemini_types.Part]:
         """
         Downloads an image from a given URL and processes it for Gemini.
+        If the URL returns HTML, it attempts to extract an image URL from the HTML and processes that.
 
         Args:
-            url: The URL of the image.
+            url: The URL of the image or a page containing the image.
 
         Returns:
             An optional Gemini types.Part object representing the processed image.
         """
         try:
-            async with aiohttp.ClientSession() as session, session.get(url) as response:
-                if response.status != 200:
-                    logger.warning(
-                        f"Failed to fetch image from {url}: Status {response.status}"
-                    )
-                    return None
-                data = await response.read()
-                mime_type = MimeDetector.detect(data)
-                if not mime_type.startswith("image/"):
-                    logger.warning(
-                        f"URL {url} did not resolve to an image. Detected MIME type: {mime_type}"
-                    )
-                    return None
-                return await self.upload_media_bytes(data, "image", mime_type)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        logger.warning(
+                            f"Failed to fetch content from {url}: Status {response.status}"
+                        )
+                        return None
+
+                    content_type = response.headers.get("Content-Type", "").lower()
+
+                    if "text/html" in content_type:
+                        html_content = await response.text()
+                        extracted_image_url = await extract_image_url_from_html(
+                            html_content, url
+                        )
+                        if extracted_image_url:
+                            logger.info(
+                                f"Extracted image URL from HTML: {extracted_image_url}. Attempting to process it."
+                            )
+                            # Recursively call process_image_url with the extracted URL
+                            return await self.process_image_url(extracted_image_url)
+                        else:
+                            logger.warning(
+                                f"No image URL found in HTML content from {url}."
+                            )
+                            return None
+                    elif content_type.startswith("image/"):
+                        data = await response.read()
+                        mime_type = MimeDetector.detect(data)
+                        if not mime_type.startswith("image/"):
+                            logger.warning(
+                                f"URL {url} did not resolve to an image. Detected MIME type: {mime_type}"
+                            )
+                            return None
+                        return await self.upload_media_bytes(
+                            data, "image", mime_type, original_url=url
+                        )
+                    else:
+                        logger.warning(
+                            f"URL {url} returned unsupported content type: {content_type}"
+                        )
+                        return None
         except Exception as e:
             logger.error(f"Error processing image URL {url}: {e}", exc_info=True)
             return None
+
+    def get_original_url(self, gemini_file_uri: str) -> Optional[str]:
+        """
+        Retrieves the original public URL associated with a Gemini File API URI.
+
+        Args:
+            gemini_file_uri: The URI of the file uploaded to the Gemini File API.
+
+        Returns:
+            The original public URL as a string, or None if not found.
+        """
+        return self._original_urls.get(gemini_file_uri)
 
     async def _get_video_processing_details(
         self, url: str

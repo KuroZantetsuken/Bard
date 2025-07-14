@@ -1,11 +1,12 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from google.genai import types
 
 from ai.settings import GeminiConfigManager
-from tools.base import BaseTool, ToolContext
+from tools.base import BaseTool, ToolContext, AttachmentProcessorProtocol
 from utilities.logging import prettify_json_for_logging, sanitize_response_for_logging
+
 
 # Initialize logger for the internet tool module.
 logger = logging.getLogger("Bard")
@@ -140,13 +141,16 @@ class InternetTool(BaseTool):
 
         gemini_client = context.gemini_client
         response_extractor = context.response_extractor
+        attachment_processor: AttachmentProcessorProtocol = context.attachment_processor
 
-        if not gemini_client or not response_extractor:
+        if not gemini_client or not response_extractor or not attachment_processor:
             missing_services = []
             if not gemini_client:
                 missing_services.append("gemini_client")
             if not response_extractor:
                 missing_services.append("response_extractor")
+            if not attachment_processor:
+                missing_services.append("attachment_processor")
             error_msg = (
                 f"Missing required context variables: {', '.join(missing_services)}."
             )
@@ -183,12 +187,10 @@ class InternetTool(BaseTool):
                 f"Gemini API (native_tools) request:\n{prettify_json_for_logging(request_payload)}"
             )
 
-            tooling_response = (
-                await gemini_client.generate_content(  # Directly use gemini_client
-                    model=self.context.config.MODEL_ID,
-                    contents=contents_for_tooling_call,
-                    config=tooling_gen_config,
-                )
+            tooling_response = await gemini_client.generate_content(
+                model=self.context.config.MODEL_ID,
+                contents=contents_for_tooling_call,
+                config=tooling_gen_config,
             )
             logger.debug(
                 f"Gemini API (native_tools) response:\n{prettify_json_for_logging(tooling_response.model_dump())}"
@@ -222,8 +224,59 @@ class InternetTool(BaseTool):
                         response={"success": False, "error": error_msg},
                     )
                 )
-            if candidate.grounding_metadata and hasattr(
-                candidate.grounding_metadata, "grounding_chunks"
+
+            tooling_text_result = response_extractor.extract_response(tooling_response)
+            extracted_image_url_gemini: Optional[str] = None
+            extracted_image_url_public: Optional[str] = None
+
+            # Attempt to find an image URL from grounding URIs
+            grounding_uris = []
+            if (
+                candidate.grounding_metadata
+                and candidate.grounding_metadata.grounding_chunks
+            ):
+                for chunk in candidate.grounding_metadata.grounding_chunks:
+                    if (
+                        hasattr(chunk, "web")
+                        and hasattr(chunk.web, "uri")
+                        and chunk.web.uri
+                    ):
+                        grounding_uris.append(chunk.web.uri)
+
+            # Check grounding URIs for images using AttachmentProcessor
+            for uri in grounding_uris:
+                image_part = await attachment_processor.process_image_url(uri)
+                if (
+                    image_part
+                    and image_part.file_data
+                    and image_part.file_data.file_uri
+                ):
+                    extracted_image_url_gemini = image_part.file_data.file_uri
+                    extracted_image_url_public = attachment_processor.get_original_url(
+                        extracted_image_url_gemini
+                    )
+                    logger.debug(
+                        f"Successfully extracted image URL (Gemini): {extracted_image_url_gemini}"
+                    )
+                    if extracted_image_url_public:
+                        logger.debug(
+                            f"Original public image URL: {extracted_image_url_public}"
+                        )
+                    break  # Found an image, no need to check further URIs
+
+            response_data = {
+                "tool_output": tooling_text_result
+                if tooling_text_result
+                else "No textual output from tools."
+            }
+            if extracted_image_url_gemini:
+                response_data["image_url_gemini"] = extracted_image_url_gemini
+            if extracted_image_url_public:
+                response_data["image_url_public"] = extracted_image_url_public
+
+            if (
+                candidate.grounding_metadata
+                and candidate.grounding_metadata.grounding_chunks
             ):
                 chunks = candidate.grounding_metadata.grounding_chunks
                 if chunks:
@@ -248,15 +301,10 @@ class InternetTool(BaseTool):
                         source_links = list(unique_sources.values())
                         grounding_sources_md = "-# " + ", ".join(source_links)
                         setattr(context, "grounding_sources_md", grounding_sources_md)
-            tooling_text_result = response_extractor.extract_response(tooling_response)
+
             return types.Part(
                 function_response=types.FunctionResponse(
-                    name=function_name,
-                    response={
-                        "tool_output": tooling_text_result
-                        if tooling_text_result
-                        else "No textual output from tools."
-                    },
+                    name=function_name, response=response_data
                 )
             )
         except Exception as e_tool:
