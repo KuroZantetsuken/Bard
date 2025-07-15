@@ -24,7 +24,7 @@ class DiscordEventTool(BaseTool):
         return [
             FunctionDeclaration(
                 name="create_discord_event",
-                description="Purpose: This tool creates a new scheduled event in the Discord server. Arguments: Fill out as many arguments as you can using the user's message, supplementing it with information gathered using other tools first. Results: Upon success, will create a Discord event, with no specific further tasks from the AI other than acknowledging this appropriately. Restrictions/Guidelines: Only use this tool if event creation is requested. If the user's request is about a known topic (e.g., a game release, movie premiere), use other tools first to find the specific details like the official date, time, description, and a relevant cover image URL. If no location is specified, use context clues to put something useful and relevant, such as a website URL.",
+                description="Purpose: This tool creates a new scheduled event in the Discord server. Arguments: Fill out as many arguments as you can using the user's message, supplementing it with information gathered using other tools first. Results: Upon success, will create a Discord event, with no specific further tasks from the AI other than acknowledging this appropriately. Restrictions/Guidelines: Only use this tool if event creation is requested. If the user's request is about a known topic (e.g., a game release, movie premiere), use other tools first to find the specific details like the official date, time, description, and a relevant cover image URL. If no location is specified, the AI should use context clues to put something useful and relevant, such as a website URL, or default to the channel where the request was made.",
                 parameters=Schema(
                     type=Type.OBJECT,
                     properties={
@@ -53,7 +53,7 @@ class DiscordEventTool(BaseTool):
                             description="A direct URL for the event's cover image (e.g., ending in .png, .jpg, .gif). The AI should use the InternetTool to find a suitable direct image URL.",
                         ),
                     },
-                    required=["name", "start_time", "end_time", "location"],
+                    required=["name", "start_time"],  # Removed location from required
                 ),
             ),
             FunctionDeclaration(
@@ -96,14 +96,19 @@ class DiscordEventTool(BaseTool):
             return self.function_response_error(
                 "create_discord_event", "start_time is required."
             )
-        if not end_time_str:
-            return self.function_response_error(
-                "create_discord_event", "end_time is required for external events."
-            )
+
+        # If end_time is not provided, it is optional for external events.
+        # If location is not provided, try to use the channel URL.
+        if not location:
+            channel = context.get("channel")
+            if channel and isinstance(channel, discord.TextChannel):
+                location = channel.mention  # Use channel mention as default location
+            else:
+                location = "Online"  # Fallback if channel is not available or not a text channel
 
         try:
             start_time = datetime.fromisoformat(start_time_str)
-            end_time = datetime.fromisoformat(end_time_str)
+            end_time = datetime.fromisoformat(end_time_str) if end_time_str else None
         except ValueError as e:
             return self.function_response_error(
                 "create_discord_event", f"Invalid ISO 8601 date format: {e}"
@@ -147,11 +152,12 @@ class DiscordEventTool(BaseTool):
                 "name": name,
                 "description": description,
                 "start_time": start_time,
-                "end_time": end_time,
                 "entity_type": discord.EntityType.external,
                 "location": location,
                 "privacy_level": discord.PrivacyLevel.guild_only,
             }
+            if end_time:
+                event_params["end_time"] = end_time
             if image_bytes:
                 event_params["image"] = image_bytes
 
@@ -180,7 +186,7 @@ class DiscordEventTool(BaseTool):
         except Exception as e:
             logger.exception(f"Failed to create event: {e}")
             response = self.function_response_error(
-                "create_discord_event", f"Failed to create event: {e}"
+                "create_discord_event", f"An unexpected error occurred: {e}"
             )
             logger.debug(
                 f"create_discord_event error response: {response.model_dump()}"

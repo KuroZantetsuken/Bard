@@ -10,8 +10,8 @@ from typing import (
     runtime_checkable,
 )
 
-from google.genai import types
 import discord
+from google.genai import types
 
 # Initialize logger for the base tools module.
 logger = logging.getLogger("Bard")

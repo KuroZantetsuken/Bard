@@ -4,9 +4,8 @@ from typing import Any, Dict, List, Optional
 from google.genai import types
 
 from ai.settings import GeminiConfigManager
-from tools.base import BaseTool, ToolContext, AttachmentProcessorProtocol
+from tools.base import AttachmentProcessorProtocol, BaseTool, ToolContext
 from utilities.logging import prettify_json_for_logging, sanitize_response_for_logging
-
 
 # Initialize logger for the internet tool module.
 logger = logging.getLogger("Bard")

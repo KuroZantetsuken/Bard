@@ -81,7 +81,7 @@ Once the bot is running, you can interact with it in the following ways.
 
 *   **Direct Messages (DMs):** The bot will respond to every message sent in a direct message channel.
 *   **Server Channels:** In a server, the bot will respond when it is mentioned (`@<BotName>`).
-*   **Replies:** The bot will respond if you reply to one of its messages.
+*   **Replies:** The bot will respond if you reply to one of its messages with the mention toggle ON.
 
 ### 2.2. Available Commands
 
@@ -212,8 +212,8 @@ This tool enables the AI to create and manage scheduled events directly within D
         *   `name` (string, required): The name of the event (maximum 100 characters).
         *   `description` (string, optional): A detailed description for the event (maximum 1000 characters). The AI can generate this if not explicitly provided.
         *   `start_time` (string, required): The scheduled start time in ISO 8601 format (e.g., "YYYY-MM-DDTHH:MM:SSZ").
-        *   `end_time` (string, required): The scheduled end time in ISO 8601 format. This is required for external events.
-        *   `location` (string, required): The location of the event (e.g., a website URL, or contextually relevant information if not specified).
+        *   `end_time` (string, optional): The scheduled end time in ISO 8601 format. If omitted, the event will be created without an end time, suitable for ongoing events or those with flexible durations.
+        *   `location` (string, optional): The location of the event (e.g., a website URL). If omitted, the AI will attempt to infer a suitable location, or default to the channel where the request was made ("Online" as a fallback).
         *   `image_url` (string, optional): A direct URL for the event's cover image (e.g., ending in .png, .jpg, .gif). The AI should use the InternetTool to find a suitable direct image URL if needed.
     *   **Results:** Upon successful creation, the tool returns details of the new event, including its ID, name, and a direct Discord event URL. No further AI action is required beyond acknowledging the creation.
     *   **Guidelines:** Only use this tool if event creation is explicitly requested. If the request pertains to a known topic (e.g., a game release, movie premiere), first use other tools (like the InternetTool) to find specific details such as the official date, time, description, and a relevant cover image URL.
@@ -401,9 +401,9 @@ class Config:
 
     # ——— Gemini AI Model Settings ———
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    MODEL_ID = "gemini-1.5-flash"
-    MODEL_ID_TTS = "tts-001"
-    VOICE_NAME = "gemini-1.5-flash"
+    MODEL_ID = "gemini-2.5-flash"
+    MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
+    VOICE_NAME = "Kore"
 
     # ——— AI Interaction and Limits ———
     MAX_REPLY_DEPTH = 10
@@ -414,7 +414,7 @@ class Config:
 
     # ——— History and Memory Settings ———
     MAX_HISTORY_TURNS = 16
-    MAX_HISTORY_AGE = 30 # minutes
+    MAX_HISTORY_AGE = 5 # minutes
     MAX_MEMORIES = 32
 
     # ——— File and Path Settings ———
@@ -432,7 +432,7 @@ class Config:
     LOG_FILE_ENABLED = True
     LOG_FILE_LEVEL = "DEBUG"
     LOG_FILE_MAX_AGE_DAYS = 7
-    LOG_FILE_MAX_COUNT = 0
+    LOG_FILE_MAX_COUNT = 10
     LOG_PRUNE_ON_STARTUP = True
 ```
 
