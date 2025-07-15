@@ -219,10 +219,17 @@ This tool enables the AI to create and manage scheduled events directly within D
     *   **Guidelines:** Only use this tool if event creation is explicitly requested. If the request pertains to a known topic (e.g., a game release, movie premiere), first use other tools (like the InternetTool) to find specific details such as the official date, time, description, and a relevant cover image URL.
 
 *   **`delete_discord_event`:**
-    *   **Purpose:** Deletes an existing scheduled event from the Discord server by its exact name.
+    *   **Purpose:** Deletes an existing scheduled event from the Discord server by its ID or name.
     *   **Arguments:**
-        *   `name` (string, required): The name of the event to be deleted.
-    *   **Guidelines:** This action is permanent. If multiple events share a similar name, the AI should ask for clarification before proceeding with deletion.
+        *   `id` (string, optional): The unique ID of the event to be deleted.
+        *   `name` (string, optional): The name of the event to be deleted. Used if `id` is not provided.
+    *   **Guidelines:** This action is permanent. The `get_discord_events` tool should be used first to obtain a list of events and their IDs for precise deletion. If only a name is provided and multiple events share a similar name, the AI should ask for clarification before proceeding.
+
+*   **`get_discord_events`:**
+    *   **Purpose:** Retrieves a list of scheduled events from the Discord server.
+    *   **Arguments:** None.
+    *   **Results:** The tool returns a list of dictionaries, each containing details about an active event, including its `id`, `name`, `description`, `start_time`, `end_time`, `location`, `status`, and `url`. If no events are found, an empty list is returned.
+    *   **Guidelines:** Use this tool to get information about active events, which can then be used for other operations like deleting events or providing event listings to users.
 
 ---
 

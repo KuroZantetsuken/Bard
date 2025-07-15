@@ -53,21 +53,34 @@ class DiscordEventTool(BaseTool):
                             description="A direct URL for the event's cover image (e.g., ending in .png, .jpg, .gif). The AI should use the InternetTool to find a suitable direct image URL.",
                         ),
                     },
-                    required=["name", "start_time"],  # Removed location from required
+                    required=["name", "start_time"],
                 ),
             ),
             FunctionDeclaration(
                 name="delete_discord_event",
-                description="Deletes an existing scheduled event from the Discord server by its exact name. This action is permanent. If multiple events share a similar name, the AI should ask for clarification before proceeding.",
+                description="Deletes an existing scheduled event from the Discord server. This action is permanent. The 'get_discord_events' tool should be used first to obtain a list of events and their IDs for precise deletion. If only a name is provided and multiple events share a similar name, the AI should ask for clarification before proceeding.",
                 parameters=Schema(
                     type=Type.OBJECT,
                     properties={
                         "name": Schema(
                             type=Type.STRING,
-                            description="The name of the event to be deleted.",
+                            description="The name of the event to be deleted. Used if ID is not provided.",
+                        ),
+                        "id": Schema(
+                            type=Type.STRING,
+                            description="The unique ID of the event to be deleted. Prefer using ID over name for precision.",
                         ),
                     },
-                    required=["name"],
+                    required=[],  # Neither name nor ID are strictly required, but one should be provided.
+                ),
+            ),
+            FunctionDeclaration(
+                name="get_discord_events",
+                description="Retrieves a list of scheduled events from the Discord server. This tool can be used to get information about active events, which can then be used for other operations like deleting events.",
+                parameters=Schema(
+                    type=Type.OBJECT,
+                    properties={},
+                    required=[],
                 ),
             ),
         ]
@@ -197,7 +210,7 @@ class DiscordEventTool(BaseTool):
         self, args: Dict[str, Any], context: ToolContext
     ) -> FunctionResponse:
         """
-        Deletes a scheduled event from the Discord server by name.
+        Deletes a scheduled event from the Discord server by ID or name.
         """
         guild = context.get("guild")
         if not guild:
@@ -205,29 +218,91 @@ class DiscordEventTool(BaseTool):
                 "delete_discord_event", "Discord guild not found in context."
             )
 
+        event_id = args.get("id")
         event_name = args.get("name")
-        if not event_name:
+
+        if not event_id and not event_name:
             return self.function_response_error(
-                "delete_discord_event", "Event name is required for deletion."
+                "delete_discord_event",
+                "Either event ID or name is required for deletion.",
             )
 
-        for event in guild.scheduled_events:
-            if event.name == event_name:
-                try:
-                    await event.delete()
-                    return self.function_response_success(
-                        "delete_discord_event",
-                        f"Event '{event_name}' deleted successfully.",
-                    )
-                except Exception as e:
-                    logger.exception(f"Failed to delete event '{event_name}': {e}")
-                    return self.function_response_error(
-                        "delete_discord_event",
-                        f"Failed to delete event '{event_name}': {e}",
-                    )
+        target_event = None
+        if event_id:
+            for event in guild.scheduled_events:
+                if str(event.id) == event_id:
+                    target_event = event
+                    break
+        elif event_name:
+            matching_events = [
+                event for event in guild.scheduled_events if event.name == event_name
+            ]
+            if len(matching_events) == 1:
+                target_event = matching_events[0]
+            elif len(matching_events) > 1:
+                return self.function_response_error(
+                    "delete_discord_event",
+                    f"Multiple events found with the name '{event_name}'. Please provide a unique ID or a more specific name.",
+                )
 
-        return self.function_response_error(
-            "delete_discord_event", f"Event '{event_name}' not found."
+        if not target_event:
+            return self.function_response_error(
+                "delete_discord_event", f"Event '{event_name or event_id}' not found."
+            )
+
+        try:
+            await target_event.delete()
+            return self.function_response_success(
+                "delete_discord_event",
+                f"Event '{target_event.name}' (ID: {target_event.id}) deleted successfully.",
+            )
+        except Exception as e:
+            logger.exception(
+                f"Failed to delete event '{target_event.name}' (ID: {target_event.id}): {e}"
+            )
+            return self.function_response_error(
+                "delete_discord_event",
+                f"Failed to delete event '{target_event.name}' (ID: {target_event.id}): {e}",
+            )
+
+    async def _get_events(
+        self, args: Dict[str, Any], context: ToolContext
+    ) -> FunctionResponse:
+        """
+        Retrieves a list of scheduled events from the Discord server.
+        """
+        guild = context.get("guild")
+        if not guild:
+            return self.function_response_error(
+                "get_discord_events", "Discord guild not found in context."
+            )
+
+        events_data = []
+        for event in guild.scheduled_events:
+            events_data.append(
+                {
+                    "id": str(event.id),
+                    "name": event.name,
+                    "description": event.description,
+                    "start_time": event.start_time.isoformat()
+                    if event.start_time
+                    else None,
+                    "end_time": event.end_time.isoformat() if event.end_time else None,
+                    "location": event.location,
+                    "status": str(event.status),
+                    "url": f"https://discord.com/events/{guild.id}/{event.id}",
+                }
+            )
+
+        if not events_data:
+            return self.function_response_success(
+                "get_discord_events", "No scheduled events found.", events=[]
+            )
+
+        return self.function_response_success(
+            "get_discord_events",
+            "Successfully retrieved scheduled events.",
+            events=events_data,
         )
 
     async def execute_tool(
@@ -241,6 +316,8 @@ class DiscordEventTool(BaseTool):
                 return await self._create_event(args, context)
             elif function_name == "delete_discord_event":
                 return await self._delete_event(args, context)
+            elif function_name == "get_discord_events":
+                return await self._get_events(args, context)
             else:
                 return self.function_response_error(
                     function_name, f"Unknown function: {function_name}"
