@@ -4,7 +4,7 @@ from typing import Any, Dict
 from google.genai import types as gemini_types
 
 # Initialize logger for the response extractor module.
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Bard")
 
 
 class ResponseExtractor:

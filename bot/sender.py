@@ -143,7 +143,7 @@ class MessageSender:
                 )
                 return None
 
-    async def _send_text_reply(
+    async def _send_reply_as_chunks(
         self,
         message_to_reply_to: discord.Message,
         text_content: str,
@@ -151,7 +151,8 @@ class MessageSender:
     ) -> List[discord.Message]:
         """
         Sends a text reply, splitting into multiple messages if necessary to adhere to Discord's limits.
-        Attaches files only to the first message chunk.
+        Attaches files only to the first message chunk. This is the fallback for messages that
+        are not sent in a thread.
 
         Args:
             message_to_reply_to: The original message to reply to.
@@ -162,12 +163,6 @@ class MessageSender:
             A list of sent Discord Message objects.
         """
         sent_messages: List[discord.Message] = []
-        if not text_content or not text_content.strip():
-            text_content = (
-                "I processed your request but have no further text to add."
-                if not files_to_attach
-                else ""
-            )
 
         # Handle case where attachments prevent splitting or text is too long.
         if files_to_attach and len(text_content) > self.max_message_length:
@@ -189,6 +184,91 @@ class MessageSender:
             )
             if sent_msg:
                 sent_messages.append(sent_msg)
+
+        return sent_messages
+
+    async def _send_text_reply(
+        self,
+        message_to_reply_to: discord.Message,
+        text_content: str,
+        files_to_attach: Optional[List[discord.File]] = None,
+    ) -> List[discord.Message]:
+        """
+        Sends a text reply. If the reply is long and has no attachments, it splits it at the
+        first sentence, creates a thread from the first part, and sends subsequent parts in the thread.
+        Otherwise, it sends the reply as chunked messages.
+
+        Args:
+            message_to_reply_to: The original message to reply to.
+            text_content: The text content of the reply.
+            files_to_attach: Optional list of Discord File objects to attach.
+
+        Returns:
+            A list of sent Discord Message objects, including the thread starter and thread messages.
+        """
+        sent_messages: List[discord.Message] = []
+        if not text_content or not text_content.strip():
+            text_content = (
+                "I processed your request but have no further text to add."
+                if not files_to_attach
+                else ""
+            )
+
+        # A thread is created if the response is long and there are no attachments.
+        should_create_thread = (
+            len(text_content) > self.max_message_length and not files_to_attach
+        )
+
+        if not should_create_thread:
+            return await self._send_reply_as_chunks(
+                message_to_reply_to, text_content, files_to_attach
+            )
+
+        # Attempt to split at the first sentence.
+        first_sentence_end = text_content.find(". ")
+        if first_sentence_end == -1 or first_sentence_end > self.max_message_length:
+            # Fallback if no period is found or the first sentence is too long.
+            return await self._send_reply_as_chunks(
+                message_to_reply_to, text_content, files_to_attach
+            )
+
+        first_part = text_content[: first_sentence_end + 1]
+        rest_of_content = text_content[first_sentence_end + 2 :].strip()
+
+        # Send the first part of the message to start the thread.
+        first_message = await self._send_single_message_with_fallback(
+            message_to_reply_to.channel,
+            first_part,
+            reply_to=message_to_reply_to,
+        )
+
+        if not first_message:
+            self.logger.error("Failed to send the initial message to start a thread.")
+            return []  # Cannot proceed if the first message fails.
+
+        sent_messages.append(first_message)
+
+        try:
+            thread_name = "Continuation of your request..."
+            thread = await first_message.create_thread(name=thread_name)
+            self.logger.debug(f"Created thread '{thread.name}' ({thread.id}).")
+
+            if rest_of_content:
+                thread_chunks = self._split_message_into_chunks(rest_of_content)
+                for chunk in thread_chunks:
+                    sent_thread_msg = await self._send_single_message_with_fallback(
+                        thread, chunk
+                    )
+                    if sent_thread_msg:
+                        sent_messages.append(sent_thread_msg)
+        except discord.HTTPException as e:
+            self.logger.error(f"Failed to create or send to thread: {e}.")
+            # If thread fails, send remaining content as regular messages.
+            if rest_of_content:
+                fallback_messages = await self._send_reply_as_chunks(
+                    message_to_reply_to, rest_of_content
+                )
+                sent_messages.extend(fallback_messages)
 
         return sent_messages
 
@@ -347,18 +427,30 @@ class MessageSender:
                         content=text_content
                     )
                     all_sent_messages.append(edited_message)
-                    return all_sent_messages  # Reactions are added at the end of the send method.
+                    # Reactions are added at the end, so return after this block.
+                    return all_sent_messages
                 except discord.HTTPException as e:
                     self.logger.warning(
                         f"Failed to edit message: {e}. Deleting for resend."
                     )
 
             # If editing is not safe, or failed, delete old messages before sending new ones.
-            for msg_to_delete in existing_bot_messages_to_edit:
+            first_message_to_edit = existing_bot_messages_to_edit[0]
+            if first_message_to_edit.thread:
+                # If the message started a thread, only delete the starter message.
                 try:
-                    await msg_to_delete.delete()
+                    await first_message_to_edit.delete()
                 except discord.HTTPException as e:
-                    self.logger.warning(f"Could not delete old message: {e}")
+                    self.logger.warning(
+                        f"Could not delete old thread starter message: {e}"
+                    )
+            else:
+                # Otherwise, delete all associated messages.
+                for msg_to_delete in existing_bot_messages_to_edit:
+                    try:
+                        await msg_to_delete.delete()
+                    except discord.HTTPException as e:
+                        self.logger.warning(f"Could not delete old message: {e}")
 
         # Prepare and send files (image, code).
         files_to_send: List[discord.File] = []
@@ -413,22 +505,22 @@ class MessageSender:
                 except Exception as e:
                     self.logger.error(f"Failed to send audio fallback: {e}")
 
-        # Add reactions to the last sent message.
+        # Add reactions to the first sent message.
         if all_sent_messages:
-            last_message = all_sent_messages[-1]
+            first_message = all_sent_messages[0]
             try:
-                await last_message.add_reaction(self.retry_emoji)
+                await first_message.add_reaction(self.retry_emoji)
             except discord.HTTPException as e:
                 self.logger.warning(
-                    f"Could not add retry reaction to the last message {last_message.id}: {e}"
+                    f"Could not add retry reaction to the first message {first_message.id}: {e}"
                 )
             if tool_emojis:
                 for emoji in tool_emojis:
                     try:
-                        await last_message.add_reaction(emoji)
+                        await first_message.add_reaction(emoji)
                     except discord.HTTPException as e:
                         self.logger.warning(
-                            f"Could not add tool emoji reaction '{emoji}' to the last message {last_message.id}: {e}"
+                            f"Could not add tool emoji reaction '{emoji}' to the first message {first_message.id}: {e}"
                         )
 
         if not all_sent_messages and any(

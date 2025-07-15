@@ -104,7 +104,7 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if response.status != 200:
-                        logger.warning(
+                        logger.debug(
                             f"Failed to fetch content from {url}: Status {response.status}"
                         )
                         return None
@@ -117,7 +117,7 @@ class AttachmentProcessor(AttachmentProcessorProtocol):
                             html_content, url
                         )
                         if extracted_image_url:
-                            logger.info(
+                            logger.debug(
                                 f"Extracted image URL from HTML: {extracted_image_url}. Attempting to process it."
                             )
                             # Recursively call process_image_url with the extracted URL

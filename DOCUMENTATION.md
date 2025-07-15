@@ -131,6 +131,7 @@ The bot maintains two layers of memory to provide a coherent and personalized co
 The bot is designed to be a dynamic participant in conversations.
 
 *   **Response Adaptation:** If a user edits or deletes a message, the bot will automatically cancel any ongoing processing, delete its previous response, and re-evaluate the new or modified message.
+*   **Thread-Based Message Splitting:** For long text-only responses, the bot enhances readability by creating a thread. It sends the first sentence as a reply and then posts the remainder of the message in a new thread started from that initial reply. This keeps channels clean while providing the full response. All reaction emojis (retry, tool use) are placed on the first message that starts the thread.
 *   **Discord Environment Context:** The bot injects a `[DYNAMIC_CONTEXT]` block into its prompts, providing the AI with information about its current environment, including the channel name, topic, users present, and the current time. This allows for more grounded and contextually relevant responses.
 *   **Attachment Handling in Replies:** When a user replies to a message, the bot processes both the text of the reply and *all* attachments from the original message, ensuring a complete understanding of the multimodal context, regardless of whether the original message is present in the bot's short-term history.
 
@@ -197,7 +198,7 @@ This tool empowers the AI to write and execute Python code to solve complex prob
     *   **Arguments:**
         *   `code_task` (string, required): A clear description of the task to be accomplished with Python code.
     *   **Results:** The tool returns the standard output (stdout) and standard error (stderr) from the executed script. If the code generates any image files (e.g., plots), they are returned as well. The executed Python code is also attached as a `code.py` file.
-    *   **Guidelines:** Use for tasks that require calculation, data analysis, or logical problem-solving. Do not use for simple questions or tasks that require web access.
+    *   **Guidelines:** Use for tasks that require calculation, data analysis, or logical problem-solving. Do not use for simple questions or tasks that can be answered from the AI's internal knowledge or solved with other tools like code execution.
 
 ### 4.5. Discord Event Tool
 
@@ -337,11 +338,11 @@ This package encapsulates all Discord-specific functionality and orchestrates th
 *   [`bot/bot.py`](bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
 *   [`bot/handlers.py`](bot/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID in other relevant components.
 *   [`bot/router.py`](bot/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
-*   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. Edited messages are not processed as commands.
+*   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
 *   [`bot/parser.py`](bot/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
 *   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, and the `MessageSender` for sending responses, ensuring a cohesive flow from message reception to final reply.
 *   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset` and `!forget`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
-*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It manages message splitting for long responses, sending file attachments, and sending native voice messages with a fallback to file attachments. The internal `_create_temp_file` context manager utilizes the module-level logger directly.
+*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It manages message splitting for long responses, including an intelligent threading mechanism for long, text-only replies. It also handles file attachments and native voice messages with a fallback to file attachments. The internal `_create_temp_file` context manager utilizes the module-level logger directly.
 *   [`bot/types.py`](bot/types.py): Defines shared data structures and type hints used across the bot components.
 
 #### `tools/` Package
@@ -385,63 +386,20 @@ This approach ensures that the codebase maintains strong type hints for developm
 
 The [`config.py`](config.py) file centralizes all static configuration variables for the bot, loading sensitive keys from environment variables and defining parameters that control the bot's behavior.
 
-```python
-# Abridged for documentation
-import os
-from dotenv import load_dotenv
+### Bot Presence Settings
 
-class Config:
-    """
-    Stores all configuration constants for the bot.
-    Loads environment variables from a .env file.
-    """
-    # Environment variables are loaded explicitly via Config.load_and_validate()
-    # after the logging system has been initialized.
+You can customize the bot's presence on Discord by editing the following variables in `config.py`:
 
-    # ——— Core Bot Settings ———
-    DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-    COMMAND_PREFIX = "!"
-    RETRY_EMOJI = "🔄"
-    CUSTOM_STATUS = "Listening for your questions"
-    MAX_DISCORD_MESSAGE_LENGTH = 2000
-    DISCORD_VOICE_MESSAGE_FLAG = 8192
+*   **`PRESENCE_TYPE`**: A string that determines the type of activity. Valid options are:
+    *   `"playing"`: Sets the status to "Playing \[PRESENCE\_TEXT]".
+    *   `"listening"`: Sets the status to "Listening to \[PRESENCE\_TEXT]".
+    *   `"watching"`: Sets the status to "Watching \[PRESENCE\_TEXT]".
+    *   `"custom"`: Sets a custom status with an optional emoji.
+*   **`PRESENCE_TEXT`**: The text that appears in the status.
+*   **`PRESENCE_EMOJI`**: The emoji to display next to the status text. This is only used when `PRESENCE_TYPE` is set to `"custom"`.
 
-    # ——— Gemini AI Model Settings ———
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    MODEL_ID = "gemini-2.5-flash"
-    MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
-    VOICE_NAME = "Kore"
-
-    # ——— AI Interaction and Limits ———
-    MAX_REPLY_DEPTH = 10
-    THINKING_BUDGET = 2048
-    MAX_OUTPUT_TOKENS = 65536
-    TOOL_TIMEOUT_SECONDS = 30
-    MAX_VIDEO_TOKENS_FOR_FULL_PROCESSING = 10000
-
-    # ——— History and Memory Settings ———
-    MAX_HISTORY_TURNS = 16
-    MAX_HISTORY_AGE = 5 # minutes
-    MAX_MEMORIES = 32
-
-    # ——— File and Path Settings ———
-    FFMPEG_PATH = "ffmpeg"
-    YTDLP_PATH = "yt-dlp"
-    PROMPT_DIR = "prompts"
-    LOG_DIR = "logs"
-    HISTORY_DIR = "history"
-    MEMORY_DIR = "memories"
-    TOOLS_DIR = "tools"
-
-    # ——— Logging Configuration ———
-    LOG_CONSOLE_ENABLED = True
-    LOG_CONSOLE_LEVEL = "INFO"
-    LOG_FILE_ENABLED = True
-    LOG_FILE_LEVEL = "DEBUG"
-    LOG_FILE_MAX_AGE_DAYS = 7
-    LOG_FILE_MAX_COUNT = 10
-    LOG_PRUNE_ON_STARTUP = True
-```
+**Known Limitation:**
+Unicode emojis set via `PRESENCE_EMOJI` for a custom status might not display correctly in the Discord client, despite being correctly handled by `discord.py`. This appears to be a limitation of the Discord API or client-side rendering, and not an issue with the bot's implementation.
 
 ---
 

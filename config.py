@@ -20,12 +20,19 @@ class Config:
     COMMAND_PREFIX = "!"
     # The emoji used to trigger a re-run of a prompt.
     RETRY_EMOJI = "🔄"
-    # A custom status message for the Discord bot.
-    CUSTOM_STATUS = "Listening for your questions"
     # Maximum allowed characters per message in Discord.
     MAX_DISCORD_MESSAGE_LENGTH = 2000
     # Discord message flag to suppress embeds and indicate a voice message.
     DISCORD_VOICE_MESSAGE_FLAG = 8192
+
+    # --- Bot Presence Settings ---
+    # The type of activity for the bot's presence.
+    # Options: "playing", "listening", "watching", "custom"
+    PRESENCE_TYPE = "listening"
+    # The text to display for the presence.
+    PRESENCE_TEXT = "your questions"
+    # The emoji for "custom" statuses (optional).
+    PRESENCE_EMOJI = "❓"
 
     # --- Gemini AI Model Settings ---
     # The API key for the Gemini AI, retrieved from environment variables.

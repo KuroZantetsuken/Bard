@@ -77,13 +77,24 @@ class DiscordEventHandler:
         if not should_process_after:
             # Delete old bot responses if the message is no longer relevant.
             if existing_bot_responses:
-                for msg in existing_bot_responses:
+                first_message = existing_bot_responses[0]
+                if first_message.thread:
+                    # If the message started a thread, only delete the starter message.
                     try:
-                        await msg.delete()
+                        await first_message.delete()
                     except discord.HTTPException as e:
                         logger.warning(
-                            f"Could not delete previous bot response {msg.id}: {e}."
+                            f"Could not delete previous bot thread starter {first_message.id}: {e}."
                         )
+                else:
+                    # Otherwise, delete all associated messages.
+                    for msg in existing_bot_responses:
+                        try:
+                            await msg.delete()
+                        except discord.HTTPException as e:
+                            logger.warning(
+                                f"Could not delete previous bot response {msg.id}: {e}."
+                            )
                 self.task_lifecycle_manager.active_bot_responses.pop(after.id, None)
             return
 
@@ -108,13 +119,25 @@ class DiscordEventHandler:
             bot_responses = self.task_lifecycle_manager.active_bot_responses.pop(
                 message.id, []
             )
-            for bot_response in bot_responses:
-                try:
-                    await bot_response.delete()
-                except discord.HTTPException as e:
-                    logger.warning(
-                        f"Could not delete bot response {bot_response.id}: {e}."
-                    )
+            if bot_responses:
+                first_message = bot_responses[0]
+                if first_message.thread:
+                    # If the message started a thread, only delete the starter message.
+                    try:
+                        await first_message.delete()
+                    except discord.HTTPException as e:
+                        logger.warning(
+                            f"Could not delete bot thread starter {first_message.id}: {e}."
+                        )
+                else:
+                    # Otherwise, delete all associated messages.
+                    for bot_response in bot_responses:
+                        try:
+                            await bot_response.delete()
+                        except discord.HTTPException as e:
+                            logger.warning(
+                                f"Could not delete bot response {bot_response.id}: {e}."
+                            )
 
     async def handle_retry_reaction(self, reaction: Reaction, user: User):
         """
