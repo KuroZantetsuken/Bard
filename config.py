@@ -50,7 +50,7 @@ class Config:
     # The maximum depth for fetching reply chains in Discord.
     MAX_REPLY_DEPTH = 10
     # The token budget for Gemini's internal "thinking" process when using tools.
-    THINKING_BUDGET = 2048
+    THINKING_BUDGET = -1
     # The maximum number of tokens for a generated response from Gemini.
     MAX_OUTPUT_TOKENS = 65536
     # A global timeout in seconds for external tool execution.
