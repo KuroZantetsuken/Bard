@@ -178,8 +178,12 @@ class CodeExecutionTool(BaseTool):
                             )
                             image_generated = True
                             self.context.is_final_output = True
+                            text_output = f"Image generated: {generated_filename}"
                         elif part.code_execution_result:
-                            if part.code_execution_result.output:
+                            if (
+                                not image_generated
+                                and part.code_execution_result.output
+                            ):
                                 text_output += part.code_execution_result.output + "\n"
                         if part.executable_code and part.executable_code.code:
                             code_content = part.executable_code.code

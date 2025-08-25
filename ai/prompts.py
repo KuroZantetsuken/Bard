@@ -209,8 +209,32 @@ class PromptBuilder:
 
         # Handle direct Discord attachments (raw bytes).
         for i, data in enumerate(attachments_data):
+            mime_type = attachments_mime_types[i]
+            logger.debug(f"Processing attachment {i} with MIME type: {mime_type}")
+
+            # Check if the MIME type is text-based and can be safely decoded.
+            if mime_type.startswith("text/") or mime_type == "application/json":
+                try:
+                    decoded_text = data.decode("utf-8")
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            text=f"ATTACHMENT_START (MIME: {mime_type})\n```\n{decoded_text}\n```\nATTACHMENT_END"
+                        )
+                    )
+                    logger.debug(f"Included text attachment {i} as text part.")
+                    continue  # Skip further processing for this attachment
+                except UnicodeDecodeError:
+                    logger.warning(
+                        f"Could not decode text attachment {i} with MIME type {mime_type}. Attempting as file_data."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error processing text attachment {i}: {e}. Attempting as file_data."
+                    )
+
+            # For non-text or undecodable text, treat as generic file_data.
             part = await self.attachment_processor.upload_media_bytes(
-                data, f"attachment_{i}", attachments_mime_types[i]
+                data, f"attachment_{i}", mime_type
             )
             if part:
                 identifier = None
