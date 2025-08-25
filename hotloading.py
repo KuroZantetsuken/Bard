@@ -10,6 +10,7 @@ from typing import Optional
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from dotenv import load_dotenv  # Import load_dotenv
 
 from utilities.logging import setup_logging_config
 
@@ -97,6 +98,7 @@ class BotRestarter(FileSystemEventHandler):
 if __name__ == "__main__":
     # Initializes global logging configuration for the application.
     setup_logging_config()
+    load_dotenv()  # Load environment variables from .env
     logger.info("Starting hot-reloader.")
 
     # Defines the command to run the main bot script.
