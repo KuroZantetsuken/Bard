@@ -9,6 +9,7 @@ from ai.memory import MemoryManager
 from ai.prompts import PromptBuilder, load_prompts_from_directory
 from ai.responses import ResponseExtractor
 from ai.settings import GeminiConfigManager
+from ai.titler import ThreadTitler
 from bot.commands import CommandHandler
 from bot.coordinator import Coordinator
 from bot.events import DiscordEventHandler
@@ -57,6 +58,7 @@ class Container:
             "command_router": lambda: CommandRouter(),
             "message_parser": self._create_message_parser,
             "gemini_config_manager": self._create_gemini_config_manager,
+            "thread_titler": self._create_thread_titler,
             "ai_conversation": self._create_ai_conversation,
             "task_lifecycle_manager": self._create_task_lifecycle_manager,
             "coordinator": self._create_coordinator,
@@ -148,6 +150,7 @@ class Container:
             bot_token=self.config.DISCORD_BOT_TOKEN,
             retry_emoji=self.config.RETRY_EMOJI,
             logger=logger,
+            thread_titler=self.get("thread_titler"),
         )
 
     def _create_command_handler(self) -> CommandHandler:
@@ -167,6 +170,14 @@ class Container:
         return GeminiConfigManager(
             max_output_tokens=self.config.MAX_OUTPUT_TOKENS,
             thinking_budget=self.config.THINKING_BUDGET,
+        )
+
+    def _create_thread_titler(self) -> ThreadTitler:
+        """Creates and returns an instance of ThreadTitler."""
+        return ThreadTitler(
+            gemini_core=self.get("gemini_client"),
+            gemini_config_manager=self.get("gemini_config_manager"),
+            config=self.config,
         )
 
     def _create_ai_conversation(self) -> AIConversation:

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import tempfile
@@ -7,6 +8,7 @@ from typing import AsyncIterator, List, Optional, Union
 import aiohttp
 import discord
 
+from ai.titler import ThreadTitler
 from config import Config
 
 # Initialize logger for the sender module.
@@ -51,6 +53,7 @@ class MessageSender:
         bot_token: str,
         retry_emoji: str,
         logger: logging.Logger,
+        thread_titler: ThreadTitler,
     ):
         """
         Initializes the MessageSender service.
@@ -59,10 +62,12 @@ class MessageSender:
             bot_token: Discord bot token for API authentication.
             retry_emoji: The emoji used to trigger a retry reaction.
             logger: The configured logger instance for diagnostics.
+            thread_titler: The service for generating thread titles.
         """
         self.bot_token = bot_token
         self.retry_emoji = retry_emoji
         self.logger = logger
+        self.thread_titler = thread_titler
         self.max_message_length = Config.MAX_DISCORD_MESSAGE_LENGTH
         self.voice_message_flag = Config.DISCORD_VOICE_MESSAGE_FLAG
 
@@ -249,9 +254,32 @@ class MessageSender:
         sent_messages.append(first_message)
 
         try:
-            thread_name = "Continuation of your request..."
-            thread = await first_message.create_thread(name=thread_name)
-            self.logger.debug(f"Created thread '{thread.name}' ({thread.id}).")
+            thread = await first_message.create_thread(
+                name="Continuation of your request..."
+            )
+            self.logger.debug(
+                f"Created thread '{thread.name}' ({thread.id}) with a placeholder name."
+            )
+
+            async def update_thread_title():
+                try:
+                    new_title = await self.thread_titler.generate_title(text_content)
+                    if new_title and new_title.strip():
+                        await thread.edit(name=new_title.strip()[:100])
+                        self.logger.debug(
+                            f"Successfully updated thread '{thread.id}' name to '{new_title}'."
+                        )
+                    else:
+                        self.logger.warning(
+                            f"Thread title generation returned an empty title for thread {thread.id}. Keeping placeholder name."
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to update thread title for thread {thread.id}: {e}",
+                        exc_info=True,
+                    )
+
+            asyncio.create_task(update_thread_title())
 
             if rest_of_content:
                 thread_chunks = self._split_message_into_chunks(rest_of_content)

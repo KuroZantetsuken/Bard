@@ -41,6 +41,8 @@ class Config:
     MODEL_ID = "gemini-2.5-flash"
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
+    # The specific model identifier for thread titling.
+    MODEL_ID_TITLER = "gemini-2.5-flash-lite"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 

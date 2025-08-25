@@ -131,7 +131,7 @@ The bot maintains two layers of memory to provide a coherent and personalized co
 The bot is designed to be a dynamic participant in conversations.
 
 *   **Response Adaptation:** If a user edits or deletes a message, the bot will automatically cancel any ongoing processing, delete its previous response, and re-evaluate the new or modified message.
-*   **Thread-Based Message Splitting:** For long text-only responses, the bot enhances readability by creating a thread. It sends the first sentence as a reply and then posts the remainder of the message in a new thread started from that initial reply. This keeps channels clean while providing the full response. All reaction emojis (retry, tool use) are placed on the first message that starts the thread.
+*   **Thread-Based Message Splitting:** For long text-only responses, the bot enhances readability by creating a thread. It sends the first sentence as a reply and then posts the remainder of the message in a new thread. To provide immediate context, the bot asynchronously generates a concise and relevant title for the thread using a dedicated, lightweight AI model. This keeps channels clean while providing the full response. All reaction emojis (retry, tool use) are placed on the first message that starts the thread.
 *   **Discord Environment Context:** The bot injects a `[DYNAMIC_CONTEXT]` block into its prompts, providing the AI with information about its current environment, including the channel name, topic, users present, and the current time. This allows for more grounded and contextually relevant responses.
 *   **Attachment Handling in Replies:** When a user replies to a message, the bot processes both the text of the reply and *all* attachments from the original message, ensuring a complete understanding of the multimodal context, regardless of whether the original message is present in the bot's short-term history.
 
@@ -274,7 +274,8 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   ├── memory.py           # User memory management
 │   ├── prompts.py          # Construction of prompts for the Gemini API
 │   ├── responses.py        # Extraction of data from Gemini API responses
-│   └── settings.py         # Gemini API configuration management
+│   ├── settings.py         # Gemini API configuration management
+│   └── titler.py           # Generates titles for long-response threads
 ├── bot/                    # Discord-specific functionalities
 │   ├── bot.py              # Main bot initialization and event handling setup
 │   ├── commands.py         # Logic for handling bot commands (e.g., !reset)
@@ -330,19 +331,21 @@ This package contains all logic related to interacting with the Google Gemini AP
 *   [`ai/files.py`](ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
 *   [`ai/prompts.py`](ai/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
 *   [`ai/responses.py`](ai/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
+*   [`ai/titler.py`](ai/titler.py): The `ThreadTitler` is a specialized service that generates concise, context-aware titles for Discord threads created from long bot responses. It uses a separate, lightweight AI model for fast and efficient title generation.
 
 #### `bot/` Package
 
 This package encapsulates all Discord-specific functionality and orchestrates the bot's responses to user interactions through a series of specialized, single-responsibility components.
 
 *   [`bot/bot.py`](bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
+*   [`bot/container.py`](bot/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
 *   [`bot/handlers.py`](bot/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID in other relevant components.
 *   [`bot/router.py`](bot/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
 *   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
 *   [`bot/parser.py`](bot/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
 *   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, and the `MessageSender` for sending responses, ensuring a cohesive flow from message reception to final reply.
 *   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset` and `!forget`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
-*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It manages message splitting for long responses, including an intelligent threading mechanism for long, text-only replies. It also handles file attachments and native voice messages with a fallback to file attachments. The internal `_create_temp_file` context manager utilizes the module-level logger directly.
+*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It manages message splitting for long responses, including an intelligent threading mechanism. For long text-only replies, it asynchronously generates a relevant thread title using the `ThreadTitler` service. It also handles file attachments and native voice messages with a fallback to file attachments. The internal `_create_temp_file` context manager utilizes the module-level logger directly.
 *   [`bot/types.py`](bot/types.py): Defines shared data structures and type hints used across the bot components.
 
 #### `tools/` Package
@@ -385,6 +388,10 @@ This approach ensures that the codebase maintains strong type hints for developm
 ## 7. Configuration Reference
 
 The [`config.py`](config.py) file centralizes all static configuration variables for the bot, loading sensitive keys from environment variables and defining parameters that control the bot's behavior.
+
+*   **`MODEL_ID`**: The primary Gemini model for general conversation and reasoning.
+*   **`MODEL_ID_TTS`**: The specialized Gemini model for text-to-speech generation.
+*   **`MODEL_ID_TITLER`**: The lightweight Gemini model used for generating thread titles.
 
 ### Bot Presence Settings
 

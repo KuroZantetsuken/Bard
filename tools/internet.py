@@ -5,7 +5,7 @@ from google.genai import types
 
 from ai.settings import GeminiConfigManager
 from tools.base import AttachmentProcessorProtocol, BaseTool, ToolContext
-from utilities.logging import prettify_json_for_logging, sanitize_response_for_logging
+from utilities.logging import prettify_json_for_logging
 
 # Initialize logger for the internet tool module.
 logger = logging.getLogger("Bard")
@@ -175,13 +175,11 @@ class InternetTool(BaseTool):
             contents_for_tooling_call = self._create_internet_tool_internal_prompt(
                 search_query
             )
-            request_payload = sanitize_response_for_logging(
-                {
-                    "model": self.context.config.MODEL_ID,
-                    "contents": [c.dict() for c in contents_for_tooling_call],
-                    "config": tooling_gen_config.dict(),
-                }
-            )
+            request_payload = {
+                "model": self.context.config.MODEL_ID,
+                "contents": [c.dict() for c in contents_for_tooling_call],
+                "config": tooling_gen_config.dict(),
+            }
             logger.debug(
                 f"Gemini API (native_tools) request:\n{prettify_json_for_logging(request_payload)}"
             )

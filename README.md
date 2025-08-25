@@ -25,6 +25,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - Re-evaluates messages if edited or deleted.
     - Injects Discord environment context into prompts for grounded responses.
     - Processes attachments from replied messages for complete understanding.
+    - Automatically generates concise, relevant titles for threads created from long responses.
 
 ## Usage
 
