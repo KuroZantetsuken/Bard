@@ -1,10 +1,11 @@
 import logging
 from typing import Optional
 
+from google.genai import types
+
 from ai.core import GeminiCore
 from ai.settings import GeminiConfigManager
 from config import Config
-from google.genai import types
 from utilities.logging import prettify_json_for_logging
 
 # Initialize logger for the thread titler module.
