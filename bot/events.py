@@ -194,3 +194,31 @@ class DiscordEventHandler:
             bot_messages_to_edit=bot_messages_to_edit,
             reaction_to_remove=(reaction, user),
         )
+
+    async def handle_cancel_reaction(self, reaction: Reaction, user: User):
+        """
+        Handles reaction add events for the cancel functionality.
+        If the reaction is the configured cancel emoji on a user's message
+        that the bot is currently processing, and the reactor is the author
+        of that message, the processing task is cancelled.
+
+        Args:
+            reaction: The Discord Reaction object.
+            user: The Discord User who added the reaction.
+        """
+        # Filter out reactions from the bot itself.
+        if user.bot:
+            return
+
+        # Check if the reaction is the cancel emoji and if it's on a message being processed.
+        if (
+            str(reaction.emoji) == self.config.CANCEL_EMOJI
+            and reaction.message.id
+            in self.task_lifecycle_manager.active_processing_tasks
+        ):
+            # Validate that the user who reacted is the author of the message.
+            if reaction.message.author.id == user.id:
+                logger.info(
+                    f"Cancel reaction detected on message {reaction.message.id} from author {user.id}. Cancelling task."
+                )
+                self.task_lifecycle_manager.cancel_task_for_message(reaction.message.id)

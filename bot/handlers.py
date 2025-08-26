@@ -194,5 +194,6 @@ class BotHandlers(commands.Cog):
         """
         assert self.bot.user is not None, "Bot user not initialized."
 
-        # The filtering logic for reactions is handled within DiscordEventHandler.handle_retry_reaction.
+        # The filtering logic for reactions is handled within DiscordEventHandler.
         await self.discord_event_handler.handle_retry_reaction(reaction, user)
+        await self.discord_event_handler.handle_cancel_reaction(reaction, user)

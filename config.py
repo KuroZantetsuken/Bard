@@ -20,6 +20,8 @@ class Config:
     COMMAND_PREFIX = "!"
     # The emoji used to trigger a re-run of a prompt.
     RETRY_EMOJI = "🔄"
+    # The emoji used to cancel a response generation.
+    CANCEL_EMOJI = "🚫"
     # Maximum allowed characters per message in Discord.
     MAX_DISCORD_MESSAGE_LENGTH = 2000
     # Discord message flag to suppress embeds and indicate a voice message.

@@ -52,6 +52,7 @@ class MessageSender:
         self,
         bot_token: str,
         retry_emoji: str,
+        cancel_emoji: str,
         logger: logging.Logger,
         thread_titler: ThreadTitler,
     ):
@@ -61,11 +62,13 @@ class MessageSender:
         Args:
             bot_token: Discord bot token for API authentication.
             retry_emoji: The emoji used to trigger a retry reaction.
+            cancel_emoji: The emoji used to cancel a response generation.
             logger: The configured logger instance for diagnostics.
             thread_titler: The service for generating thread titles.
         """
         self.bot_token = bot_token
         self.retry_emoji = retry_emoji
+        self.cancel_emoji = cancel_emoji
         self.logger = logger
         self.thread_titler = thread_titler
         self.max_message_length = Config.MAX_DISCORD_MESSAGE_LENGTH
@@ -262,6 +265,9 @@ class MessageSender:
             )
 
             async def update_thread_title():
+                self.logger.debug(
+                    f"Starting thread title update for thread {thread.id}"
+                )
                 try:
                     new_title = await self.thread_titler.generate_title(text_content)
                     if new_title and new_title.strip():
@@ -278,6 +284,9 @@ class MessageSender:
                         f"Failed to update thread title for thread {thread.id}: {e}",
                         exc_info=True,
                     )
+                self.logger.debug(
+                    f"Finished thread title update for thread {thread.id}"
+                )
 
             asyncio.create_task(update_thread_title())
 
@@ -532,24 +541,6 @@ class MessageSender:
                             all_sent_messages.append(sent_msg)
                 except Exception as e:
                     self.logger.error(f"Failed to send audio fallback: {e}")
-
-        # Add reactions to the first sent message.
-        if all_sent_messages:
-            first_message = all_sent_messages[0]
-            try:
-                await first_message.add_reaction(self.retry_emoji)
-            except discord.HTTPException as e:
-                self.logger.warning(
-                    f"Could not add retry reaction to the first message {first_message.id}: {e}"
-                )
-            if tool_emojis:
-                for emoji in tool_emojis:
-                    try:
-                        await first_message.add_reaction(emoji)
-                    except discord.HTTPException as e:
-                        self.logger.warning(
-                            f"Could not add tool emoji reaction '{emoji}' to the first message {first_message.id}: {e}"
-                        )
 
         if not all_sent_messages and any(
             [text_content, audio_data, image_data, code_data]

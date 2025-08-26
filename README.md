@@ -40,6 +40,9 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 ### **Retry a Response:**
 - React to the bot's message with the retry emoji `🔄` to regenerate its last response.
 
+### **Cancel a Response:**
+- React to your own message with the cancel emoji `🚫` to cancel a response that is currently being generated.
+
 ### **Prerequisites:**
 - Python 3.10+
 - FFmpeg

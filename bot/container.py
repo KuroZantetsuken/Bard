@@ -149,6 +149,7 @@ class Container:
         return MessageSender(
             bot_token=self.config.DISCORD_BOT_TOKEN,
             retry_emoji=self.config.RETRY_EMOJI,
+            cancel_emoji=self.config.CANCEL_EMOJI,
             logger=logger,
             thread_titler=self.get("thread_titler"),
         )

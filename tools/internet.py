@@ -184,11 +184,13 @@ class InternetTool(BaseTool):
                 f"Gemini API (native_tools) request:\n{prettify_json_for_logging(request_payload)}"
             )
 
+            logger.info("Calling Gemini API for internet tool.")
             tooling_response = await gemini_client.generate_content(
                 model=self.context.config.MODEL_ID,
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )
+            logger.info("Finished calling Gemini API for internet tool.")
             logger.debug(
                 f"Gemini API (native_tools) response:\n{prettify_json_for_logging(tooling_response.model_dump())}"
             )

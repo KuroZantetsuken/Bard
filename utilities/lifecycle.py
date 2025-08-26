@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+import discord
 from discord import Message, Reaction, User
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ class TaskLifecycleManager:
         self._coordinator = coordinator
         self.active_processing_tasks: Dict[int, asyncio.Task] = {}
         self.active_bot_responses: Dict[int, List[Message]] = {}
+        self.active_cancel_reactions: Dict[int, Message] = {}
 
     @property
     def coordinator(self) -> "Coordinator":
@@ -72,6 +74,15 @@ class TaskLifecycleManager:
                 old_task, return_exceptions=True
             )  # Wait for cancellation to propagate.
 
+        # Add cancel reaction to the user's message.
+        try:
+            await message.add_reaction(self.coordinator.message_sender.cancel_emoji)
+            self.active_cancel_reactions[message_id] = message
+        except Exception as e:
+            logger.warning(
+                f"Failed to add cancel reaction to message {message_id}: {e}"
+            )
+
         # Create a new asyncio.Task to run Coordinator.process.
         task = asyncio.create_task(
             self.coordinator.process(message, bot_messages_to_edit, reaction_to_remove)
@@ -93,6 +104,29 @@ class TaskLifecycleManager:
             task.cancel()
             # No need to await here, the callback will handle cleanup after cancellation propagates.
 
+    async def _remove_cancel_reaction(self, message_id: int):
+        if message_id in self.active_cancel_reactions:
+            message = self.active_cancel_reactions.pop(message_id)
+            bot_user = None
+            if message.guild:
+                bot_user = message.guild.me
+            elif isinstance(message.channel, (discord.DMChannel, discord.GroupChannel)):
+                bot_user = message.channel.me
+
+            if bot_user:
+                try:
+                    await message.remove_reaction(
+                        self.coordinator.message_sender.cancel_emoji, bot_user
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to remove cancel reaction from message {message_id}: {e}"
+                    )
+            else:
+                logger.warning(
+                    f"Could not find bot user to remove cancel reaction for message {message_id}"
+                )
+
     def _task_done_callback(self, task: asyncio.Task, message_id: int):
         """
         Callback function executed when a processing task completes or is cancelled.
@@ -104,6 +138,9 @@ class TaskLifecycleManager:
         """
         # Pop the task from active_processing_tasks (already done in start_new_task if cancelling, but safety).
         self.active_processing_tasks.pop(message_id, None)
+
+        # Remove the cancel reaction.
+        asyncio.create_task(self._remove_cancel_reaction(message_id))
 
         try:
             if not task.cancelled() and (exc := task.exception()):

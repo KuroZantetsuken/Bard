@@ -64,7 +64,10 @@ class Coordinator:
             reaction_to_remove: Optional tuple containing a Reaction and User to remove after processing.
         """
         logger.info(f"Processing message ID: {message.id} from user: {message.author}")
+        final_ai_response: Optional[FinalAIResponse] = None
+        bot_messages: Optional[List[Message]] = None
         try:
+            logger.debug(f"Entering typing context for message ID: {message.id}")
             async with message.channel.typing():
                 # Process command first. If a command is handled, stop further processing.
                 was_handled, is_reset = await self.command_handler.process_command(
@@ -87,9 +90,7 @@ class Coordinator:
 
                 # Delegate to the AIConversation to generate a response.
                 logger.debug(f"Starting AI conversation for message ID: {message.id}")
-                final_ai_response: FinalAIResponse = await self.ai_conversation.run(
-                    parsed_context
-                )
+                final_ai_response = await self.ai_conversation.run(parsed_context)
 
                 # Send the AI's response back to Discord.
                 logger.debug(f"Sending AI response for message ID: {message.id}")
@@ -106,6 +107,25 @@ class Coordinator:
                     self.task_lifecycle_manager.active_bot_responses[message.id] = (
                         bot_messages
                     )
+            logger.debug(f"Exited typing context for message ID: {message.id}")
+
+            # Add reactions to the first sent message.
+            if bot_messages and final_ai_response:
+                first_message = bot_messages[0]
+                try:
+                    await first_message.add_reaction(self.message_sender.retry_emoji)
+                except discord.HTTPException as e:
+                    logger.warning(
+                        f"Could not add retry reaction to the first message {first_message.id}: {e}"
+                    )
+                if final_ai_response.tool_emojis:
+                    for emoji in final_ai_response.tool_emojis:
+                        try:
+                            await first_message.add_reaction(emoji)
+                        except discord.HTTPException as e:
+                            logger.warning(
+                                f"Could not add tool emoji reaction '{emoji}' to the first message {first_message.id}: {e}"
+                            )
 
             # Remove the reaction if one was provided (e.g., a retry reaction).
             if reaction_to_remove:
