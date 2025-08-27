@@ -182,6 +182,7 @@ class ToolContext:
         mime_detector: MimeDetectorProtocol,
         full_conversation_for_tooling: Optional[List[Any]] = None,
         guild: Optional[discord.Guild] = None,
+        user_id: Optional[str] = None,
         **kwargs: Any,
     ):
         """
@@ -197,6 +198,7 @@ class ToolContext:
             mime_detector: An object implementing MimeDetectorProtocol.
             full_conversation_for_tooling: Optional; the full conversation history for tool context.
             guild: Optional; the Discord guild object.
+            user_id: Optional; the Discord user ID.
             **kwargs: Additional keyword arguments for flexible context data.
         """
         self.config = config
@@ -219,6 +221,7 @@ class ToolContext:
         self.grounding_sources_md: Optional[str] = None
         self.full_conversation_for_tooling = full_conversation_for_tooling
         self.guild = guild
+        self.user_id = user_id
         self.__dict__.update(kwargs)
 
     def _validate_service(self, service: Any, protocol: type) -> None:

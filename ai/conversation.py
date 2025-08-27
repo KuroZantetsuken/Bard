@@ -187,6 +187,7 @@ class AIConversation:
             raise ValueError("ToolContext not initialized in ToolRegistry.")
 
         tool_context.guild = parsed_context.guild
+        tool_context.user_id = str(user_id)
 
         # Load existing chat history for the user/guild.
         history_entries = await self.chat_history_manager.load_history(

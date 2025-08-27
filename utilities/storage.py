@@ -49,14 +49,16 @@ class JsonStorageManager:
             The complete file path for the JSON storage file.
         """
         if guild_id is not None:
-            filename = f"{guild_id}{self.file_suffix}"
+            base_name = str(guild_id)
         elif user_id is not None:
-            filename = f"DM_{user_id}{self.file_suffix}"
+            base_name = str(user_id)
         else:
             logger.error(
                 "Attempted to get storage filepath with neither guild_id nor user_id"
             )
-            filename = f"unknown{self.file_suffix}"
+            base_name = "unknown"
+
+        filename = f"{base_name}{self.file_suffix}"
         return os.path.join(self.storage_dir, filename)
 
     async def _load_data(
