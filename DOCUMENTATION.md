@@ -289,9 +289,13 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   ├── events.py           # Handles Discord events that modify in-flight processes
 │   ├── handlers.py         # Discord event listeners (on_message, on_ready, etc.)
 │   ├── parser.py           # Parses Discord messages into structured data
+│   ├── presence.py         # Manages the bot's Discord presence
+│   ├── reactions.py        # Manages message reactions
 │   ├── router.py           # Routes incoming messages (commands vs. AI processing)
 │   ├── sender.py           # Logic for sending messages and files to Discord
-│   └── types.py            # Shared type definitions for the bot
+│   ├── threading.py        # Manages long-response threads
+│   ├── types.py            # Shared type definitions for the bot
+│   └── voice.py            # Manages sending native voice messages
 ├── data/                   # Runtime data storage (history, memories)
 ├── prompts/                # System prompt templates for the AI
 │   ├── capabilities.prompt.md
@@ -305,6 +309,7 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   └── tts.py              # Text-to-speech tool
 ├── utilities/              # General-purpose helper functions
 │   ├── ffmpeg.py           # Wrapper for FFmpeg commands
+│   ├── files.py            # Shared utility for creating temporary files
 │   ├── lifecycle.py        # Manages asynchronous task lifecycles
 │   ├── logging.py          # Custom logging configuration
 │   ├── media.py            # Media URL extraction and MIME type detection
@@ -344,13 +349,17 @@ This package encapsulates all Discord-specific functionality and orchestrates th
 
 *   [`bot/bot.py`](bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
 *   [`bot/container.py`](bot/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
-*   [`bot/handlers.py`](bot/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID in other relevant components.
+*   [`bot/handlers.py`](bot/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID and delegates presence updates to the `PresenceManager`.
 *   [`bot/router.py`](bot/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
 *   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
 *   [`bot/parser.py`](bot/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
-*   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, and the `MessageSender` for sending responses, ensuring a cohesive flow from message reception to final reply.
+*   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
 *   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset` and `!forget`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
-*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It manages message splitting for long responses, including an intelligent threading mechanism. For long text-only replies, it asynchronously generates a relevant thread title using the `ThreadTitler` service. It also handles file attachments and native voice messages with a fallback to file attachments. The internal `_create_temp_file` context manager utilizes the module-level logger directly.
+*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
+*   [`bot/presence.py`](bot/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
+*   [`bot/reactions.py`](bot/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.
+*   [`bot/threading.py`](bot/threading.py): The `ThreadingManager` is responsible for creating and managing threads for long bot responses.
+*   [`bot/voice.py`](bot/voice.py): The `VoiceManager` handles the logic for sending native Discord voice messages.
 *   [`bot/types.py`](bot/types.py): Defines shared data structures and type hints used across the bot components.
 
 #### `tools/` Package
@@ -369,6 +378,7 @@ This package contains the implementations of the external functions the AI can c
 This package provides shared, general-purpose helper modules.
 
 *   [`utilities/ffmpeg.py`](utilities/ffmpeg.py): A wrapper for executing FFmpeg commands asynchronously for audio conversion and processing. The `convert_audio` method is a class method and uses `cls.execute` for internal FFmpeg command execution.
+*   [`utilities/files.py`](utilities/files.py): Contains a shared utility for creating and managing temporary files, used across different modules for handling attachments and other file-based operations.
 *   [`utilities/lifecycle.py`](utilities/lifecycle.py): The `TaskLifecycleManager` manages the complete `asyncio.Task` lifecycle for message processing runs. It handles the creation, cancellation, and monitoring of asynchronous tasks, ensuring proper cleanup and error logging.
 *   [`utilities/logging.py`](utilities/logging.py): Configures the application's advanced logging system, which supports separate handlers for console and file output, log pruning, and sanitization of sensitive data in logs.
 *   [`utilities/media.py`](utilities/media.py): Contains helper functions for extracting URLs from text and detecting MIME types.

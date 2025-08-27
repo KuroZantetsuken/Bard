@@ -1,13 +1,13 @@
 import logging
 from typing import List, Optional, Tuple
 
-import discord
 from discord import Message, Reaction, User
 
 from ai.conversation import AIConversation
 from ai.types import FinalAIResponse
 from bot.commands import CommandHandler
 from bot.parser import MessageParser
+from bot.reactions import ReactionManager
 from bot.sender import MessageSender
 from bot.types import ParsedMessageContext
 from utilities.lifecycle import TaskLifecycleManager
@@ -46,6 +46,7 @@ class Coordinator:
         self.message_sender = message_sender
         self.command_handler = command_handler
         self.task_lifecycle_manager = task_lifecycle_manager
+        self.reaction_manager = ReactionManager(self.message_sender.retry_emoji)
 
     async def process(
         self,
@@ -109,33 +110,16 @@ class Coordinator:
                     )
             logger.debug(f"Exited typing context for message ID: {message.id}")
 
-            # Add reactions to the first sent message.
+            # Add reactions to the first sent message using ReactionManager.
             if bot_messages and final_ai_response:
                 first_message = bot_messages[0]
-                try:
-                    await first_message.add_reaction(self.message_sender.retry_emoji)
-                except discord.HTTPException as e:
-                    logger.warning(
-                        f"Could not add retry reaction to the first message {first_message.id}: {e}"
-                    )
-                if final_ai_response.tool_emojis:
-                    for emoji in final_ai_response.tool_emojis:
-                        try:
-                            await first_message.add_reaction(emoji)
-                        except discord.HTTPException as e:
-                            logger.warning(
-                                f"Could not add tool emoji reaction '{emoji}' to the first message {first_message.id}: {e}"
-                            )
+                await self.reaction_manager.add_reactions(
+                    first_message, final_ai_response.tool_emojis
+                )
 
-            # Remove the reaction if one was provided (e.g., a retry reaction).
+            # Remove the reaction if one was provided (e.g., a retry reaction) using ReactionManager.
             if reaction_to_remove:
-                reaction, user = reaction_to_remove
-                try:
-                    await reaction.remove(user)
-                except discord.HTTPException as e:
-                    logger.warning(
-                        f"Failed to remove reaction for message ID {message.id}: {e}"
-                    )
+                await self.reaction_manager.remove_reaction(reaction_to_remove)
 
         except Exception as e:
             logger.error(

@@ -1,45 +1,17 @@
-import asyncio
 import logging
 import os
-import tempfile
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, List, Optional, Union
+from typing import List, Optional, Union
 
-import aiohttp
 import discord
 
 from ai.titler import ThreadTitler
+from bot.threading import ThreadManager
+from bot.voice import VoiceMessageSender
 from config import Config
+from utilities.files import create_temp_file
 
 # Initialize logger for the sender module.
 logger = logging.getLogger("Bard")
-
-
-@asynccontextmanager
-async def _create_temp_file(data: bytes, suffix: str) -> AsyncIterator[str]:
-    """
-    Asynchronously creates a temporary file, writes data to it, and ensures it's cleaned up
-    upon exiting the context.
-
-    Args:
-        data: The bytes data to write to the temporary file.
-        suffix: The file extension (e.g., ".png", ".py", ".ogg").
-
-    Yields:
-        The path to the created temporary file.
-    """
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-            temp_path = temp_file.name
-            temp_file.write(data)
-        yield temp_path
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except OSError as e:
-                logger.warning(f"Could not delete temporary file {temp_path}: {e}")
 
 
 class MessageSender:
@@ -70,9 +42,9 @@ class MessageSender:
         self.retry_emoji = retry_emoji
         self.cancel_emoji = cancel_emoji
         self.logger = logger
-        self.thread_titler = thread_titler
+        self.thread_manager = ThreadManager(logger, thread_titler)
         self.max_message_length = Config.MAX_DISCORD_MESSAGE_LENGTH
-        self.voice_message_flag = Config.DISCORD_VOICE_MESSAGE_FLAG
+        self.voice_sender = VoiceMessageSender(bot_token, logger)
 
     def _split_message_into_chunks(self, text_content: str) -> List[str]:
         """
@@ -202,9 +174,8 @@ class MessageSender:
         files_to_attach: Optional[List[discord.File]] = None,
     ) -> List[discord.Message]:
         """
-        Sends a text reply. If the reply is long and has no attachments, it splits it at the
-        first sentence, creates a thread from the first part, and sends subsequent parts in the thread.
-        Otherwise, it sends the reply as chunked messages.
+        Sends a text reply. If the reply is long and has no attachments, it delegates to the ThreadManager
+        to create a thread. Otherwise, it sends the reply as chunked messages.
 
         Args:
             message_to_reply_to: The original message to reply to.
@@ -212,9 +183,8 @@ class MessageSender:
             files_to_attach: Optional list of Discord File objects to attach.
 
         Returns:
-            A list of sent Discord Message objects, including the thread starter and thread messages.
+            A list of sent Discord Message objects.
         """
-        sent_messages: List[discord.Message] = []
         if not text_content or not text_content.strip():
             text_content = (
                 "I processed your request but have no further text to add."
@@ -222,187 +192,37 @@ class MessageSender:
                 else ""
             )
 
-        # A thread is created if the response is long and there are no attachments.
-        should_create_thread = (
-            len(text_content) > self.max_message_length and not files_to_attach
-        )
-
-        if not should_create_thread:
+        # If there are attachments, we don't create a thread.
+        if files_to_attach:
             return await self._send_reply_as_chunks(
                 message_to_reply_to, text_content, files_to_attach
             )
 
-        # Attempt to split at the first sentence.
-        first_sentence_end = text_content.find(". ")
-        if first_sentence_end == -1 or first_sentence_end > self.max_message_length:
-            # Fallback if no period is found or the first sentence is too long.
-            return await self._send_reply_as_chunks(
-                message_to_reply_to, text_content, files_to_attach
-            )
-
-        first_part = text_content[: first_sentence_end + 1]
-        rest_of_content = text_content[first_sentence_end + 2 :].strip()
-
-        # Send the first part of the message to start the thread.
-        first_message = await self._send_single_message_with_fallback(
-            message_to_reply_to.channel,
-            first_part,
-            reply_to=message_to_reply_to,
+        # Attempt to create a thread for long messages.
+        thread_messages = await self.thread_manager.create_thread_if_needed(
+            message_to_reply_to,
+            text_content,
+            self._send_single_message_with_fallback,
+            self._split_message_into_chunks,
         )
 
-        if not first_message:
-            self.logger.error("Failed to send the initial message to start a thread.")
-            return []  # Cannot proceed if the first message fails.
-
-        sent_messages.append(first_message)
-
-        try:
-            thread = await first_message.create_thread(
-                name="Continuation of your request..."
-            )
-            self.logger.debug(
-                f"Created thread '{thread.name}' ({thread.id}) with a placeholder name."
-            )
-
-            async def update_thread_title():
-                self.logger.debug(
-                    f"Starting thread title update for thread {thread.id}"
-                )
-                try:
-                    new_title = await self.thread_titler.generate_title(text_content)
-                    if new_title and new_title.strip():
-                        await thread.edit(name=new_title.strip()[:100])
-                        self.logger.debug(
-                            f"Successfully updated thread '{thread.id}' name to '{new_title}'."
-                        )
-                    else:
-                        self.logger.warning(
-                            f"Thread title generation returned an empty title for thread {thread.id}. Keeping placeholder name."
-                        )
-                except Exception as e:
-                    self.logger.error(
-                        f"Failed to update thread title for thread {thread.id}: {e}",
-                        exc_info=True,
+        # If a thread was created, thread_messages will be a list of sent messages.
+        if thread_messages is not None:
+            # Check if the thread creation failed and we need to send the rest of the message.
+            if len(thread_messages) == 1 and text_content.find(". ") != -1:
+                first_sentence_end = text_content.find(". ")
+                rest_of_content = text_content[first_sentence_end + 2 :].strip()
+                if rest_of_content:
+                    fallback_messages = await self._send_reply_as_chunks(
+                        message_to_reply_to, rest_of_content
                     )
-                self.logger.debug(
-                    f"Finished thread title update for thread {thread.id}"
-                )
+                    thread_messages.extend(fallback_messages)
+            return thread_messages
 
-            asyncio.create_task(update_thread_title())
-
-            if rest_of_content:
-                thread_chunks = self._split_message_into_chunks(rest_of_content)
-                for chunk in thread_chunks:
-                    sent_thread_msg = await self._send_single_message_with_fallback(
-                        thread, chunk
-                    )
-                    if sent_thread_msg:
-                        sent_messages.append(sent_thread_msg)
-        except discord.HTTPException as e:
-            self.logger.error(f"Failed to create or send to thread: {e}.")
-            # If thread fails, send remaining content as regular messages.
-            if rest_of_content:
-                fallback_messages = await self._send_reply_as_chunks(
-                    message_to_reply_to, rest_of_content
-                )
-                sent_messages.extend(fallback_messages)
-
-        return sent_messages
-
-    async def _send_native_voice_message(
-        self,
-        message_to_reply_to: discord.Message,
-        audio_data: bytes,
-        duration_secs: float,
-        waveform_b64: str,
-    ) -> Optional[discord.Message]:
-        """
-        Attempts to send a native Discord voice message using Discord's API.
-
-        Args:
-            message_to_reply_to: The original message to reply to.
-            audio_data: The raw audio data in bytes (OGG format).
-            duration_secs: The duration of the audio in seconds.
-            waveform_b64: The base64 encoded waveform of the audio.
-
-        Returns:
-            The sent Discord Message object if successful, None otherwise.
-        """
-        try:
-            async with _create_temp_file(audio_data, ".ogg") as temp_audio_path:
-                async with aiohttp.ClientSession() as session:
-                    channel_id = str(message_to_reply_to.channel.id)
-                    upload_url = (
-                        f"https://discord.com/api/v10/channels/{channel_id}/attachments"
-                    )
-                    headers = {
-                        "Authorization": f"Bot {self.bot_token}",
-                        "Content-Type": "application/json",
-                    }
-                    payload = {
-                        "files": [
-                            {
-                                "filename": "voice_message.ogg",
-                                "file_size": len(audio_data),
-                                "id": "0",
-                                "is_clip": False,
-                            }
-                        ]
-                    }
-                    async with session.post(
-                        upload_url, json=payload, headers=headers
-                    ) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json()
-                        attachment = data["attachments"][0]
-
-                    async with session.put(
-                        attachment["upload_url"],
-                        data=open(temp_audio_path, "rb"),
-                        headers={"Content-Type": "audio/ogg"},
-                    ) as resp:
-                        resp.raise_for_status()
-
-                    send_url = (
-                        f"https://discord.com/api/v10/channels/{channel_id}/messages"
-                    )
-                    send_payload = {
-                        "content": "",
-                        "flags": self.voice_message_flag,
-                        "attachments": [
-                            {
-                                "id": "0",
-                                "filename": "voice_message.ogg",
-                                "uploaded_filename": attachment["upload_filename"],
-                                "duration_secs": duration_secs,
-                                "waveform": waveform_b64,
-                            }
-                        ],
-                        "message_reference": {
-                            "message_id": str(message_to_reply_to.id)
-                        },
-                        "allowed_mentions": {"parse": [], "replied_user": False},
-                    }
-                    async with session.post(
-                        send_url, json=send_payload, headers=headers
-                    ) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json()
-                        sent_audio_message = (
-                            await message_to_reply_to.channel.fetch_message(data["id"])
-                        )
-                        return sent_audio_message
-        except aiohttp.ClientResponseError as e:
-            self.logger.error(
-                f"HTTP error sending native voice message: Status {e.status}, Response: {e.message}.",
-                exc_info=True,
-            )
-            return None
-        except Exception as e:
-            self.logger.error(
-                f"Error sending native voice message: {e}.", exc_info=True
-            )
-            return None
+        # If no thread was created, send as regular chunks.
+        return await self._send_reply_as_chunks(
+            message_to_reply_to, text_content, files_to_attach
+        )
 
     async def send(
         self,
@@ -492,7 +312,7 @@ class MessageSender:
         # Prepare and send files (image, code).
         files_to_send: List[discord.File] = []
         if image_data:
-            async with _create_temp_file(image_data, ".png") as temp_image_path:
+            async with create_temp_file(image_data, ".png") as temp_image_path:
                 filename = image_filename or "image.png"
                 _, ext = os.path.splitext(filename)
                 if not ext:
@@ -500,7 +320,7 @@ class MessageSender:
                 files_to_send.append(discord.File(temp_image_path, filename=filename))
 
         if code_data:
-            async with _create_temp_file(code_data, ".py") as temp_code_path:
+            async with create_temp_file(code_data, ".py") as temp_code_path:
                 filename = code_filename or "code.py"
                 _, ext = os.path.splitext(filename)
                 if not ext:
@@ -516,7 +336,7 @@ class MessageSender:
 
         # Handle audio data.
         if audio_data:
-            sent_audio_message = await self._send_native_voice_message(
+            sent_audio_message = await self.voice_sender._send_native_voice_message(
                 message_to_reply_to,
                 audio_data,
                 duration_secs,
@@ -527,7 +347,7 @@ class MessageSender:
             else:
                 # Fallback to sending audio as a file attachment if native voice message fails.
                 try:
-                    async with _create_temp_file(audio_data, ".ogg") as temp_audio_path:
+                    async with create_temp_file(audio_data, ".ogg") as temp_audio_path:
                         file = discord.File(
                             temp_audio_path, filename="voice_response.ogg"
                         )
