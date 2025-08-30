@@ -154,6 +154,13 @@ class TTSGenerator(BaseTool):
             logger.error("Gemini client not initialized. Cannot generate TTS.")
             return None
 
+        # Incorporate style into the text_for_tts if provided
+        if style:
+            text_for_tts = f"{style}: {text_for_tts}"
+            logger.info(
+                f"Applying style '{style}'. Modified text for TTS: '{text_for_tts}'"
+            )
+
         voice_config_params = {
             "prebuilt_voice_config": types.PrebuiltVoiceConfig(
                 voice_name=Config.VOICE_NAME
