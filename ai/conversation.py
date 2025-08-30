@@ -259,9 +259,7 @@ class AIConversation:
 
         # Log the request payload before sending to Gemini.
         loggable_request_payload = {
-            "system_instruction": system_instruction_str,
             "contents": [c.model_dump() for c in contents_for_gemini],
-            "tools": [t.model_dump() for t in main_config.tools or []],
             "generation_config": main_config.model_dump(),
         }
         cleaned_loggable_payload = clean_dict(loggable_request_payload)
@@ -281,7 +279,7 @@ class AIConversation:
         loggable_response = response.model_dump()
         logger.debug(
             f"RESPONSE from Gemini (model: {self.config.MODEL_ID}):\n"
-            f"{prettify_json_for_logging(loggable_response)}"
+            f"{prettify_json_for_logging(clean_dict(loggable_response))}"
         )
 
         final_text_parts = []
