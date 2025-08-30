@@ -120,13 +120,13 @@ The bot can process and comprehend a wide array of inputs beyond just text, than
 The bot maintains two layers of memory to provide a coherent and personalized conversational experience.
 
 *   **Short-Term Memory (History):**
-    *   The bot keeps a record of recent conversations on a per-server (or per-DM) basis, stored locally in `history`.
+    *   The bot keeps a record of recent conversations on a per-server (or per-DM) basis, stored locally in `data/`.
     *   This history is accessible to all users in the channel and allows the AI to follow the conversational flow.
     *   It can be cleared at any time using the `!reset` command.
 *   **Long-Term Memory (User-Specific):**
     *   The bot can store user-specific information (e.g., preferences, key facts) for long-term recall.
     *   This memory is private to each user and persists across all servers where they interact with the bot.
-    *   Memories are managed by the `MemoryTool` and stored locally in `memories`. The AI can be prompted to remove outdated or incorrect memories.
+    *   Memories are managed by the `MemoryTool` and stored locally in `data/`. The AI can be prompted to remove outdated or incorrect memories.
 
 ### 3.3. Dynamic Interaction & Adaptation
 
@@ -146,7 +146,7 @@ The bot utilizes Gemini's function calling capability to connect with external t
 
 ### 4.1. Memory Tool
 
-*   **File:** [`tools/memory.py`](tools/memory.py)
+*   **File:** [`bard/tools/memory.py`](bard/tools/memory.py)
 *   **Emoji:** 🧠
 
 This tool manages the bot's long-term, user-specific memory. It internally manages the `MemoryManager` for persistent storage.
@@ -161,7 +161,7 @@ This tool manages the bot's long-term, user-specific memory. It internally manag
 
 ### 4.2. Text-to-Speech (TTS) Tool
 
-*   **File:** [`tools/tts.py`](tools/tts.py)
+*   **File:** [`bard/tools/tts.py`](bard/tools/tts.py)
 *   **Emoji:** 🗣️
 
 This tool transforms the bot's textual responses into natural-sounding speech.
@@ -177,7 +177,7 @@ This tool transforms the bot's textual responses into natural-sounding speech.
 
 ### 4.3. Internet Tool
 
-*   **File:** [`tools/internet.py`](tools/internet.py)
+*   **File:** [`bard/tools/internet.py`](bard/tools/internet.py)
 *   **Emoji:** 🌐
 
 This tool allows the AI to access real-time information from the internet.
@@ -191,7 +191,7 @@ This tool allows the AI to access real-time information from the internet.
 
 ### 4.4. Code Execution Tool
 
-*   **File:** [`tools/code.py`](tools/code.py)
+*   **File:** [`bard/tools/code.py`](bard/tools/code.py)
 *   **Emoji:** 💻
 
 This tool empowers the AI to write and execute Python code to solve complex problems.
@@ -205,7 +205,7 @@ This tool empowers the AI to write and execute Python code to solve complex prob
 
 ### 4.5. Discord Event Tool
 
-*   **File:** [`tools/event.py`](tools/event.py)
+*   **File:** [`bard/tools/event.py`](bard/tools/event.py)
 *   **Emoji:** 📅
 
 This tool enables the AI to create and manage scheduled events directly within Discord servers.
@@ -237,7 +237,7 @@ This tool enables the AI to create and manage scheduled events directly within D
 
 ### 4.6. Image Generation Tool
 
-*   **File:** [`tools/image.py`](tools/image.py)
+*   **File:** [`bard/tools/image.py`](bard/tools/image.py)
 *   **Emoji:** 🎨
 
 This tool allows the AI to generate new images based on textual descriptions using Gemini's image generation capabilities.
@@ -283,129 +283,148 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 
 ```
 .
-├── ai/                     # AI-related functionalities (Gemini API interaction)
-│   ├── context.py          # Chat history management
-│   ├── conversation.py     # Main conversation flow and tool calling logic
-│   ├── core.py             # Core Gemini API client and interaction logic
-│   ├── files.py            # Media attachment processing and uploading
-│   ├── prompts.py          # Construction of prompts for the Gemini API
-│   ├── responses.py        # Extraction of data from Gemini API responses
-│   ├── settings.py         # Gemini API configuration management
-│   └── titler.py           # Generates titles for long-response threads
-├── bot/                    # Discord-specific functionalities
-│   ├── bot.py              # Main bot initialization and event handling setup
-│   ├── commands.py         # Logic for handling bot commands (e.g., !reset)
-│   ├── container.py        # Dependency injection container
-│   ├── coordinator.py      # Orchestrates message processing workflow
-│   ├── events.py           # Handles Discord events that modify in-flight processes
-│   ├── handlers.py         # Discord event listeners (on_message, on_ready, etc.)
-│   ├── parser.py           # Parses Discord messages into structured data
-│   ├── presence.py         # Manages the bot's Discord presence
-│   ├── reactions.py        # Manages message reactions
-│   ├── router.py           # Routes incoming messages (commands vs. AI processing)
-│   ├── sender.py           # Logic for sending messages and files to Discord
-│   ├── threading.py        # Manages long-response threads
-│   ├── types.py            # Shared type definitions for the bot
-│   └── voice.py            # Manages sending native voice messages
-├── data/                   # Runtime data storage (history, memories)
-├── prompts/                # System prompt templates for the AI
-│   ├── capabilities.prompt.md
-│   └── personality.prompt.md
-├── tools/                  # Gemini function calling tools
-│   ├── base.py             # Base classes and protocols for tools
-│   ├── code.py             # Python code execution tool
-│   ├── image.py            # Image generation tool
-│   ├── internet.py         # Google Search and URL analysis tool
-│   ├── memory.py           # User memory management tool, including MemoryManager
-│   ├── registry.py         # Tool discovery and registration
-│   └── tts.py              # Text-to-speech tool
-├── utilities/              # General-purpose helper functions
-│   ├── ffmpeg.py           # Wrapper for FFmpeg commands
-│   ├── files.py            # Shared utility for creating temporary files
-│   ├── lifecycle.py        # Manages asynchronous task lifecycles
-│   ├── logging.py          # Custom logging configuration
-│   ├── media.py            # Media URL extraction and MIME type detection
-│   ├── parser.py           # Parses Discord messages into structured data
-│   ├── storage.py          # Base class for JSON file storage
-│   └── video.py            # Video processing utilities
+├── .gitignore
 ├── config.py               # Centralized configuration constants
-├── main.py                 # Main entry point for the application
+├── DOCUMENTATION.md        # This documentation file
+├── example.env             # Example environment variables file
 ├── hotloading.py           # Script for development hot-reloading
+├── LICENSE                 # Project license
+├── main.py                 # Main entry point for the application
+├── README.md               # Project README
 ├── requirements.txt        # Python dependencies
-└── ...
+├── bard/                   # Main application source code
+│   ├── ai/                 # AI-related functionalities (Gemini API interaction)
+│   │   ├── chat/           # Chat-specific AI components
+│   │   │   ├── context.py  # Chat history management
+│   │   │   ├── conversation.py # Main conversation flow and tool calling logic
+│   │   │   ├── responses.py # Extraction of data from Gemini API responses
+│   │   │   └── titler.py   # Generates titles for long-response threads
+│   │   ├── config/         # AI configuration and prompt management
+│   │   │   ├── prompts.py  # Construction of prompts for the Gemini API
+│   │   │   └── settings.py # Gemini API configuration management
+│   │   ├── core.py         # Core Gemini API client and interaction logic
+│   │   ├── files.py        # Media attachment processing and uploading
+│   │   └── types.py        # Shared type definitions for AI components
+│   ├── bot/                # Discord-specific functionalities
+│   │   ├── core/           # Core bot components
+│   │   │   ├── container.py # Dependency injection container
+│   │   │   ├── coordinator.py # Orchestrates message processing workflow
+│   │   │   └── handlers.py # Discord event listeners (on_message, on_ready, etc.)
+│   │   ├── lifecycle/      # Discord event handling and bot presence
+│   │   │   ├── events.py   # Handles Discord events that modify in-flight processes
+│   │   │   └── presence.py # Manages the bot's Discord presence
+│   │   ├── message/        # Message processing and sending components
+│   │   │   ├── commands.py # Logic for handling bot commands (e.g., !reset)
+│   │   │   ├── manager.py  # Manages bot messages and their state (e.g., in-flight responses)
+│   │   │   ├── parser.py   # Parses Discord messages into structured data
+│   │   │   ├── reactions.py # Manages message reactions
+│   │   │   ├── router.py   # Routes incoming messages (commands vs. AI processing)
+│   │   │   ├── sender.py   # Logic for sending messages and files to Discord
+│   │   │   ├── threading.py # Manages long-response threads
+│   │   │   └── voice.py    # Manages sending native voice messages
+│   │   ├── bot.py          # Main bot initialization and event handling setup
+│   │   └── types.py        # Shared type definitions for the bot
+│   ├── tools/              # Gemini function calling tools
+│   │   ├── base.py         # Base classes and protocols for tools
+│   │   ├── code.py         # Python code execution tool
+│   │   ├── event.py        # Discord event management tool
+│   │   ├── image.py        # Image generation tool
+│   │   ├── internet.py     # Google Search and URL analysis tool
+│   │   ├── memory.py       # User memory management tool, including MemoryManager
+│   │   ├── registry.py     # Tool discovery and registration
+│   │   └── tts.py          # Text-to-speech tool
+│   └── util/               # General-purpose helper functions
+│       ├── data/           # Data-related utilities
+│       │   ├── parser.py   # Parses various data formats (e.g., HTML)
+│       │   └── storage.py  # Base class for JSON file storage
+│       ├── media/          # Media processing utilities
+│       │   ├── audio.py    # Audio processing utilities
+│       │   ├── ffmpeg.py   # Wrapper for FFmpeg commands
+│       │   ├── media.py    # Media URL extraction and MIME type detection
+│       │   └── video.py    # Video processing utilities
+│       ├── system/         # System-level utilities
+│       │   ├── files.py    # Shared utility for creating temporary files
+│       │   └── lifecycle.py # Manages asynchronous task lifecycles
+│       └── logging.py      # Custom logging configuration
+├── data/                   # Runtime data storage (history, memories)
+└── prompts/                # System prompt templates for the AI
+    ├── capabilities.prompt.md
+    └── personality.prompt.md
 ```
 
 ### 6.2. Key Components
 
 #### `main.py`: Application Entry Point
 
-The [`main.py`](main.py) script is the starting point of the application. Its primary responsibilities are to set up the application-wide logging system and launch the bot's asynchronous event loop. Environment variable validation is handled within the `Config` class.
+The [`main.py`](main.py) script is the starting point of the application. Its primary responsibilities are to set up the application-wide logging system and launch the bot's asynchronous event loop. Environment variable validation is handled within the `config.Config` class.
 
-#### `ai/` Package
+#### `bard/ai/` Package
 
 This package contains all logic related to interacting with the Google Gemini API, including managing conversational flow and prompt construction.
 
-*   [`ai/core.py`](ai/core.py): Provides the `GeminiCore` class, a wrapper around the Gemini API client that handles content generation and media uploads. The `generate_content` method supports streaming directly via a `stream=True` argument.
-*   [`ai/settings.py`](ai/settings.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
-*   [`ai/conversation.py`](ai/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. It directly instantiates and uses `MemoryManager` for loading and formatting user memories. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
-*   [`ai/context.py`](ai/context.py): The `ChatHistoryManager` is responsible for loading, saving, and truncating short-term conversational history.
-*   [`ai/files.py`](ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
-*   [`ai/prompts.py`](ai/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It directly accepts `formatted_memories` and no longer requires a separate `context_manager`. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
-*   [`ai/responses.py`](ai/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
-*   [`ai/titler.py`](ai/titler.py): The `ThreadTitler` is a specialized service that generates concise, context-aware titles for Discord threads created from long bot responses. It uses a separate, lightweight AI model for fast and efficient title generation.
+*   [`bard/ai/core.py`](bard/ai/core.py): Provides the `GeminiCore` class, a wrapper around the Gemini API client that handles content generation and media uploads. The `generate_content` method supports streaming directly via a `stream=True` argument.
+*   [`bard/ai/config/settings.py`](bard/ai/config/settings.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
+*   [`bard/ai/chat/conversation.py`](bard/ai/chat/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. It directly instantiates and uses `MemoryManager` for loading and formatting user memories. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
+*   [`bard/ai/chat/context.py`](bard/ai/chat/context.py): The `ChatHistoryManager` is responsible for loading, saving, and truncating short-term conversational history.
+*   [`bard/ai/files.py`](bard/ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
+*   [`bard/ai/config/prompts.py`](bard/ai/config/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It directly accepts `formatted_memories` and no longer requires a separate `context_manager`. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
+*   [`bard/ai/chat/responses.py`](bard/ai/chat/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
+*   [`bard/ai/chat/titler.py`](bard/ai/chat/titler.py): The `ThreadTitler` is a specialized service that generates concise, context-aware titles for Discord threads created from long bot responses. It uses a separate, lightweight AI model for fast and efficient title generation.
 
-#### `bot/` Package
+#### `bard/bot/` Package
 
 This package encapsulates all Discord-specific functionality and orchestrates the bot's responses to user interactions through a series of specialized, single-responsibility components.
 
-*   [`bot/bot.py`](bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
-*   [`bot/container.py`](bot/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
-*   [`bot/handlers.py`](bot/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID and delegates presence updates to the `PresenceManager`.
-*   [`bot/router.py`](bot/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
-*   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
-*   [`bot/parser.py`](bot/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
-*   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
-*   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
-*   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
-*   [`bot/presence.py`](bot/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
-*   [`bot/reactions.py`](bot/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.
-*   [`bot/threading.py`](bot/threading.py): The `ThreadingManager` is responsible for creating and managing threads for long bot responses.
-*   [`bot/voice.py`](bot/voice.py): The `VoiceManager` handles the logic for sending native Discord voice messages.
-*   [`bot/types.py`](bot/types.py): Defines shared data structures and type hints used across the bot components.
+*   [`bard/bot/bot.py`](bard/bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
+*   [`bard/bot/core/container.py`](bard/bot/core/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
+*   [`bard/bot/core/handlers.py`](bard/bot/core/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID and delegates presence updates to the `PresenceManager`.
+*   [`bard/bot/message/router.py`](bard/bot/message/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
+*   [`bard/bot/lifecycle/events.py`](bard/bot/lifecycle/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
+*   [`bard/bot/message/parser.py`](bard/bot/message/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
+*   [`bard/bot/core/coordinator.py`](bard/bot/core/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
+*   [`bard/bot/message/commands.py`](bard/bot/message/commands.py): The `CommandHandler` processes specific bot commands like `!reset`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
+*   [`bard/bot/message/sender.py`](bard/bot/message/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
+*   [`bard/bot/lifecycle/presence.py`](bard/bot/lifecycle/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
+*   [`bard/bot/message/reactions.py`](bard/bot/message/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.
+*   [`bard/bot/message/threading.py`](bard/bot/message/threading.py): The `ThreadingManager` is responsible for creating and managing threads for long bot responses.
+*   [`bard/bot/message/voice.py`](bard/bot/message/voice.py): The `VoiceManager` handles the logic for sending native Discord voice messages.
+*   [`bard/bot/types.py`](bard/bot/types.py): Defines shared data structures and type hints used across the bot components.
+*   [`bard/bot/message/manager.py`](bard/bot/message/manager.py): Manages bot messages and their state (e.g., tracking in-flight responses for cancellation or retry).
 
-#### `tools/` Package
+#### `bard/tools/` Package
 
 This package contains the implementations of the external functions the AI can call.
 
-*   [`tools/base.py`](tools/base.py): Defines the `BaseTool` abstract class and the `ToolContext` container, providing a consistent structure for all tools. The `GeminiClientProtocol` defines `generate_content` as its primary method. The `AttachmentProcessorProtocol` specifies `upload_media_bytes`.
-*   [`tools/code.py`](tools/code.py): Python code execution tool. It utilizes `self.context.mime_detector.get_extension` for retrieving file extensions.
-*   [`tools/image.py`](tools/image.py): Image generation tool.
-*   [`tools/internet.py`](tools/internet.py): Google Search and URL analysis tool. It employs standard Python list types and streamlines checks for `gemini_client` and `response_extractor` in the `execute_tool` method.
-*   [`tools/memory.py`](tools/memory.py): User memory management tool. This file contains the `MemoryManager` class. It employs standard Python list types.
-*   [`tools/registry.py`](tools/registry.py): Tool discovery and registration.
-*   [`tools/tts.py`](tools/tts.py): Text-to-speech tool. It employs `self.gemini_client.generate_content` with `stream=True` for speech synthesis.
+*   [`bard/tools/base.py`](bard/tools/base.py): Defines the `BaseTool` abstract class and the `ToolContext` container, providing a consistent structure for all tools. The `GeminiClientProtocol` defines `generate_content` as its primary method. The `AttachmentProcessorProtocol` specifies `upload_media_bytes`.
+*   [`bard/tools/code.py`](bard/tools/code.py): Python code execution tool. It utilizes `self.context.mime_detector.get_extension` for retrieving file extensions.
+*   [`bard/tools/image.py`](bard/tools/image.py): Image generation tool.
+*   [`bard/tools/internet.py`](bard/tools/internet.py): Google Search and URL analysis tool. It employs standard Python list types and streamlines checks for `gemini_client` and `response_extractor` in the `execute_tool` method.
+*   [`bard/tools/memory.py`](bard/tools/memory.py): User memory management tool. This file contains the `MemoryManager` class. It employs standard Python list types.
+*   [`bard/tools/registry.py`](bard/tools/registry.py): Tool discovery and registration.
+*   [`bard/tools/tts.py`](bard/tools/tts.py): Text-to-speech tool. It employs `self.gemini_client.generate_content` with `stream=True` for speech synthesis.
 
-#### `utilities/` Package
+#### `bard/util/` Package
 
 This package provides shared, general-purpose helper modules.
 
-*   [`utilities/ffmpeg.py`](utilities/ffmpeg.py): A wrapper for executing FFmpeg commands asynchronously for audio conversion and processing. The `convert_audio` method is a class method and uses `cls.execute` for internal FFmpeg command execution.
-*   [`utilities/files.py`](utilities/files.py): Contains a shared utility for creating and managing temporary files, used across different modules for handling attachments and other file-based operations.
-*   [`utilities/lifecycle.py`](utilities/lifecycle.py): The `TaskLifecycleManager` manages the complete `asyncio.Task` lifecycle for message processing runs. It handles the creation, cancellation, and monitoring of asynchronous tasks, ensuring proper cleanup and error logging.
-*   [`utilities/logging.py`](utilities/logging.py): Configures the application's advanced logging system, which supports separate handlers for console and file output, log pruning, and sanitization of sensitive data in logs.
-*   [`utilities/media.py`](utilities/media.py): Contains helper functions for extracting URLs from text and detecting MIME types.
-*   [`utilities/parser.py`](utilities/parser.py): Parses Discord messages into structured data.
-*   [`utilities/storage.py`](utilities/storage.py): Provides a base class for managing data stored in JSON files.
-*   [`utilities/video.py`](utilities/video.py): Contains helper functions for processing videos. The `stream_media` method utilizes `FFmpegWrapper.execute` for consistent and robust FFmpeg command execution.
+*   [`bard/util/media/ffmpeg.py`](bard/util/media/ffmpeg.py): A wrapper for executing FFmpeg commands asynchronously for audio conversion and processing. The `convert_audio` method is a class method and uses `cls.execute` for internal FFmpeg command execution.
+*   [`bard/util/system/files.py`](bard/util/system/files.py): Contains a shared utility for creating and managing temporary files, used across different modules for handling attachments and other file-based operations.
+*   [`bard/util/system/lifecycle.py`](bard/util/system/lifecycle.py): The `TaskLifecycleManager` manages the complete `asyncio.Task` lifecycle for message processing runs. It handles the creation, cancellation, and monitoring of asynchronous tasks, ensuring proper cleanup and error logging.
+*   [`bard/util/logging.py`](bard/util/logging.py): Configures the application's advanced logging system, which supports separate handlers for console and file output, log pruning, and sanitization of sensitive data in logs.
+*   [`bard/util/media/media.py`](bard/util/media/media.py): Contains helper functions for extracting URLs from text and detecting MIME types.
+*   [`bard/util/data/parser.py`](bard/util/data/parser.py): Parses various data formats, for example, extracting image URLs from HTML content.
+*   [`bard/util/data/storage.py`](bard/util/data/storage.py): Provides a base class for managing data stored in JSON files.
+*   [`bard/util/media/video.py`](bard/util/media/video.py): Contains helper functions for processing videos. The `stream_media` method utilizes `FFmpegWrapper.execute` for consistent and robust FFmpeg command execution.
+*   [`bard/util/media/audio.py`](bard/util/media/audio.py): Provides utilities for audio processing.
 
 ### 6.3. Dependency Management
 
-To address circular import dependencies, particularly between modules like `bot/lifecycle.py` and `bot/coordinator.py`, a strategy of deferred dependency resolution combined with type-checking imports is employed.
+To address circular import dependencies, particularly between modules like `bard/util/system/lifecycle.py` and `bard/bot/core/coordinator.py`, a strategy of deferred dependency resolution combined with type-checking imports is employed.
 
 *   **Problem:** Direct module-level imports between two modules, where each module needs to reference the other's classes for type hinting or instantiation, can lead to `ImportError` due to circular dependencies at runtime.
 *   **Solution:**
     1.  **Deferred Instantiation:** Components are designed such that they can be instantiated without immediate access to all their dependencies. For example, `TaskLifecycleManager` can be created without a `Coordinator` instance, and the `Coordinator` can be injected later.
-    2.  **Runtime Injection:** The `bot/bot.py` module acts as an orchestrator, instantiating `TaskLifecycleManager` and `Coordinator` independently, and then explicitly injecting the `Coordinator` instance into the `TaskLifecycleManager` after both are available. This is managed by the `Container` class.
+    2.  **Runtime Injection:** The `bard/bot/bot.py` module acts as an orchestrator, instantiating `TaskLifecycleManager` and `Coordinator` independently, and then explicitly injecting the `Coordinator` instance into the `TaskLifecycleManager` after both are available. This is managed by the `Container` class.
     3.  **Type Hinting with `TYPE_CHECKING`:** For static analysis (type checking with tools like Pylance) to function correctly without introducing runtime circular imports, the `typing.TYPE_CHECKING` constant is used. This allows modules to conditionally import types only during type-checking passes, effectively making those imports inert at runtime.
 
 This approach ensures that the codebase maintains strong type hints for development and static analysis while avoiding runtime import errors caused by interdependent modules.

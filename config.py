@@ -90,7 +90,7 @@ class Config:
     # The directory for storing long-term user memories (.memory.json).
     MEMORY_DIR = "memories"
     # The directory where tool modules are located.
-    TOOLS_DIR = "tools"
+    TOOLS_DIR = "bard/tools"
 
     # --- Logging Configuration ---
     # Enable or disable logging to the console.
