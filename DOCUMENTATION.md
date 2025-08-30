@@ -88,7 +88,6 @@ Once the bot is running, you can interact with it in the following ways.
 The bot supports a set of commands for managing its state:
 
 *   `!reset`: Clears the bot's short-term memory (the recent chat history) for the current channel or DM.
-*   `!forget`: Deletes all of your user-specific long-term memories that the bot has stored.
 
 ### 2.3. Retry a Response
 
@@ -127,8 +126,7 @@ The bot maintains two layers of memory to provide a coherent and personalized co
 *   **Long-Term Memory (User-Specific):**
     *   The bot can store user-specific information (e.g., preferences, key facts) for long-term recall.
     *   This memory is private to each user and persists across all servers where they interact with the bot.
-    *   Memories are managed by the `MemoryTool` and stored locally in `memories`.
-    *   Users can clear their memories with the `!forget` command.
+    *   Memories are managed by the `MemoryTool` and stored locally in `memories`. The AI can be prompted to remove outdated or incorrect memories.
 
 ### 3.3. Dynamic Interaction & Adaptation
 
@@ -151,7 +149,7 @@ The bot utilizes Gemini's function calling capability to connect with external t
 *   **File:** [`tools/memory.py`](tools/memory.py)
 *   **Emoji:** 🧠
 
-This tool manages the bot's long-term, user-specific memory.
+This tool manages the bot's long-term, user-specific memory. It internally manages the `MemoryManager` for persistent storage.
 
 *   **`add_user_memory`:**
     *   **Purpose:** To store important facts, preferences, or other details about a user for future recall.
@@ -276,7 +274,6 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   ├── conversation.py     # Main conversation flow and tool calling logic
 │   ├── core.py             # Core Gemini API client and interaction logic
 │   ├── files.py            # Media attachment processing and uploading
-│   ├── memory.py           # User memory management
 │   ├── prompts.py          # Construction of prompts for the Gemini API
 │   ├── responses.py        # Extraction of data from Gemini API responses
 │   ├── settings.py         # Gemini API configuration management
@@ -304,7 +301,7 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   ├── base.py             # Base classes and protocols for tools
 │   ├── code.py             # Python code execution tool
 │   ├── internet.py         # Google Search and URL analysis tool
-│   ├── memory.py           # User memory management tool
+│   ├── memory.py           # User memory management tool, including MemoryManager
 │   ├── registry.py         # Tool discovery and registration
 │   └── tts.py              # Text-to-speech tool
 ├── utilities/              # General-purpose helper functions
@@ -335,11 +332,10 @@ This package contains all logic related to interacting with the Google Gemini AP
 
 *   [`ai/core.py`](ai/core.py): Provides the `GeminiCore` class, a wrapper around the Gemini API client that handles content generation and media uploads. The `generate_content` method supports streaming directly via a `stream=True` argument.
 *   [`ai/settings.py`](ai/settings.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
-*   [`ai/conversation.py`](ai/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
+*   [`ai/conversation.py`](ai/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. It directly instantiates and uses `MemoryManager` for loading and formatting user memories. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
 *   [`ai/context.py`](ai/context.py): The `ChatHistoryManager` is responsible for loading, saving, and truncating short-term conversational history.
-*   [`ai/memory.py`](ai/memory.py): The `MemoryManager` is responsible for loading, saving, and managing long-term user memories.
 *   [`ai/files.py`](ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
-*   [`ai/prompts.py`](ai/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
+*   [`ai/prompts.py`](ai/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It directly accepts `formatted_memories` and no longer requires a separate `context_manager`. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
 *   [`ai/responses.py`](ai/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
 *   [`ai/titler.py`](ai/titler.py): The `ThreadTitler` is a specialized service that generates concise, context-aware titles for Discord threads created from long bot responses. It uses a separate, lightweight AI model for fast and efficient title generation.
 
@@ -354,7 +350,7 @@ This package encapsulates all Discord-specific functionality and orchestrates th
 *   [`bot/events.py`](bot/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
 *   [`bot/parser.py`](bot/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
 *   [`bot/coordinator.py`](bot/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
-*   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset` and `!forget`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
+*   [`bot/commands.py`](bot/commands.py): The `CommandHandler` processes specific bot commands like `!reset`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
 *   [`bot/sender.py`](bot/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
 *   [`bot/presence.py`](bot/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
 *   [`bot/reactions.py`](bot/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.
@@ -369,7 +365,7 @@ This package contains the implementations of the external functions the AI can c
 *   [`tools/base.py`](tools/base.py): Defines the `BaseTool` abstract class and the `ToolContext` container, providing a consistent structure for all tools. The `GeminiClientProtocol` defines `generate_content` as its primary method. The `AttachmentProcessorProtocol` specifies `upload_media_bytes`.
 *   [`tools/code.py`](tools/code.py): Python code execution tool. It utilizes `self.context.mime_detector.get_extension` for retrieving file extensions.
 *   [`tools/internet.py`](tools/internet.py): Google Search and URL analysis tool. It employs standard Python list types and streamlines checks for `gemini_client` and `response_extractor` in the `execute_tool` method.
-*   [`tools/memory.py`](tools/memory.py): User memory management tool. It employs standard Python list types.
+*   [`tools/memory.py`](tools/memory.py): User memory management tool. This file contains the `MemoryManager` class. It employs standard Python list types.
 *   [`tools/registry.py`](tools/registry.py): Tool discovery and registration.
 *   [`tools/tts.py`](tools/tts.py): Text-to-speech tool. It employs `self.gemini_client.generate_content` with `stream=True` for speech synthesis.
 
