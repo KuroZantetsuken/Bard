@@ -5,7 +5,6 @@ from ai.context import ChatHistoryManager
 from ai.conversation import AIConversation
 from ai.core import GeminiCore
 from ai.files import AttachmentProcessor
-from ai.memory import MemoryManager
 from ai.prompts import PromptBuilder, load_prompts_from_directory
 from ai.responses import ResponseExtractor
 from ai.settings import GeminiConfigManager
@@ -46,7 +45,6 @@ class Container:
         self._service_factories: Dict[str, Callable[[], Any]] = {
             "gemini_client": self._create_gemini_client,
             "chat_history_mgr": self._create_chat_history_manager,
-            "memory_manager": self._create_memory_manager,
             "mime_detector": lambda: MimeDetector(),
             "ffmpeg_wrapper": lambda: FFmpegWrapper(),
             "attachment_processor": self._create_attachment_processor,
@@ -101,13 +99,6 @@ class Container:
             max_history_age=self.config.MAX_HISTORY_AGE,
         )
 
-    def _create_memory_manager(self) -> MemoryManager:
-        """Creates and returns an instance of MemoryManager."""
-        return MemoryManager(
-            memory_dir=self.config.MEMORY_DIR,
-            max_memories=self.config.MAX_MEMORIES,
-        )
-
     def _create_attachment_processor(self) -> AttachmentProcessor:
         """Creates and returns an instance of AttachmentProcessor."""
         return AttachmentProcessor(gemini_core=self.get("gemini_client"))
@@ -117,7 +108,6 @@ class Container:
         return ToolRegistry(
             config=self.config,
             gemini_client=self.get("gemini_client"),
-            memory_service=self.get("memory_manager"),
             response_extractor=self.get("response_extractor"),
             attachment_processor=self.get("attachment_processor"),
             ffmpeg_wrapper=self.get("ffmpeg_wrapper"),
@@ -128,16 +118,7 @@ class Container:
         """Creates and returns an instance of PromptBuilder."""
         system_prompt = load_prompts_from_directory(self.config.PROMPT_DIR)
 
-        async def context_manager_wrapper(user_id: int):
-            user_id_str = str(user_id)
-            memories = await self.get("memory_manager").load_memories(user_id_str)
-            formatted_memories = self.get("memory_manager").format_memories(
-                user_id_str, memories
-            )
-            return memories, formatted_memories
-
         return PromptBuilder(
-            context_manager=context_manager_wrapper,
             attachment_processor=self.get("attachment_processor"),
             system_prompt=system_prompt,
         )
@@ -158,7 +139,6 @@ class Container:
         """Creates and returns an instance of CommandHandler."""
         return CommandHandler(
             context_manager=self.get("chat_history_mgr"),
-            memory_manager=self.get("memory_manager"),
             message_sender=self.get("message_sender"),
         )
 
@@ -189,7 +169,6 @@ class Container:
             config_manager=self.get("gemini_config_manager"),
             prompt_builder=self.get("prompt_builder"),
             chat_history_manager=self.get("chat_history_mgr"),
-            memory_manager=self.get("memory_manager"),
             tool_registry=self.get("tool_registry"),
         )
 

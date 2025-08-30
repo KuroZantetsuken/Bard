@@ -40,36 +40,6 @@ class GeminiClientProtocol(Protocol):
 
 
 @runtime_checkable
-class MemoryServiceProtocol(Protocol):
-    """
-    Defines the required interface for a memory service used by tools.
-    This ensures consistent interaction with user-specific long-term memories.
-    """
-
-    @abstractmethod
-    async def get_memory(self, user_id: str, memory_key: str) -> Optional[Any]:
-        """Retrieves a specific memory for a user by content key."""
-        ...
-
-    @abstractmethod
-    async def set_memory(
-        self, user_id: str, memory_key: str, memory_value: Any
-    ) -> None:
-        """Sets or updates a specific memory for a user by content key."""
-        ...
-
-    @abstractmethod
-    async def add_memory(self, user_id: str, memory_content: str) -> bool:
-        """Adds a new memory for a user."""
-        ...
-
-    @abstractmethod
-    async def remove_memory(self, user_id: str, memory_id: int) -> bool:
-        """Removes a specific memory by ID."""
-        ...
-
-
-@runtime_checkable
 class ResponseExtractorProtocol(Protocol):
     """
     Defines the required interface for a response extraction service used by tools.
@@ -175,7 +145,6 @@ class ToolContext:
         self,
         config: Any,
         gemini_client: GeminiClientProtocol,
-        memory_service: MemoryServiceProtocol,
         response_extractor: ResponseExtractorProtocol,
         attachment_processor: AttachmentProcessorProtocol,
         ffmpeg_wrapper: FFmpegWrapperProtocol,
@@ -183,7 +152,6 @@ class ToolContext:
         full_conversation_for_tooling: Optional[List[Any]] = None,
         guild: Optional[discord.Guild] = None,
         user_id: Optional[str] = None,
-        **kwargs: Any,
     ):
         """
         Initializes the ToolContext.
@@ -191,7 +159,6 @@ class ToolContext:
         Args:
             config: Application configuration settings.
             gemini_client: An object implementing GeminiClientProtocol.
-            memory_service: An object implementing MemoryServiceProtocol.
             response_extractor: An object implementing ResponseExtractorProtocol.
             attachment_processor: An object implementing AttachmentProcessorProtocol.
             ffmpeg_wrapper: An object implementing FFmpegWrapperProtocol.
@@ -199,21 +166,20 @@ class ToolContext:
             full_conversation_for_tooling: Optional; the full conversation history for tool context.
             guild: Optional; the Discord guild object.
             user_id: Optional; the Discord user ID.
-            **kwargs: Additional keyword arguments for flexible context data.
         """
         self.config = config
         self._validate_service(gemini_client, GeminiClientProtocol)
-        self._validate_service(memory_service, MemoryServiceProtocol)
         self._validate_service(response_extractor, ResponseExtractorProtocol)
         self._validate_service(attachment_processor, AttachmentProcessorProtocol)
         self._validate_service(ffmpeg_wrapper, FFmpegWrapperProtocol)
         self._validate_service(mime_detector, MimeDetectorProtocol)
+
         self.gemini_client = gemini_client
-        self.memory_service = memory_service
         self.response_extractor = response_extractor
         self.attachment_processor = attachment_processor
         self.ffmpeg_wrapper = ffmpeg_wrapper
         self.mime_detector = mime_detector
+
         self.image_data: Optional[Any] = None
         self.image_filename: Optional[str] = None
         self.is_final_output: Optional[bool] = None
@@ -222,7 +188,6 @@ class ToolContext:
         self.full_conversation_for_tooling = full_conversation_for_tooling
         self.guild = guild
         self.user_id = user_id
-        self.__dict__.update(kwargs)
 
     def _validate_service(self, service: Any, protocol: type) -> None:
         """

@@ -8,9 +8,9 @@ import threading
 import time
 from typing import Optional
 
+from dotenv import load_dotenv
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from dotenv import load_dotenv  # Import load_dotenv
 
 from utilities.logging import setup_logging_config
 

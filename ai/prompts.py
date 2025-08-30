@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Awaitable, Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from google.genai import types as gemini_types
 
@@ -9,7 +9,6 @@ from bot.types import DiscordContext, VideoMetadata
 
 # Initialize logger for the prompt builder module.
 logger = logging.getLogger("Bard")
-ContextManagerInterface = Callable[[int], Awaitable[Tuple[List[dict], str]]]
 
 
 def load_prompts_from_directory(directory: str) -> str:
@@ -58,7 +57,6 @@ class PromptBuilder:
 
     def __init__(
         self,
-        context_manager: ContextManagerInterface,
         attachment_processor: AttachmentProcessor,
         system_prompt: str,
     ):
@@ -66,11 +64,9 @@ class PromptBuilder:
         Initializes the PromptBuilder.
 
         Args:
-            context_manager: A callable for managing user context and memories.
             attachment_processor: An instance of AttachmentProcessor for handling media.
             system_prompt: The base system instruction for the AI.
         """
-        self.context_manager = context_manager
         self.attachment_processor = attachment_processor
         self.system_prompt = system_prompt
 
@@ -142,7 +138,6 @@ class PromptBuilder:
 
     async def build_prompt_parts(
         self,
-        user_id: int,
         user_message_content: str,
         attachments_data: List[bytes],
         attachments_mime_types: List[str],
@@ -152,14 +147,13 @@ class PromptBuilder:
         reply_chain_context_text: Optional[str],
         discord_context: DiscordContext,
         raw_urls_for_model: List[str],
-        tool_declarations: Optional[str] = None,
+        formatted_memories: Optional[str] = None,
     ) -> Tuple[List[gemini_types.Part], bool]:
         """
         Constructs the prompt parts for the Gemini AI,
-        incorporating various inputs and preventing media duplication.
+        incorporating various contextual elements like Discord context, memories, and attachments.
 
         Args:
-            user_id: The ID of the user initiating the conversation.
             user_message_content: The main text content of the user's message.
             attachments_data: Raw byte data of direct attachments.
             attachments_mime_types: MIME types corresponding to attachments_data.
@@ -169,7 +163,7 @@ class PromptBuilder:
             reply_chain_context_text: Text from the Discord reply chain.
             discord_context: Discord-specific context information.
             raw_urls_for_model: Raw URLs extracted from the message for tool use.
-            tool_declarations: Optional string containing tool declarations.
+            formatted_memories: Optional string containing formatted user memories.
 
         Returns:
             A tuple containing:
@@ -179,15 +173,11 @@ class PromptBuilder:
         prompt_parts: List[gemini_types.Part] = []
         seen_media_identifiers = set()  # To prevent duplicate media parts.
 
-        if tool_declarations:
-            prompt_parts.append(gemini_types.Part(text=tool_declarations))
-
         if discord_context:
             prompt_parts.append(
                 gemini_types.Part(text=self._format_discord_context(discord_context))
             )
 
-        memories, formatted_memories = await self.context_manager(user_id)
         if formatted_memories:
             prompt_parts.append(gemini_types.Part(text=formatted_memories))
 

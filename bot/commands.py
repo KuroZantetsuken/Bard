@@ -4,7 +4,6 @@ from typing import List, Optional, Tuple
 import discord
 
 from ai.context import ChatHistoryManager
-from ai.memory import MemoryManager
 
 from .sender import MessageSender
 
@@ -14,14 +13,12 @@ logger = logging.getLogger("Bard")
 
 class CommandHandler:
     """
-    Handles Discord bot commands such as !reset and !forget,
-    by interacting with chat history and memory management services.
+    Handles Discord bot commands such as !reset.
     """
 
     def __init__(
         self,
         context_manager: ChatHistoryManager,
-        memory_manager: MemoryManager,
         message_sender: MessageSender,
     ):
         """
@@ -29,11 +26,10 @@ class CommandHandler:
 
         Args:
             context_manager: An instance of ChatHistoryManager for managing chat history.
-            memory_manager: An instance of MemoryManager for managing user memories.
             message_sender: An instance of MessageSender for sending messages to Discord.
         """
         self.context_manager = context_manager
-        self.memory_manager = memory_manager
+
         self.message_sender = message_sender
 
     async def _send_command_error_response(
@@ -91,41 +87,6 @@ class CommandHandler:
         )
         return True
 
-    async def handle_forget_command(
-        self,
-        message: discord.Message,
-        user_id: int,
-        bot_messages_to_edit: Optional[List[discord.Message]] = None,
-    ) -> bool:
-        """
-        Handles the `!forget` command, which deletes all memories for a user.
-
-        Args:
-            message: The Discord message object for the command.
-            user_id: The ID of the user who issued the command.
-            bot_messages_to_edit: Optional list of bot messages to edit.
-
-        Returns:
-            True if the command was successfully handled, False otherwise.
-        """
-        try:
-            deleted = await self.memory_manager.delete_all_memories(str(user_id))
-            response = (
-                f"🧠 All your memories with me have been forgotten, {message.author.display_name}."
-                if deleted
-                else "No memories found for you to forget."
-            )
-        except Exception as e:
-            logger.error(
-                f"Error forgetting memories for user {user_id}: {e}",
-                exc_info=True,
-            )
-            response = "❌ An error occurred while forgetting memories."
-        await self.message_sender.send(
-            message, response, existing_bot_messages_to_edit=bot_messages_to_edit
-        )
-        return True
-
     async def process_command(
         self,
         message: discord.Message,
@@ -165,16 +126,5 @@ class CommandHandler:
                 message, guild_id, user_id, bot_messages_to_edit
             )
             return was_handled, was_handled
-        elif command == "!forget":
-            if len(command_parts) > 1:
-                await self._send_command_error_response(
-                    message,
-                    "⚠️ The `!forget` command does not take any arguments.",
-                    bot_messages_to_edit,
-                )
-                return True, False
-            was_handled = await self.handle_forget_command(
-                message, user_id, bot_messages_to_edit
-            )
-            return was_handled, False
+
         return False, False

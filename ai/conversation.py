@@ -6,13 +6,13 @@ from google.genai import types as gemini_types
 
 from ai.context import ChatHistoryManager, HistoryEntry
 from ai.core import GeminiCore
-from ai.memory import MemoryManager
 from ai.prompts import PromptBuilder
 from ai.settings import GeminiConfigManager
 from ai.types import FinalAIResponse
 from bot.types import ParsedMessageContext
 from config import Config
 from tools.base import ToolContext
+from tools.memory import MemoryManager
 from tools.registry import ToolRegistry
 from utilities.logging import clean_dict, prettify_json_for_logging
 from utilities.media import MimeDetector
@@ -35,7 +35,6 @@ class AIConversation:
         config_manager: GeminiConfigManager,
         prompt_builder: PromptBuilder,
         chat_history_manager: ChatHistoryManager,
-        memory_manager: MemoryManager,
         tool_registry: ToolRegistry,
     ):
         """
@@ -47,7 +46,6 @@ class AIConversation:
             config_manager: Manages Gemini generation configuration.
             prompt_builder: Constructs prompts for the Gemini API.
             chat_history_manager: Manages short-term chat history.
-            memory_manager: Manages long-term user memories.
             tool_registry: Manages available tools and their execution.
         """
         self.config = config
@@ -55,9 +53,11 @@ class AIConversation:
         self.config_manager = config_manager
         self.prompt_builder = prompt_builder
         self.chat_history_manager = chat_history_manager
-        self.memory_manager = memory_manager
         self.tool_registry = tool_registry
         self.mime_detector = MimeDetector()
+        self.memory_manager = MemoryManager(
+            memory_dir=Config.MEMORY_DIR, max_memories=Config.MAX_MEMORIES
+        )
 
     async def _process_tool_response_part(
         self, tool_response_part: gemini_types.Part, tool_context: ToolContext
@@ -195,12 +195,15 @@ class AIConversation:
         )
         contents_for_gemini = [entry.content for entry in history_entries]
 
+        # Load and format memories
+        memories = await self.memory_manager.load_memories(str(user_id))
+        formatted_memories = self.memory_manager.format_memories(str(user_id), memories)
+
         # Build prompt parts based on the user's message and attachments.
         (
             gemini_prompt_parts,
             is_empty,
         ) = await self.prompt_builder.build_prompt_parts(
-            user_id=user_id,
             user_message_content=parsed_context.cleaned_content,
             attachments_data=parsed_context.attachments_data,
             attachments_mime_types=parsed_context.attachments_mime_types,
@@ -210,6 +213,7 @@ class AIConversation:
             reply_chain_context_text=parsed_context.cleaned_reply_chain_text,
             discord_context=parsed_context.discord_context,
             raw_urls_for_model=parsed_context.raw_urls_for_model,
+            formatted_memories=formatted_memories,
         )
 
         # Handle empty prompts or no history.

@@ -17,7 +17,6 @@ from .base import (
     BaseTool,
     FFmpegWrapperProtocol,
     GeminiClientProtocol,
-    MemoryServiceProtocol,
     MimeDetectorProtocol,
     ResponseExtractorProtocol,
     ToolContext,
@@ -38,7 +37,6 @@ class ToolRegistry:
         self,
         config: Config,
         gemini_client: GeminiClientProtocol,
-        memory_service: MemoryServiceProtocol,
         response_extractor: ResponseExtractorProtocol,
         attachment_processor: AttachmentProcessorProtocol,
         ffmpeg_wrapper: FFmpegWrapperProtocol,
@@ -50,7 +48,6 @@ class ToolRegistry:
         Args:
             config: Application configuration settings.
             gemini_client: An instance of GeminiClientProtocol.
-            memory_service: An instance of MemoryServiceProtocol.
             response_extractor: An instance of ResponseExtractorProtocol.
             attachment_processor: An instance of AttachmentProcessorProtocol.
             ffmpeg_wrapper: An instance of FFmpegWrapperProtocol.
@@ -58,7 +55,6 @@ class ToolRegistry:
         """
         self.config = config
         self.gemini_client = gemini_client
-        self.memory_service = memory_service
         self.response_extractor = response_extractor
         self.attachment_processor = attachment_processor
         self.ffmpeg_wrapper = ffmpeg_wrapper
@@ -86,7 +82,6 @@ class ToolRegistry:
         self.shared_tool_context = ToolContext(
             config=self.config,
             gemini_client=self.gemini_client,
-            memory_service=self.memory_service,
             response_extractor=self.response_extractor,
             attachment_processor=self.attachment_processor,
             ffmpeg_wrapper=self.ffmpeg_wrapper,
