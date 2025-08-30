@@ -71,18 +71,18 @@ class ThreadTitler:
 
             # Log the request payload before sending to Gemini.
             loggable_request_payload = {
-                "model": self.config.MODEL_ID_TITLER,
+                "model": self.config.MODEL_ID_SECONDARY,
                 "contents": [c.model_dump() for c in contents],
                 "generation_config": title_config.model_dump(),
             }
             logger.debug(
-                f"REQUEST to Gemini (model: {self.config.MODEL_ID_TITLER}):\n"
+                f"REQUEST to Gemini (model: {self.config.MODEL_ID_SECONDARY}):\n"
                 f"{prettify_json_for_logging(loggable_request_payload)}"
             )
 
             # Make the AI call to generate the title.
             response = await self.gemini_core.generate_content(
-                model=self.config.MODEL_ID_TITLER,
+                model=self.config.MODEL_ID_SECONDARY,
                 contents=contents,
                 config=title_config,
             )
@@ -90,7 +90,7 @@ class ThreadTitler:
             # Log the response from Gemini.
             loggable_response = response.model_dump()
             logger.debug(
-                f"RESPONSE from Gemini (model: {self.config.MODEL_ID_TITLER}):\n"
+                f"RESPONSE from Gemini (model: {self.config.MODEL_ID_SECONDARY}):\n"
                 f"{prettify_json_for_logging(loggable_response)}"
             )
 
