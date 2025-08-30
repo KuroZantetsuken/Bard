@@ -67,7 +67,7 @@ class BotHandlers(commands.Cog):
             )
             logger.debug(f"Discord.py Version: {discord.__version__}")
             logger.debug(
-                f"Main Gemini Model: {self.config.MODEL_ID}, TTS Gemini Model: {self.config.MODEL_ID_TTS}, Voice: {self.config.VOICE_NAME}."
+                f"Main Gemini Model: {self.config.MODEL_ID}, Secondary Gemini Model: {self.config.MODEL_ID_SECONDARY}, TTS Gemini Model: {self.config.MODEL_ID_TTS}, Voice: {self.config.VOICE_NAME}."
             )
             logger.debug(
                 f"Chat History Max Turns: {self.config.MAX_HISTORY_TURNS}, Max Age: {self.config.MAX_HISTORY_AGE} mins."
