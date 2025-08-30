@@ -9,7 +9,7 @@ The Bard Discord Bot is an AI-powered agent designed for seamless integration in
 ### Key Project Goals
 
 *   **Intelligent Assistance:** To provide a highly responsive and intelligent AI assistant within the Discord ecosystem.
-*   **Multimodal Interaction:** To showcase and utilize the advanced multimodal capabilities of the Gemini AI, including the processing of text, images, audio, and video.
+*   **Multimodal Interaction:** To showcase and utilize the advanced multimodal capabilities of the Gemini AI, including the processing of text, images, audio, video, and the generation of new images.
 *   **Extensible Functionality:** To enable powerful, real-world actions through Gemini's function calling feature, integrating with external tools like Google Search and a code execution environment.
 *   **Persistent Context:** To ensure continuous and contextually-aware interactions through robust short-term and long-term memory systems.
 
@@ -235,6 +235,20 @@ This tool enables the AI to create and manage scheduled events directly within D
     *   **Results:** The tool returns a list of dictionaries, each containing details about an active event, including its `id`, `name`, `description`, `start_time`, `end_time`, `location`, `status`, and `url`. If no events are found, an empty list is returned.
     *   **Guidelines:** Use this tool to get information about active events, which can then be used for other operations like deleting events or providing event listings to users.
 
+### 4.6. Image Generation Tool
+
+*   **File:** [`tools/image.py`](tools/image.py)
+*   **Emoji:** 🎨
+
+This tool allows the AI to generate new images based on textual descriptions using Gemini's image generation capabilities.
+
+*   **`generate_image`:**
+    *   **Purpose:** To create high-quality images from simple or complex text descriptions, supporting creative tasks requiring visual output.
+    *   **Arguments:**
+        *   `prompt` (string, required): A detailed text description for the image to be generated.
+    *   **Results:** Upon successful generation, the tool returns information about the generated image, including its filename and confirmation of generation. The generated image will be sent as an attachment.
+    *   **Guidelines:** Use this tool when a visual output is explicitly requested or when a detailed image generation task is provided. Provide comprehensive and descriptive prompts to guide the image generation process effectively.
+
 ---
 
 ## 5. Development Workflow
@@ -300,6 +314,7 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 ├── tools/                  # Gemini function calling tools
 │   ├── base.py             # Base classes and protocols for tools
 │   ├── code.py             # Python code execution tool
+│   ├── image.py            # Image generation tool
 │   ├── internet.py         # Google Search and URL analysis tool
 │   ├── memory.py           # User memory management tool, including MemoryManager
 │   ├── registry.py         # Tool discovery and registration
@@ -364,6 +379,7 @@ This package contains the implementations of the external functions the AI can c
 
 *   [`tools/base.py`](tools/base.py): Defines the `BaseTool` abstract class and the `ToolContext` container, providing a consistent structure for all tools. The `GeminiClientProtocol` defines `generate_content` as its primary method. The `AttachmentProcessorProtocol` specifies `upload_media_bytes`.
 *   [`tools/code.py`](tools/code.py): Python code execution tool. It utilizes `self.context.mime_detector.get_extension` for retrieving file extensions.
+*   [`tools/image.py`](tools/image.py): Image generation tool.
 *   [`tools/internet.py`](tools/internet.py): Google Search and URL analysis tool. It employs standard Python list types and streamlines checks for `gemini_client` and `response_extractor` in the `execute_tool` method.
 *   [`tools/memory.py`](tools/memory.py): User memory management tool. This file contains the `MemoryManager` class. It employs standard Python list types.
 *   [`tools/registry.py`](tools/registry.py): Tool discovery and registration.
@@ -403,6 +419,7 @@ The [`config.py`](config.py) file centralizes all static configuration variables
 *   **`MODEL_ID`**: The primary Gemini model for general conversation and reasoning.
 *   **`MODEL_ID_TTS`**: The specialized Gemini model for text-to-speech generation.
 *   **`MODEL_ID_TITLER`**: The lightweight Gemini model used for generating thread titles.
+*   **`MODEL_ID_IMAGE_GENERATION`**: The specialized Gemini model for image generation.
 
 ### Bot Presence Settings
 

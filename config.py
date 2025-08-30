@@ -45,6 +45,8 @@ class Config:
     MODEL_ID_SECONDARY = "gemini-2.5-flash-lite"
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
+    # The specific model identifier for image generation.
+    MODEL_ID_IMAGE_GENERATION = "gemini-2.5-flash-image-preview"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 
