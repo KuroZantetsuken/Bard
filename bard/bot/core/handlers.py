@@ -6,9 +6,7 @@ from discord.ext import commands
 
 from bard.bot.lifecycle.events import DiscordEventHandler
 from bard.bot.lifecycle.presence import PresenceManager
-from bard.bot.message.commands import CommandHandler
 from bard.bot.message.parser import MessageParser
-from bard.bot.message.router import CommandRouter
 from bard.util.system.lifecycle import TaskLifecycleManager
 from config import Config
 
@@ -24,10 +22,8 @@ class BotHandlers(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        command_router: CommandRouter,
         task_lifecycle_manager: TaskLifecycleManager,
         discord_event_handler: DiscordEventHandler,
-        command_handler: CommandHandler,
         config: Config,
         message_parser: MessageParser,
     ):
@@ -36,18 +32,14 @@ class BotHandlers(commands.Cog):
 
         Args:
             bot: The Discord bot instance.
-            command_router: Router for handling commands.
             task_lifecycle_manager: Manages the lifecycle of processing tasks.
             discord_event_handler: Handles Discord-specific events.
-            command_handler: Handles bot commands.
             config: Application configuration settings.
             message_parser: Parses Discord messages into structured data.
         """
         self.bot = bot
-        self.command_router = command_router
         self.task_lifecycle_manager = task_lifecycle_manager
         self.discord_event_handler = discord_event_handler
-        self.command_handler = command_handler
         self.config = config
         self.message_parser = message_parser
         self.presence_manager = PresenceManager(bot, config)
@@ -92,13 +84,6 @@ class BotHandlers(commands.Cog):
         """
         assert self.bot.user is not None, "Bot user not initialized."
         if message.author == self.bot.user or message.author.bot:
-            return
-
-        if self.command_router.is_command(message):
-            guild_id = message.guild.id if message.guild else None
-            await self.command_handler.process_command(
-                message, guild_id, message.author.id
-            )
             return
 
         is_dm = isinstance(message.channel, discord.DMChannel)

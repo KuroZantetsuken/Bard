@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from google.genai import types as gemini_types
 
-from bard.ai.chat.context import ChatHistoryManager, HistoryEntry
+from bard.ai.chat.history import ChatHistoryManager, HistoryEntry
 from bard.ai.config.prompts import PromptBuilder
 from bard.ai.config.settings import GeminiConfigManager
 from bard.ai.core import GeminiCore
@@ -174,9 +174,7 @@ class AIConversation:
                 message_id=None,
             )
 
-        guild_id = parsed_context.discord_context.get("guild_id")
         user_id = parsed_context.discord_context["sender_user_id"]
-        is_dm = guild_id is None
 
         self.tool_registry.reset_tool_context_data()
         tool_context = self.tool_registry.shared_tool_context
@@ -186,9 +184,7 @@ class AIConversation:
         tool_context.guild = parsed_context.guild
         tool_context.user_id = str(user_id)
 
-        history_entries = await self.chat_history_manager.load_history(
-            guild_id, str(user_id) if not is_dm else None
-        )
+        history_entries = self.chat_history_manager.load_history()
         contents_for_gemini = [entry.content for entry in history_entries]
 
         memories = await self.memory_manager.load_memories(str(user_id))
@@ -343,11 +339,7 @@ class AIConversation:
                 HistoryEntry(timestamp=datetime.now(timezone.utc), content=content)
             )
 
-        await self.chat_history_manager.save_history(
-            guild_id,
-            str(user_id) if not is_dm else None,
-            history_entries,
-        )
+        self.chat_history_manager.save_history(history_entries)
 
         return FinalAIResponse(
             text_content=final_text,

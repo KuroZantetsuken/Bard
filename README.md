@@ -8,8 +8,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - Web page analysis for real-time information access.
 - **History:** Short-term memory per server.
     - Only accessible in the respective server, by any user.
-    - Saved locally.
-    - Reset with `!reset`.
+    - Not saved locally.
 - **Function Calling:** Uses Gemini's function calling feature for robust tool usage.
     - **Memory:** Long-term memory per user.
         - Only accessible by the respective user, in any server.
@@ -33,10 +32,6 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 ### **Interaction Methods:**
 - **Direct Messages (DMs):** Responds to every message sent in a direct message channel.
 - **Server Channels:** Responds when mentioned (`@<BotName>`).
-
-### **Available Commands:**
-- `!reset`: Clears the bot's short-term memory (the recent chat history) for the current channel or DM.
-- `!forget`: Deletes all of your user-specific long-term memories that the bot has stored.
 
 ### **Retry a Response:**
 - React to the bot's message with the retry emoji `🔄` to regenerate its last response.

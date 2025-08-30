@@ -5,7 +5,6 @@ from discord import Message, Reaction, User
 
 from bard.ai.chat.conversation import AIConversation
 from bard.ai.types import FinalAIResponse
-from bard.bot.message.commands import CommandHandler
 from bard.bot.message.parser import MessageParser
 from bard.bot.message.reactions import ReactionManager
 from bard.bot.message.sender import MessageSender
@@ -19,7 +18,7 @@ class Coordinator:
     """
     Orchestrates the high-level workflow for processing a single Discord message.
     This class coordinates interactions between message parsing, AI conversation,
-    message sending, command handling, and task lifecycle management.
+    message sending, and task lifecycle management.
     """
 
     def __init__(
@@ -27,7 +26,6 @@ class Coordinator:
         message_parser: MessageParser,
         ai_conversation: AIConversation,
         message_sender: MessageSender,
-        command_handler: CommandHandler,
         task_lifecycle_manager: TaskLifecycleManager,
     ):
         """
@@ -37,13 +35,11 @@ class Coordinator:
             message_parser: Service for parsing incoming Discord messages.
             ai_conversation: Service for managing AI conversational turns.
             message_sender: Service for sending messages back to Discord.
-            command_handler: Service for processing bot commands.
             task_lifecycle_manager: Service for managing asynchronous task lifecycles.
         """
         self.message_parser = message_parser
         self.ai_conversation = ai_conversation
         self.message_sender = message_sender
-        self.command_handler = command_handler
         self.task_lifecycle_manager = task_lifecycle_manager
         self.reaction_manager = ReactionManager(self.message_sender.retry_emoji)
 
@@ -55,7 +51,7 @@ class Coordinator:
     ) -> None:
         """
         Main orchestration method for processing a Discord message.
-        This method encompasses the full flow from command handling to AI response generation
+        This method encompasses the full flow from AI response generation
         and message sending, including error handling and reaction management.
 
         Args:
@@ -69,18 +65,6 @@ class Coordinator:
         try:
             logger.debug(f"Entering typing context for message ID: {message.id}")
             async with message.channel.typing():
-                was_handled, is_reset = await self.command_handler.process_command(
-                    message,
-                    message.guild.id if message.guild else None,
-                    message.author.id,
-                    bot_messages_to_edit,
-                )
-                if was_handled:
-                    logger.info(
-                        f"Command handled for message ID: {message.id}. No further AI processing."
-                    )
-                    return
-
                 logger.debug(f"Parsing message content for message ID: {message.id}")
                 parsed_context: ParsedMessageContext = await self.message_parser.parse(
                     message

@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Callable, Dict
 
-from bard.ai.chat.context import ChatHistoryManager
 from bard.ai.chat.conversation import AIConversation
+from bard.ai.chat.history import ChatHistoryManager
 from bard.ai.chat.responses import ResponseExtractor
 from bard.ai.chat.titler import ThreadTitler
 from bard.ai.config.prompts import PromptBuilder, load_prompts_from_directory
@@ -11,9 +11,7 @@ from bard.ai.core import GeminiCore
 from bard.ai.files import AttachmentProcessor
 from bard.bot.core.coordinator import Coordinator
 from bard.bot.lifecycle.events import DiscordEventHandler
-from bard.bot.message.commands import CommandHandler
 from bard.bot.message.parser import MessageParser
-from bard.bot.message.router import CommandRouter
 from bard.bot.message.sender import MessageSender
 from bard.tools.registry import ToolRegistry
 from bard.util.media.ffmpeg import FFmpegWrapper
@@ -51,8 +49,6 @@ class Container:
             "tool_registry": self._create_tool_registry,
             "prompt_builder": self._create_prompt_builder,
             "message_sender": self._create_message_sender,
-            "command_handler": self._create_command_handler,
-            "command_router": lambda: CommandRouter(),
             "message_parser": self._create_message_parser,
             "gemini_config_manager": self._create_gemini_config_manager,
             "thread_titler": self._create_thread_titler,
@@ -93,7 +89,6 @@ class Container:
     def _create_chat_history_manager(self) -> ChatHistoryManager:
         """Creates and returns an instance of ChatHistoryManager."""
         return ChatHistoryManager(
-            history_dir=self.config.HISTORY_DIR,
             max_history_turns=self.config.MAX_HISTORY_TURNS,
             max_history_age=self.config.MAX_HISTORY_AGE,
         )
@@ -132,13 +127,6 @@ class Container:
             cancel_emoji=self.config.CANCEL_EMOJI,
             logger=logger,
             thread_titler=self.get("thread_titler"),
-        )
-
-    def _create_command_handler(self) -> CommandHandler:
-        """Creates and returns an instance of CommandHandler."""
-        return CommandHandler(
-            context_manager=self.get("chat_history_mgr"),
-            message_sender=self.get("message_sender"),
         )
 
     def _create_message_parser(self) -> MessageParser:
@@ -187,7 +175,6 @@ class Container:
             message_parser=self.get("message_parser"),
             ai_conversation=self.get("ai_conversation"),
             message_sender=self.get("message_sender"),
-            command_handler=self.get("command_handler"),
             task_lifecycle_manager=self.get("task_lifecycle_manager"),
         )
 

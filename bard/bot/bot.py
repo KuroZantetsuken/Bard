@@ -14,7 +14,7 @@ logger = logging.getLogger("Bard")
 async def run():
     """
     Runs the Discord bot. This function initializes the bot, sets up its intents,
-    configures dependency injection, registers event handlers and commands,
+    configures dependency injection, registers event handlers,
     and starts the Discord connection.
     """
     Config.load_and_validate()
@@ -29,7 +29,7 @@ async def run():
     intents.message_content = True
     intents.members = True
 
-    bot = commands.Bot(command_prefix=config.COMMAND_PREFIX, intents=intents)
+    bot = commands.Bot(command_prefix=commands.when_mentioned_or(""), intents=intents)
 
     try:
         container = Container(config)
@@ -37,10 +37,8 @@ async def run():
         await bot.add_cog(
             BotHandlers(
                 bot,
-                container.get("command_router"),
                 container.get("task_lifecycle_manager"),
                 container.get("discord_event_handler"),
-                container.get("command_handler"),
                 config,
                 container.get("message_parser"),
             )

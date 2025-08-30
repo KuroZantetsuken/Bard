@@ -83,17 +83,11 @@ Once the bot is running, you can interact with it in the following ways.
 *   **Server Channels:** In a server, the bot will respond when it is mentioned (`@<BotName>`).
 *   **Replies:** The bot will respond if you reply to one of its messages with the mention toggle ON.
 
-### 2.2. Available Commands
-
-The bot supports a set of commands for managing its state:
-
-*   `!reset`: Clears the bot's short-term memory (the recent chat history) for the current channel or DM.
-
-### 2.3. Retry a Response
+### 2.2. Retry a Response
 
 To have the bot regenerate its last response, simply react to its message with the retry emoji: `🔄`. This will trigger the bot to re-process the original prompt and provide a new answer.
 
-### 2.4. Cancel a Response
+### 2.3. Cancel a Response
 
 To cancel a response that is currently being generated, react to your own message with the cancel emoji: `🚫`. This will stop the bot from continuing its response.
 
@@ -120,9 +114,9 @@ The bot can process and comprehend a wide array of inputs beyond just text, than
 The bot maintains two layers of memory to provide a coherent and personalized conversational experience.
 
 *   **Short-Term Memory (History):**
-    *   The bot keeps a record of recent conversations on a per-server (or per-DM) basis, stored locally in `data/`.
-    *   This history is accessible to all users in the channel and allows the AI to follow the conversational flow.
-    *   It can be cleared at any time using the `!reset` command.
+    *   The bot keeps a record of recent conversations in-memory for the current channel or DM. This history is transient and not stored persistently on disk.
+    *   It is accessible to all users in the channel and allows the AI to follow the conversational flow.
+    *   The duration and number of turns retained are configurable in `config.py`.
 *   **Long-Term Memory (User-Specific):**
     *   The bot can store user-specific information (e.g., preferences, key facts) for long-term recall.
     *   This memory is private to each user and persists across all servers where they interact with the bot.
@@ -295,7 +289,7 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 ├── bard/                   # Main application source code
 │   ├── ai/                 # AI-related functionalities (Gemini API interaction)
 │   │   ├── chat/           # Chat-specific AI components
-│   │   │   ├── context.py  # Chat history management
+│   │   │   ├── history.py  # In-memory chat history management
 │   │   │   ├── conversation.py # Main conversation flow and tool calling logic
 │   │   │   ├── responses.py # Extraction of data from Gemini API responses
 │   │   │   └── titler.py   # Generates titles for long-response threads
@@ -314,11 +308,9 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │   │   │   ├── events.py   # Handles Discord events that modify in-flight processes
 │   │   │   └── presence.py # Manages the bot's Discord presence
 │   │   ├── message/        # Message processing and sending components
-│   │   │   ├── commands.py # Logic for handling bot commands (e.g., !reset)
 │   │   │   ├── manager.py  # Manages bot messages and their state (e.g., in-flight responses)
 │   │   │   ├── parser.py   # Parses Discord messages into structured data
 │   │   │   ├── reactions.py # Manages message reactions
-│   │   │   ├── router.py   # Routes incoming messages (commands vs. AI processing)
 │   │   │   ├── sender.py   # Logic for sending messages and files to Discord
 │   │   │   ├── threading.py # Manages long-response threads
 │   │   │   └── voice.py    # Manages sending native voice messages
@@ -346,7 +338,7 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 │       │   ├── files.py    # Shared utility for creating temporary files
 │       │   └── lifecycle.py # Manages asynchronous task lifecycles
 │       └── logging.py      # Custom logging configuration
-├── data/                   # Runtime data storage (history, memories)
+├── data/                   # Runtime data storage
 └── prompts/                # System prompt templates for the AI
     ├── capabilities.prompt.md
     └── personality.prompt.md
@@ -365,7 +357,7 @@ This package contains all logic related to interacting with the Google Gemini AP
 *   [`bard/ai/core.py`](bard/ai/core.py): Provides the `GeminiCore` class, a wrapper around the Gemini API client that handles content generation and media uploads. The `generate_content` method supports streaming directly via a `stream=True` argument.
 *   [`bard/ai/config/settings.py`](bard/ai/config/settings.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
 *   [`bard/ai/chat/conversation.py`](bard/ai/chat/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. It directly instantiates and uses `MemoryManager` for loading and formatting user memories. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
-*   [`bard/ai/chat/context.py`](bard/ai/chat/context.py): The `ChatHistoryManager` is responsible for loading, saving, and truncating short-term conversational history.
+*   [`bard/ai/chat/history.py`](bard/ai/chat/history.py): The `ChatHistoryManager` is responsible for managing in-memory short-term conversational history.
 *   [`bard/ai/files.py`](bard/ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
 *   [`bard/ai/config/prompts.py`](bard/ai/config/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It directly accepts `formatted_memories` and no longer requires a separate `context_manager`. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
 *   [`bard/ai/chat/responses.py`](bard/ai/chat/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
@@ -378,11 +370,9 @@ This package encapsulates all Discord-specific functionality and orchestrates th
 *   [`bard/bot/bot.py`](bard/bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
 *   [`bard/bot/core/container.py`](bard/bot/core/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
 *   [`bard/bot/core/handlers.py`](bard/bot/core/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID and delegates presence updates to the `PresenceManager`.
-*   [`bard/bot/message/router.py`](bard/bot/message/router.py): The `CommandRouter` acts as a lightweight, stateless pre-filter for incoming messages. Its sole responsibility is to identify whether a message is a bot command, preventing command messages from triggering the more complex AI processing lifecycle.
-*   [`bard/bot/lifecycle/events.py`](bard/bot/lifecycle/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history. Edited messages are not processed as commands.
+*   [`bard/bot/lifecycle/events.py`](bard/bot/lifecycle/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history.
 *   [`bard/bot/message/parser.py`](bard/bot/message/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It extracts and processes message content, attachments, reply chains, and Discord context, preparing the data for AI interaction.
 *   [`bard/bot/core/coordinator.py`](bard/bot/core/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
-*   [`bard/bot/message/commands.py`](bard/bot/message/commands.py): The `CommandHandler` processes specific bot commands like `!reset`. Argument validation for these commands strictly disallows extra arguments, ensuring clear command usage.
 *   [`bard/bot/message/sender.py`](bard/bot/message/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
 *   [`bard/bot/lifecycle/presence.py`](bard/bot/lifecycle/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
 *   [`bard/bot/message/reactions.py`](bard/bot/message/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.

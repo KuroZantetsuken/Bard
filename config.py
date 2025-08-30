@@ -16,8 +16,6 @@ class Config:
     # --- Core Bot Settings ---
     # The Discord bot token, retrieved from environment variables.
     DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-    # The command prefix for bot commands (e.g., !reset).
-    COMMAND_PREFIX = "!"
     # The emoji used to trigger a re-run of a prompt.
     RETRY_EMOJI = "🔄"
     # The emoji used to cancel a response generation.
@@ -85,8 +83,8 @@ class Config:
     PROMPT_DIR = "prompts"
     # The directory where log files are saved.
     LOG_DIR = "logs"
-    # The directory for storing short-term chat history (.history.json).
-    HISTORY_DIR = "history"
+    # The directory for storing short-term chat history (now transient).
+    HISTORY_DIR = "history"  # This directory is no longer used for file storage, but the config entry remains for consistency/future use if desired.
     # The directory for storing long-term user memories (.memory.json).
     MEMORY_DIR = "memories"
     # The directory where tool modules are located.

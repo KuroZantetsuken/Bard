@@ -3,6 +3,9 @@ import io
 import logging
 from typing import Tuple
 
+import numpy as np
+import soundfile
+
 logger = logging.getLogger("Bard")
 
 
@@ -21,12 +24,14 @@ def get_audio_duration_and_waveform(
         A tuple containing the duration of the audio in seconds and the base64 encoded waveform string.
     """
 
-    import numpy as np
-    import soundfile
-
     try:
         with io.BytesIO(audio_bytes) as audio_io:
             audio_data, samplerate = soundfile.read(audio_io)
+
+        if audio_data is None or samplerate is None:
+            logger.error("soundfile.read returned None for audio_data or samplerate.")
+            return 1.0, "FzYACgAAAAAAACQAAAAAAAA="
+
         duration_secs = len(audio_data) / float(samplerate)
         mono_audio_data = (
             np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
