@@ -68,9 +68,9 @@ class Config:
 
     # --- History and Memory Settings ---
     # The maximum number of conversational turns (user + assistant) to keep in short-term history.
-    MAX_HISTORY_TURNS = 0
+    MAX_HISTORY_TURNS = 5
     # The maximum age (in minutes) for a turn to be considered for history. 0 disables this check.
-    MAX_HISTORY_AGE = 0
+    MAX_HISTORY_AGE = 10
     # The maximum number of long-term memories to store per user. 0 disables this check.
     MAX_MEMORIES = 32
 

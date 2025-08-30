@@ -5,6 +5,17 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
+def clean_dict(d: Any) -> Any:
+    """
+    Recursively removes keys with None values from a dictionary or list of dictionaries.
+    """
+    if isinstance(d, dict):
+        return {k: clean_dict(v) for k, v in d.items() if v is not None}
+    if isinstance(d, list):
+        return [clean_dict(i) for i in d if i is not None]
+    return d
+
+
 class JsonPayloadFilter(logging.Filter):
     """
     A logging filter that prevents log records containing specific JSON API payloads

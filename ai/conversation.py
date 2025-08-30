@@ -14,7 +14,7 @@ from bot.types import ParsedMessageContext
 from config import Config
 from tools.base import ToolContext
 from tools.registry import ToolRegistry
-from utilities.logging import prettify_json_for_logging
+from utilities.logging import clean_dict, prettify_json_for_logging
 from utilities.media import MimeDetector
 
 # Initialize logger for the AI conversation module.
@@ -264,9 +264,10 @@ class AIConversation:
             "tools": [t.model_dump() for t in main_config.tools or []],
             "generation_config": main_config.model_dump(),
         }
+        cleaned_loggable_payload = clean_dict(loggable_request_payload)
         logger.debug(
             f"REQUEST to Gemini (model: {self.config.MODEL_ID}):\n"
-            f"{prettify_json_for_logging(loggable_request_payload)}"
+            f"{prettify_json_for_logging(cleaned_loggable_payload)}"
         )
 
         # Initial content generation call to Gemini.
