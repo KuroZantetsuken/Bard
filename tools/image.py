@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from google.genai import types
 
 from tools.base import BaseTool, ToolContext
+from utilities.logging import clean_dict, prettify_json_for_logging
 
 # Initialize logger for the image generation tool module.
 logger = logging.getLogger("Bard")
@@ -98,8 +99,15 @@ class ImageGenerationTool(BaseTool):
         try:
             # Use the specific image generation model from config
             image_model_id = context.config.MODEL_ID_IMAGE_GENERATION
+            request_payload = {
+                "model": image_model_id,
+                "contents": [prompt],
+            }
             logger.debug(
                 f"ImageGenerationTool: Calling Gemini API with model: {image_model_id}, prompt: '{prompt}'"
+            )
+            logger.debug(
+                f"Gemini API (image_generation) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
             )
 
             response = await gemini_client.aio.models.generate_content(
@@ -108,6 +116,9 @@ class ImageGenerationTool(BaseTool):
             )
             logger.debug(
                 f"ImageGenerationTool: Received response from Gemini API. Candidates: {len(response.candidates) if response.candidates else 0}"
+            )
+            logger.debug(
+                f"Gemini API (image_generation) response:\n{prettify_json_for_logging(clean_dict(response.dict()))}"
             )
 
             generated_filename = None

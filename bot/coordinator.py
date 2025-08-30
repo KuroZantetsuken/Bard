@@ -94,13 +94,6 @@ class Coordinator:
                 logger.debug(f"Starting AI conversation for message ID: {message.id}")
                 final_ai_response = await self.ai_conversation.run(parsed_context)
 
-                # Log the final AI response details before sending.
-                logger.debug(
-                    f"Final AI Response for message ID {message.id}:\n"
-                    f"Media: {prettify_json_for_logging(final_ai_response.media)}\n"
-                    f"Tool Emojis: {final_ai_response.tool_emojis}"
-                )
-
                 # Send the AI's response back to Discord.
                 logger.debug(f"Sending AI response for message ID: {message.id}")
                 bot_messages = await self.message_sender.send(

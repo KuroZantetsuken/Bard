@@ -8,6 +8,7 @@ from google.genai import types
 from config import Config
 
 from .base import BaseTool, ToolContext
+from utilities.logging import clean_dict, prettify_json_for_logging
 
 # Initialize logger for the TTS tool module.
 logger = logging.getLogger("Bard")
@@ -117,12 +118,23 @@ class TTSGenerator(BaseTool):
                     voice_config=types.VoiceConfig(**voice_config_params)
                 ),
             )
+            request_payload = {
+                "model": Config.MODEL_ID_TTS,
+                "contents": [types.Content(parts=[types.Part(text=text)])].__dict__,
+                "config": speech_generation_config.__dict__,
+            }
+            logger.debug(
+                f"Gemini API (tts_synthesis) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+            )
             async for chunk in await self.gemini_client.generate_content(
                 model=Config.MODEL_ID_TTS,
                 contents=[types.Content(parts=[types.Part(text=text)])],
                 config=speech_generation_config,
                 stream=True,
             ):
+                logger.debug(
+                    f"Gemini API (tts_synthesis) response chunk:\n{prettify_json_for_logging(clean_dict(chunk.dict()))}"
+                )
                 if (
                     chunk.candidates
                     and chunk.candidates[0].content
@@ -173,10 +185,22 @@ class TTSGenerator(BaseTool):
             ),
         )
 
+        request_payload = {
+            "model": Config.MODEL_ID_TTS,
+            "contents": [types.Content(parts=[types.Part(text=text_for_tts)])].__dict__,
+            "config": speech_generation_config.__dict__,
+        }
+        logger.debug(
+            f"Gemini API (tts_generate_ogg) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+        )
+
         gemini_response_object = await self.gemini_client.generate_content(
             model=Config.MODEL_ID_TTS,
             contents=[types.Content(parts=[types.Part(text=text_for_tts)])],
             config=speech_generation_config,
+        )
+        logger.debug(
+            f"Gemini API (tts_generate_ogg) response:\n{prettify_json_for_logging(clean_dict(gemini_response_object.dict()))}"
         )
 
         reason = "Unknown"

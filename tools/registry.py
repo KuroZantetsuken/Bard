@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from google.genai import types as gemini_types
 
 from config import Config
-from utilities.logging import prettify_json_for_logging
+from utilities.logging import clean_dict, prettify_json_for_logging
 
 from .base import (
     AttachmentProcessorProtocol,
@@ -227,7 +227,7 @@ class ToolRegistry:
             An optional Gemini types.Part object containing the result of the function execution.
         """
         logger.info(
-            f"Executing tool function: {function_name} with args: {prettify_json_for_logging(args)}"
+            f"Executing tool function: {function_name} with args: {prettify_json_for_logging(clean_dict(args))}"
         )
         tool_class_name = self.function_to_tool_map.get(function_name)
         if not tool_class_name:

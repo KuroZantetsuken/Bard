@@ -5,7 +5,7 @@ from google.genai import types
 
 from ai.settings import GeminiConfigManager
 from tools.base import BaseTool, ToolContext
-from utilities.logging import prettify_json_for_logging
+from utilities.logging import clean_dict, prettify_json_for_logging
 
 # Initialize logger for the code execution tool module.
 logger = logging.getLogger("Bard")
@@ -146,7 +146,7 @@ class CodeExecutionTool(BaseTool):
                 "config": code_exec_config.dict(),
             }
             logger.debug(
-                f"Gemini API (code_execution) request:\n{prettify_json_for_logging(request_payload)}"
+                f"Gemini API (code_execution) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
             )
             response = await gemini_client.aio.models.generate_content(
                 model=self.context.config.MODEL_ID,
@@ -154,7 +154,7 @@ class CodeExecutionTool(BaseTool):
                 config=code_exec_config,
             )
             logger.debug(
-                f"Gemini API (code_execution) response:\n{prettify_json_for_logging(response.dict())}"
+                f"Gemini API (code_execution) response:\n{prettify_json_for_logging(clean_dict(response.dict()))}"
             )
             text_output = ""
             image_generated = False
