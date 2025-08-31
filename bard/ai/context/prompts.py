@@ -6,6 +6,8 @@ from google.genai import types as gemini_types
 
 from bard.ai.files import AttachmentProcessor
 from bard.bot.types import DiscordContext, VideoMetadata
+from bard.ai.context.dynamic import DynamicContextFormatter
+from bard.ai.context.replies import ReplyChainFormatter
 
 logger = logging.getLogger("Bard")
 
@@ -68,72 +70,8 @@ class PromptBuilder:
         """
         self.attachment_processor = attachment_processor
         self.system_prompt = system_prompt
-
-    @staticmethod
-    def _format_discord_context(context: DiscordContext) -> str:
-        """
-        Formats the Discord context dictionary into a readable string for the prompt.
-
-        Args:
-            context: A dictionary containing Discord-specific context information.
-
-        Returns:
-            A formatted string representing the Discord context.
-        """
-        formatted_context = [
-            "[DYNAMIC_CONTEXT]",
-            f"Channel ID: <#{context['channel_id']}>",
-            f"Channel Name: {context['channel_name']}",
-        ]
-        if context["channel_topic"]:
-            formatted_context.append(f"Channel Topic: {context['channel_topic']}")
-
-        if context["users_in_channel"]:
-            users_formatted = " ".join(
-                [f"<@{user_id}>" for user_id in context["users_in_channel"]]
-            )
-            formatted_context.append(f"Users in Channel: {users_formatted}")
-
-        formatted_context.append(f"Sender User ID: <@{context['sender_user_id']}>")
-        formatted_context.append(f"Replied User ID: <@{context['replied_user_id']}>")
-
-        formatted_context.append(f"Current Time (UTC): {context['current_time_utc']}")
-        formatted_context.append("[/DYNAMIC_CONTEXT]")
-        return "\n".join(formatted_context)
-
-    def _format_video_metadata(self, metadata: VideoMetadata) -> str:
-        """
-        Formats video metadata into a readable string for the prompt.
-
-        Args:
-            metadata: A VideoMetadata object containing details about a video.
-
-        Returns:
-            A formatted string representing the video metadata.
-        """
-        formatted_metadata = ["[VIDEO_METADATA]"]
-        if metadata.title:
-            formatted_metadata.append(f"Title: {metadata.title}")
-        if metadata.description:
-            formatted_metadata.append(f"Description: {metadata.description}")
-        if metadata.duration_seconds is not None:
-            formatted_metadata.append(f"Duration: {metadata.duration_seconds} seconds")
-        if metadata.upload_date:
-            formatted_metadata.append(f"Upload Date: {metadata.upload_date}")
-        if metadata.uploader:
-            formatted_metadata.append(f"Uploader: {metadata.uploader}")
-        if metadata.view_count is not None:
-            formatted_metadata.append(f"View Count: {metadata.view_count}")
-        if metadata.average_rating is not None:
-            formatted_metadata.append(f"Average Rating: {metadata.average_rating}")
-        if metadata.categories:
-            formatted_metadata.append(f"Categories: {', '.join(metadata.categories)}")
-        if metadata.tags:
-            formatted_metadata.append(f"Tags: {', '.join(metadata.tags)}")
-        formatted_metadata.append(f"Is YouTube: {metadata.is_youtube}")
-        formatted_metadata.append(f"URL: {metadata.url}")
-        formatted_metadata.append("[/VIDEO_METADATA]")
-        return "\n".join(formatted_metadata)
+        self.dynamic_context_formatter = DynamicContextFormatter()
+        self.reply_chain_formatter = ReplyChainFormatter()
 
     async def build_prompt_parts(
         self,
@@ -174,7 +112,11 @@ class PromptBuilder:
 
         if discord_context:
             prompt_parts.append(
-                gemini_types.Part(text=self._format_discord_context(discord_context))
+                gemini_types.Part(
+                    text=self.dynamic_context_formatter.format_discord_context(
+                        discord_context
+                    )
+                )
             )
 
         if formatted_memories:
@@ -268,7 +210,9 @@ class PromptBuilder:
         for video_metadata in video_metadata_list:
             if video_metadata:
                 metadata_text_part = gemini_types.Part(
-                    text=self._format_video_metadata(video_metadata)
+                    text=self.reply_chain_formatter.format_video_metadata(
+                        video_metadata
+                    )
                 )
 
                 identifier = f"metadata_{video_metadata.url}"

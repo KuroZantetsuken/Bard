@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from google.genai import types
 
-from bard.ai.config.settings import GeminiConfigManager
+from bard.ai.config import GeminiConfigManager
 from bard.tools.base import AttachmentProcessorProtocol, BaseTool, ToolContext
 from bard.util.logging import clean_dict, prettify_json_for_logging
 

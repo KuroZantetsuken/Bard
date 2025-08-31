@@ -2,11 +2,11 @@ import logging
 from typing import Any, Callable, Dict
 
 from bard.ai.chat.conversation import AIConversation
-from bard.ai.chat.history import ChatHistoryManager
+from bard.ai.context.history import ChatHistoryManager
 from bard.ai.chat.responses import ResponseExtractor
 from bard.ai.chat.titler import ThreadTitler
-from bard.ai.config.prompts import PromptBuilder, load_prompts_from_directory
-from bard.ai.config.settings import GeminiConfigManager
+from bard.ai.context.prompts import PromptBuilder, load_prompts_from_directory
+from bard.ai.config import GeminiConfigManager
 from bard.ai.core import GeminiCore
 from bard.ai.files import AttachmentProcessor
 from bard.bot.core.coordinator import Coordinator

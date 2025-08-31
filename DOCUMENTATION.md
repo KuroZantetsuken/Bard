@@ -278,68 +278,70 @@ The bot's architecture is designed to be modular and maintainable, with a clear 
 ```
 .
 ├── .gitignore
-├── config.py               # Centralized configuration constants
-├── DOCUMENTATION.md        # This documentation file
-├── example.env             # Example environment variables file
-├── hotloading.py           # Script for development hot-reloading
-├── LICENSE                 # Project license
-├── main.py                 # Main entry point for the application
-├── README.md               # Project README
-├── requirements.txt        # Python dependencies
-├── bard/                   # Main application source code
-│   ├── ai/                 # AI-related functionalities (Gemini API interaction)
-│   │   ├── chat/           # Chat-specific AI components
-│   │   │   ├── history.py  # In-memory chat history management
+├── config.py                   # Centralized configuration constants
+├── DOCUMENTATION.md            # This documentation file
+├── example.env                 # Example environment variables file
+├── hotloading.py               # Script for development hot-reloading
+├── LICENSE                     # Project license
+├── main.py                     # Main entry point for the application
+├── README.md                   # Project README
+├── requirements.txt            # Python dependencies
+├── bard/                       # Main application source code
+│   ├── ai/                     # AI-related functionalities (Gemini API interaction)
+│   │   ├── config.py           # AI configuration and settings management
+│   │   ├── chat/               # Chat-specific AI components
 │   │   │   ├── conversation.py # Main conversation flow and tool calling logic
-│   │   │   ├── responses.py # Extraction of data from Gemini API responses
-│   │   │   └── titler.py   # Generates titles for long-response threads
-│   │   ├── config/         # AI configuration and prompt management
-│   │   │   ├── prompts.py  # Construction of prompts for the Gemini API
-│   │   │   └── settings.py # Gemini API configuration management
-│   │   ├── core.py         # Core Gemini API client and interaction logic
-│   │   ├── files.py        # Media attachment processing and uploading
-│   │   └── types.py        # Shared type definitions for AI components
-│   ├── bot/                # Discord-specific functionalities
-│   │   ├── core/           # Core bot components
-│   │   │   ├── container.py # Dependency injection container
-│   │   │   ├── coordinator.py # Orchestrates message processing workflow
-│   │   │   └── handlers.py # Discord event listeners (on_message, on_ready, etc.)
-│   │   ├── lifecycle/      # Discord event handling and bot presence
-│   │   │   ├── events.py   # Handles Discord events that modify in-flight processes
-│   │   │   └── presence.py # Manages the bot's Discord presence
-│   │   ├── message/        # Message processing and sending components
-│   │   │   ├── manager.py  # Manages bot messages and their state (e.g., in-flight responses)
-│   │   │   ├── parser.py   # Parses Discord messages into structured data
-│   │   │   ├── reactions.py # Manages message reactions
-│   │   │   ├── sender.py   # Logic for sending messages and files to Discord
-│   │   │   ├── threading.py # Manages long-response threads
-│   │   │   └── voice.py    # Manages sending native voice messages
-│   │   ├── bot.py          # Main bot initialization and event handling setup
-│   │   └── types.py        # Shared type definitions for the bot
-│   ├── tools/              # Gemini function calling tools
-│   │   ├── base.py         # Base classes and protocols for tools
-│   │   ├── code.py         # Python code execution tool
-│   │   ├── event.py        # Discord event management tool
-│   │   ├── image.py        # Image generation tool
-│   │   ├── internet.py     # Google Search and URL analysis tool
-│   │   ├── memory.py       # User memory management tool, including MemoryManager
-│   │   ├── registry.py     # Tool discovery and registration
-│   │   └── tts.py          # Text-to-speech tool
-│   └── util/               # General-purpose helper functions
-│       ├── data/           # Data-related utilities
-│       │   ├── parser.py   # Parses various data formats (e.g., HTML)
-│       │   └── storage.py  # Base class for JSON file storage
-│       ├── media/          # Media processing utilities
-│       │   ├── audio.py    # Audio processing utilities
-│       │   ├── ffmpeg.py   # Wrapper for FFmpeg commands
-│       │   ├── media.py    # Media URL extraction and MIME type detection
-│       │   └── video.py    # Video processing utilities
-│       ├── system/         # System-level utilities
-│       │   ├── files.py    # Shared utility for creating temporary files
-│       │   └── lifecycle.py # Manages asynchronous task lifecycles
-│       └── logging.py      # Custom logging configuration
-├── data/                   # Runtime data storage
-└── prompts/                # System prompt templates for the AI
+│   │   │   ├── responses.py    # Extraction of data from Gemini API responses
+│   │   │   └── titler.py       # Generates titles for long-response threads
+│   │   ├── context/            # Context management for AI prompts
+│   │   │   ├── dynamic.py      # Manages dynamic Discord context injection
+│   │   │   ├── history.py      # In-memory chat history management
+│   │   │   ├── prompts.py      # Central manager for constructing prompts for the Gemini API
+│   │   │   └── replies.py      # Manages reply chain context injection
+│   │   ├── core.py             # Core Gemini API client and interaction logic
+│   │   ├── files.py            # Media attachment processing and uploading
+│   │   └── types.py            # Shared type definitions for AI components
+│   ├── bot/                    # Discord-specific functionalities
+│   │   ├── core/               # Core bot components
+│   │   │   ├── container.py    # Dependency injection container
+│   │   │   ├── coordinator.py  # Orchestrates message processing workflow
+│   │   │   └── handlers.py     # Discord event listeners (on_message, on_ready, etc.)
+│   │   ├── lifecycle/          # Discord event handling and bot presence
+│   │   │   ├── events.py       # Handles Discord events that modify in-flight processes
+│   │   │   └── presence.py     # Manages the bot's Discord presence
+│   │   ├── message/            # Message processing and sending components
+│   │   │   ├── manager.py      # Manages bot messages and their state (e.g., in-flight responses)
+│   │   │   ├── parser.py       # Parses Discord messages into structured data
+│   │   │   ├── reactions.py    # Manages message reactions
+│   │   │   ├── sender.py       # Logic for sending messages and files to Discord
+│   │   │   ├── threading.py    # Manages long-response threads
+│   │   │   └── voice.py        # Manages sending native voice messages
+│   │   ├── bot.py              # Main bot initialization and event handling setup
+│   │   └── types.py            # Shared type definitions for the bot
+│   ├── tools/                  # Gemini function calling tools
+│   │   ├── base.py             # Base classes and protocols for tools
+│   │   ├── code.py             # Python code execution tool
+│   │   ├── event.py            # Discord event management tool
+│   │   ├── image.py            # Image generation tool
+│   │   ├── internet.py         # Google Search and URL analysis tool
+│   │   ├── memory.py           # User memory management tool, including MemoryManager
+│   │   ├── registry.py         # Tool discovery and registration
+│   │   └── tts.py              # Text-to-speech tool
+│   └── util/                   # General-purpose helper functions
+│       ├── data/               # Data-related utilities
+│       │   ├── parser.py       # Parses various data formats (e.g., HTML)
+│       │   └── storage.py      # Base class for JSON file storage
+│       ├── media/              # Media processing utilities
+│       │   ├── audio.py        # Audio processing utilities
+│       │   ├── ffmpeg.py       # Wrapper for FFmpeg commands
+│       │   ├── media.py        # Media URL extraction and MIME type detection
+│       │   └── video.py        # Video processing utilities
+│       ├── system/             # System-level utilities
+│       │   ├── files.py        # Shared utility for creating temporary files
+│       │   └── lifecycle.py    # Manages asynchronous task lifecycles
+│       └── logging.py          # Custom logging configuration
+├── data/                       # Runtime data storage
+└── prompts/                    # System prompt templates for the AI
     ├── capabilities.prompt.md
     └── personality.prompt.md
 ```
@@ -355,11 +357,11 @@ The [`main.py`](main.py) script is the starting point of the application. Its pr
 This package contains all logic related to interacting with the Google Gemini API, including managing conversational flow and prompt construction.
 
 *   [`bard/ai/core.py`](bard/ai/core.py): Provides the `GeminiCore` class, a wrapper around the Gemini API client that handles content generation and media uploads. The `generate_content` method supports streaming directly via a `stream=True` argument.
-*   [`bard/ai/config/settings.py`](bard/ai/config/settings.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
+*   [`bard/ai/config.py`](bard/ai/config.py): The `GeminiConfigManager` class is responsible for creating the generation configuration for Gemini API calls.
 *   [`bard/ai/chat/conversation.py`](bard/ai/chat/conversation.py): The `AIConversation` class manages the entire, stateful, multi-step conversational turn with the Gemini API. It orchestrates prompt building, history management, AI model interaction, and tool calling, consolidating the final AI response. It directly instantiates and uses `MemoryManager` for loading and formatting user memories. Logic for processing tool responses and building the final AI response resides in dedicated helper methods (`_process_tool_response_part` and `_build_final_response_data`).
-*   [`bard/ai/chat/history.py`](bard/ai/chat/history.py): The `ChatHistoryManager` is responsible for managing in-memory short-term conversational history.
+*   [`bard/ai/context/history.py`](bard/ai/context/history.py): The `ChatHistoryManager` is responsible for managing in-memory short-term conversational history.
 *   [`bard/ai/files.py`](bard/ai/files.py): Contains the `AttachmentProcessor`, a critical component for handling all media. It processes local attachments and remote URLs, uploads them to the Gemini File API, and caches the results. The `upload_media_bytes` method handles media processing from bytes.
-*   [`bard/ai/config/prompts.py`](bard/ai/config/prompts.py): The `PromptBuilder` class assembles the final prompt sent to the AI, combining the system instructions, chat history, user memories, processed attachments, and dynamic context. It directly accepts `formatted_memories` and no longer requires a separate `context_manager`. It utilizes `attachment_processor.upload_media_bytes` for handling attachments.
+*   [`bard/ai/context/prompts.py`](bard/ai/context/prompts.py): The `PromptBuilder` class acts as a central manager for constructing the final prompt sent to the AI. It combines system instructions, chat history, user memories, processed attachments, and dynamic context. It leverages `DynamicContextFormatter` for injecting Discord environment context and `ReplyChainFormatter` for managing reply chain context, ensuring a comprehensive and accurate prompt. It directly accepts `formatted_memories` and utilizes `attachment_processor.upload_media_bytes` for handling attachments.
 *   [`bard/ai/chat/responses.py`](bard/ai/chat/responses.py): The `ResponseExtractor` utility helps parse and extract textual content and other data from the AI's response.
 *   [`bard/ai/chat/titler.py`](bard/ai/chat/titler.py): The `ThreadTitler` is a specialized service that generates concise, context-aware titles for Discord threads created from long bot responses. It uses a separate, lightweight AI model for fast and efficient title generation.
 

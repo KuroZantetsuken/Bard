@@ -4,9 +4,9 @@ from typing import Any, Dict, List
 
 from google.genai import types as gemini_types
 
-from bard.ai.chat.history import ChatHistoryManager, HistoryEntry
-from bard.ai.config.prompts import PromptBuilder
-from bard.ai.config.settings import GeminiConfigManager
+from bard.ai.context.history import ChatHistoryManager, HistoryEntry
+from bard.ai.context.prompts import PromptBuilder
+from bard.ai.config import GeminiConfigManager
 from bard.ai.core import GeminiCore
 from bard.ai.types import FinalAIResponse
 from bard.bot.types import ParsedMessageContext

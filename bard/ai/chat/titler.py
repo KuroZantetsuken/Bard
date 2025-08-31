@@ -3,7 +3,7 @@ from typing import Optional
 
 from google.genai import types
 
-from bard.ai.config.settings import GeminiConfigManager
+from bard.ai.config import GeminiConfigManager
 from bard.ai.core import GeminiCore
 from bard.util.logging import prettify_json_for_logging
 from config import Config
