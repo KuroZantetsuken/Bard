@@ -7,7 +7,6 @@ from bard.ai.config import GeminiConfigManager
 from bard.tools.base import AttachmentProcessorProtocol, BaseTool, ToolContext
 from bard.util.logging import clean_dict, prettify_json_for_logging
 
-
 logger = logging.getLogger("Bard")
 
 

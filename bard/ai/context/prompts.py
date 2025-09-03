@@ -4,10 +4,10 @@ from typing import List, Optional, Tuple
 
 from google.genai import types as gemini_types
 
-from bard.ai.files import AttachmentProcessor
-from bard.bot.types import DiscordContext, VideoMetadata
 from bard.ai.context.dynamic import DynamicContextFormatter
 from bard.ai.context.videos import VideoFormatter
+from bard.ai.files import AttachmentProcessor
+from bard.bot.types import DiscordContext, VideoMetadata
 
 logger = logging.getLogger("Bard")
 

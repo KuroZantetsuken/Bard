@@ -1,4 +1,5 @@
 from typing import List, Tuple
+
 import discord
 
 from config import Config
