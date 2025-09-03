@@ -13,7 +13,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - **Memory:** Long-term memory per user.
         - Only accessible by the respective user, in any server.
         - Saved locally.
-        - Reset with `!forget`.
+        - Reset with by prompting the bot to forget everything.
     - **Text-to-Speech:** Generate native Discord voice messages. Supports different speech styles.
         - Request using natural language.
     - **Google Search & URL Context:** Access Google Search or web URLs using native tools.
