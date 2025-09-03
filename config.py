@@ -83,8 +83,6 @@ class Config:
     PROMPT_DIR = "prompts"
     # The directory where log files are saved.
     LOG_DIR = "logs"
-    # The directory for storing short-term chat history (now transient).
-    HISTORY_DIR = "history"  # This directory is no longer used for file storage, but the config entry remains for consistency/future use if desired.
     # The directory for storing long-term user memories (.memory.json).
     MEMORY_DIR = "memories"
     # The directory where tool modules are located.
