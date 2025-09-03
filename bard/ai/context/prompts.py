@@ -7,7 +7,7 @@ from google.genai import types as gemini_types
 from bard.ai.files import AttachmentProcessor
 from bard.bot.types import DiscordContext, VideoMetadata
 from bard.ai.context.dynamic import DynamicContextFormatter
-from bard.ai.context.replies import ReplyChainFormatter
+from bard.ai.context.videos import VideoFormatter
 
 logger = logging.getLogger("Bard")
 
@@ -71,7 +71,7 @@ class PromptBuilder:
         self.attachment_processor = attachment_processor
         self.system_prompt = system_prompt
         self.dynamic_context_formatter = DynamicContextFormatter()
-        self.reply_chain_formatter = ReplyChainFormatter()
+        self.video_formatter = VideoFormatter()
 
     async def build_prompt_parts(
         self,
@@ -131,9 +131,7 @@ class PromptBuilder:
         if raw_urls_for_model:
             raw_urls_text = "\n".join([f"URL: {url}" for url in raw_urls_for_model])
             prompt_parts.append(
-                gemini_types.Part(
-                    text=f"[RAW_URLS_FOR_MODEL]\n{raw_urls_text}\n[/RAW_URLS_FOR_MODEL]"
-                )
+                gemini_types.Part(text=f"[URLS:START]\n{raw_urls_text}\n[URLS:END]")
             )
 
         for i, data in enumerate(attachments_data):
@@ -210,9 +208,7 @@ class PromptBuilder:
         for video_metadata in video_metadata_list:
             if video_metadata:
                 metadata_text_part = gemini_types.Part(
-                    text=self.reply_chain_formatter.format_video_metadata(
-                        video_metadata
-                    )
+                    text=self.video_formatter.format_video_metadata(video_metadata)
                 )
 
                 identifier = f"metadata_{video_metadata.url}"

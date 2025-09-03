@@ -7,6 +7,7 @@ import discord
 from discord import Message
 from google.genai import types as gemini_types
 
+from bard.ai.context.replies import ReplyChainConstructor
 from bard.ai.files import AttachmentProcessor
 from bard.bot.types import DiscordContext, ParsedMessageContext, VideoMetadata
 
@@ -34,6 +35,7 @@ class MessageParser:
         """
         self.attachment_processor = attachment_processor
         self.bot_user_id = bot_user_id
+        self.reply_chain_constructor = ReplyChainConstructor()
 
     async def _extract_discord_context(self, message: Message) -> DiscordContext:
         """
@@ -107,23 +109,11 @@ class MessageParser:
         Returns:
             A ParsedMessageContext object containing all extracted and processed information.
         """
-        reply_chain_text = ""
-        replied_attachments_data = []
-        replied_attachments_mime_types = []
-
-        if message.reference and message.reference.message_id:
-            try:
-                replied_msg = await message.channel.fetch_message(
-                    message.reference.message_id
-                )
-                reply_chain_text = replied_msg.content
-
-                if replied_msg.attachments:
-                    for attachment in replied_msg.attachments:
-                        replied_attachments_data.append(await attachment.read())
-                        replied_attachments_mime_types.append(attachment.content_type)
-            except discord.NotFound:
-                pass
+        (
+            reply_chain_text,
+            replied_attachments_data,
+            replied_attachments_mime_types,
+        ) = await self.reply_chain_constructor.build_reply_chain(message)
 
         cleaned_content = message.content
 

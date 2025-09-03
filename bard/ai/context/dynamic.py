@@ -18,7 +18,7 @@ class DynamicContextFormatter:
             A formatted string representing the Discord context.
         """
         formatted_context = [
-            "[DYNAMIC_CONTEXT]",
+            "[CONTEXT:START]",
             f"Channel ID: <#{context['channel_id']}>",
             f"Channel Name: {context['channel_name']}",
         ]
@@ -35,5 +35,5 @@ class DynamicContextFormatter:
         formatted_context.append(f"Replied User ID: <@{context['replied_user_id']}>")
 
         formatted_context.append(f"Current Time (UTC): {context['current_time_utc']}")
-        formatted_context.append("[/DYNAMIC_CONTEXT]")
+        formatted_context.append("[CONTEXT:END]")
         return "\n".join(formatted_context)

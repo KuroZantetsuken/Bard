@@ -1,41 +1,77 @@
-from bard.bot.types import VideoMetadata
+from typing import List, Tuple
+import discord
+
+from config import Config
 
 
-class ReplyChainFormatter:
+class ReplyChainConstructor:
     """
-    Encapsulates methods for formatting reply chain related context elements.
+    Constructs a formatted string and gathers attachments from a chain of Discord message replies.
     """
 
-    def format_video_metadata(self, metadata: VideoMetadata) -> str:
+    def __init__(self, max_depth: int = Config.MAX_REPLY_DEPTH):
         """
-        Formats video metadata into a readable string for the prompt.
+        Initializes the ReplyChainConstructor.
 
         Args:
-            metadata: A VideoMetadata object containing details about a video.
+            max_depth: The maximum number of messages to traverse in the reply chain.
+        """
+        self.max_depth = max_depth
+
+    async def build_reply_chain(
+        self, message: discord.Message
+    ) -> Tuple[str, List[bytes], List[str]]:
+        """
+        Traverses a chain of replies, formats them into a single string, and collects their attachments.
+
+        Args:
+            message: The starting Discord message in the reply chain.
 
         Returns:
-            A formatted string representing the video metadata.
+            A tuple containing:
+            - A formatted string representing the conversation in the reply chain.
+            - A list of attachment data (bytes).
+            - A list of attachment MIME types.
         """
-        formatted_metadata = ["[VIDEO_METADATA]"]
-        if metadata.title:
-            formatted_metadata.append(f"Title: {metadata.title}")
-        if metadata.description:
-            formatted_metadata.append(f"Description: {metadata.description}")
-        if metadata.duration_seconds is not None:
-            formatted_metadata.append(f"Duration: {metadata.duration_seconds} seconds")
-        if metadata.upload_date:
-            formatted_metadata.append(f"Upload Date: {metadata.upload_date}")
-        if metadata.uploader:
-            formatted_metadata.append(f"Uploader: {metadata.uploader}")
-        if metadata.view_count is not None:
-            formatted_metadata.append(f"View Count: {metadata.view_count}")
-        if metadata.average_rating is not None:
-            formatted_metadata.append(f"Average Rating: {metadata.average_rating}")
-        if metadata.categories:
-            formatted_metadata.append(f"Categories: {', '.join(metadata.categories)}")
-        if metadata.tags:
-            formatted_metadata.append(f"Tags: {', '.join(metadata.tags)}")
-        formatted_metadata.append(f"Is YouTube: {metadata.is_youtube}")
-        formatted_metadata.append(f"URL: {metadata.url}")
-        formatted_metadata.append("[/VIDEO_METADATA]")
-        return "\n".join(formatted_metadata)
+        if not message.reference or not message.reference.message_id:
+            return "", [], []
+
+        chain = []
+        attachments_data = []
+        attachments_mime_types = []
+
+        current_message = message
+        for _ in range(self.max_depth):
+            if (
+                not current_message.reference
+                or not current_message.reference.message_id
+            ):
+                break
+
+            try:
+                replied_msg = await current_message.channel.fetch_message(
+                    current_message.reference.message_id
+                )
+                chain.append(replied_msg)
+
+                if replied_msg.attachments:
+                    for attachment in replied_msg.attachments:
+                        attachments_data.append(await attachment.read())
+                        attachments_mime_types.append(attachment.content_type)
+
+                current_message = replied_msg
+            except discord.NotFound:
+                break
+
+        if not chain:
+            return "", [], []
+
+        # The chain is built from newest to oldest, so we reverse it
+        chain.reverse()
+
+        formatted_chain = ["[REPLY_CHAIN:START]"]
+        for msg in chain:
+            formatted_chain.append(f"<{msg.author.name}>: {msg.content}")
+        formatted_chain.append("[REPLY_CHAIN:END]")
+
+        return "\n".join(formatted_chain), attachments_data, attachments_mime_types
