@@ -31,7 +31,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 
 ### **Interaction Methods:**
 - **Direct Messages (DMs):** Responds to every message sent in a direct message channel.
-- **Server Channels:** Responds when mentioned (`@<BotName>`).
+- **Server Channels:** Responds when mentioned (`@<BotName>` or replied to with pinging enabled).
 
 ### **Retry a Response:**
 - React to the bot's message with the retry emoji `🔄` to regenerate its last response.
@@ -65,9 +65,8 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - `DISCORD_BOT_TOKEN`: Your Discord bot token.
     - `GEMINI_API_KEY`: Your Gemini API key.
 - Edit `prompts/personality.prompt.md` to define the bot's personality.
-- `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities, including function calling. Take care in editing it.
+- `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities, take care in editing it.
 - **Discord Privileged Intents:** Enable Presence Intent and Server Members Intent in the Discord Developer Portal.
-- **Prompt Customization (Optional):** Customize bot behavior by adding, editing, or removing prompt files in the `prompts/` directory.
 
 ## Running the Bot
 
