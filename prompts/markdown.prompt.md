@@ -1,6 +1,7 @@
 [MARKDOWN:START]
 
 You ONLY have access to the following Markdown syntax. Use them when appropriate.
+Masked links MUST NOT have a URL in the square brackets.
 
 
 *italics*, __*underline italics*__, **bold**, __**underline bold**__, ***bold italics***, __***underline bold italics***__, __underline__,  ~~Strikethrough~~,

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from typing import Any, Dict, List
 
 from google.genai import types
@@ -15,6 +16,8 @@ class DiagnoseTool(BaseTool):
     """
 
     tool_emoji = "🔍"
+    _ignored_patterns: List[re.Pattern] = []
+    _allowed_exceptions: List[re.Pattern] = []
 
     def __init__(self, context: ToolContext):
         """
@@ -24,6 +27,73 @@ class DiagnoseTool(BaseTool):
             context: The ToolContext object providing shared resources.
         """
         super().__init__(context=context)
+        self._load_gitignore_patterns()
+
+    def _load_gitignore_patterns(self):
+        """
+        Loads and compiles .gitignore patterns, handling exceptions.
+        """
+        gitignore_path = ".gitignore"
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+
+                    if line.startswith("!"):
+                        pattern = line[1:]
+                        if pattern.endswith("/"):
+                            pattern = pattern.rstrip("/")
+                        self._allowed_exceptions.append(
+                            re.compile(self._convert_gitignore_to_regex(pattern))
+                        )
+                    else:
+                        if line.endswith("/"):
+                            line = line.rstrip("/")
+                        self._ignored_patterns.append(
+                            re.compile(self._convert_gitignore_to_regex(line))
+                        )
+
+        if not any(p.pattern == r"^logs(/.*)?$" for p in self._allowed_exceptions):
+            self._allowed_exceptions.append(re.compile(r"^logs(/.*)?$"))
+
+    def _convert_gitignore_to_regex(self, pattern: str) -> str:
+        """
+        Converts a .gitignore pattern to a regular expression.
+        Handles '*' and '**' wildcards, and ensures patterns match paths correctly.
+        """
+        regex = re.escape(pattern)
+        regex = regex.replace(r"\*\*", r".*")
+        regex = regex.replace(r"\*", r"[^/]*")
+
+        if pattern.startswith("/"):
+            regex = "^" + regex
+        else:
+            regex = "(^|/)" + regex
+
+        if pattern.endswith("/"):
+            regex = regex + "(/.*)?$"
+        else:
+            regex = regex + "$"
+
+        return regex
+
+    def _is_ignored_file(self, file_path: str) -> bool:
+        """
+        Checks if a file path should be ignored based on .gitignore patterns.
+        """
+        normalized_path = os.path.normpath(file_path)
+
+        for pattern in self._allowed_exceptions:
+            if pattern.match(normalized_path):
+                return False
+
+        for pattern in self._ignored_patterns:
+            if pattern.match(normalized_path):
+                return True
+
+        return False
 
     def get_function_declarations(self) -> List[types.FunctionDeclaration]:
         """
@@ -32,7 +102,7 @@ class DiagnoseTool(BaseTool):
         return [
             types.FunctionDeclaration(
                 name="inspect_project",
-                description="Purpose: This tool allows the AI to inspect its own project structure and file contents, which is essential for self-diagnosis, understanding the existing codebase, and verifying changes. It provides a way for the AI to dynamically explore its own environment. Results: If a path to a folder is provided, the tool returns a JSON object representing the folder's file hierarchy, including nested files and directories. If a path to a file is provided, it returns the raw content of that file as a string. Arguments: This function accepts a `path` argument, which is the relative path to the file or folder to be inspected. Use '.' to inspect the project's root directory. Restrictions/Guidelines: Use this tool when you need to understand the structure of the project or the content of a specific file. It is a read-only tool and does not modify any files or directories. Do not use this tool to execute code or interact with external services.",
+                description="Purpose: This tool allows the AI to inspect its own project structure and file contents, which is essential for self-diagnosis, understanding the existing codebase, and verifying changes. It provides a way for the AI to dynamically explore its own environment. Results: If a path to a folder is provided, the tool returns a JSON object representing the folder's file hierarchy, including nested files and directories. If a path to a file is provided, it returns the raw content of that file as a string. Arguments: This function accepts a `path` argument, which is the relative path to the file or folder to be inspected. Use '.' to inspect the project's root directory. Restrictions/Guidelines: Use this tool when you need to understand the structure of the project or the content of a specific file. It is a read-only tool and does not modify any files or directories. Do not use this tool to execute code or interact with external services. This tool will refuse to read files that match patterns in the project's .gitignore, with the specific exception of content within the 'logs' directory.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -53,6 +123,15 @@ class DiagnoseTool(BaseTool):
         Executes the `inspect_project` function.
         """
         path_arg = args.get("path", ".")
+
+        if os.path.isfile(path_arg):
+            if self._is_ignored_file(path_arg):
+                return types.Part(
+                    function_response=self.function_response_error(
+                        function_name,
+                        f"Refused to read file '{path_arg}' as it matches a .gitignore pattern and is not explicitly allowed.",
+                    )
+                )
 
         try:
             if os.path.isfile(path_arg):
@@ -90,10 +169,9 @@ class DiagnoseTool(BaseTool):
         """
         Generates a dictionary representing the directory hierarchy.
         """
-        # Get the absolute path to handle "." and other relative paths correctly
+
         abs_path = os.path.abspath(path)
 
-        # Create the root of the structure
         dir_structure = {
             "name": os.path.basename(abs_path),
             "path": path,
@@ -101,25 +179,21 @@ class DiagnoseTool(BaseTool):
             "children": [],
         }
 
-        # Walk through the directory
         for root, dirs, files in os.walk(path, topdown=True):
-            # Filter out dot-prefixed and dunder-style directories
             dirs[:] = [
                 d
                 for d in dirs
-                if not d.startswith(".")
+                if not self._is_ignored_file(os.path.join(root, d))
+                and not d.startswith(".")
                 and not (d.startswith("__") and d.endswith("__"))
             ]
 
-            # Find the current directory's node in the structure
             parts = os.path.relpath(root, path).split(os.sep)
             if parts[0] == ".":
                 current_level = dir_structure["children"]
             else:
-                # Find the correct place in the tree to add new nodes
                 node = dir_structure
                 for part in parts:
-                    # Find the child that matches the part
                     child_node = next(
                         (
                             child
@@ -130,28 +204,30 @@ class DiagnoseTool(BaseTool):
                     )
                     if child_node:
                         node = child_node
-                    # This case should ideally not be hit if os.walk works as expected
+
                 current_level = node.get("children", [])
 
-            # Add subdirectories
             for d in sorted(dirs):
-                current_level.append(
-                    {
-                        "name": d,
-                        "path": os.path.join(os.path.relpath(root, "."), d),
-                        "type": "directory",
-                        "children": [],
-                    }
-                )
+                full_path = os.path.join(root, d)
+                if not self._is_ignored_file(full_path):
+                    current_level.append(
+                        {
+                            "name": d,
+                            "path": os.path.join(os.path.relpath(root, "."), d),
+                            "type": "directory",
+                            "children": [],
+                        }
+                    )
 
-            # Add files, filtering out dot-prefixed files
-            for f in sorted([f for f in files if not f.startswith(".")]):
-                current_level.append(
-                    {
-                        "name": f,
-                        "path": os.path.join(os.path.relpath(root, "."), f),
-                        "type": "file",
-                    }
-                )
+            for f in sorted(files):
+                full_path = os.path.join(root, f)
+                if not f.startswith(".") and not self._is_ignored_file(full_path):
+                    current_level.append(
+                        {
+                            "name": f,
+                            "path": os.path.join(os.path.relpath(root, "."), f),
+                            "type": "file",
+                        }
+                    )
 
         return dir_structure
