@@ -272,62 +272,74 @@ class AIConversation:
         used_tool_emojis = []
 
         model_response = response
-
         while True:
             if not model_response.candidates:
                 break
 
-            model_response_content = model_response.candidates[0].content
-            function_calls = [
-                part.function_call
-                for part in model_response_content.parts
-                if hasattr(part, "function_call") and part.function_call
+            current_model_content = model_response.candidates[0].content
+
+            current_model_text_parts = [
+                p for p in current_model_content.parts if p.text
+            ]
+            current_model_function_call_parts = [
+                p for p in current_model_content.parts if p.function_call
             ]
 
-            if not function_calls:
-                final_text_parts.extend(
-                    part.text for part in model_response_content.parts if part.text
-                )
-                contents_for_gemini.append(model_response_content)
+            if not current_model_function_call_parts:
+                final_text_parts.extend(p.text for p in current_model_text_parts)
+                contents_for_gemini.append(current_model_content)
                 break
-
-            contents_for_gemini.append(model_response_content)
-
-            tool_response_parts = []
-
-            for function_call in function_calls:
-                if function_call.name == "generate_speech_ogg":
-                    logger.info("TTS tool detected. Preparing for audio output.")
-
-                tool_response_part = await self.tool_registry.execute_function(
-                    function_name=function_call.name,
-                    args=dict(function_call.args),
-                    context=tool_context,
+            else:
+                contents_for_gemini.append(
+                    gemini_types.Content(
+                        role="model", parts=current_model_function_call_parts
+                    )
                 )
 
-                tool_class_name = self.tool_registry.function_to_tool_map.get(
-                    function_call.name
-                )
-                if tool_class_name:
-                    tool_emoji = self.tool_registry.tool_emojis.get(tool_class_name)
-                    if tool_emoji:
-                        used_tool_emojis.append(tool_emoji)
+                tool_response_parts = []
+                for function_call_part in current_model_function_call_parts:
+                    function_call = function_call_part.function_call
+                    if function_call.name == "generate_speech_ogg":
+                        logger.info("TTS tool detected. Preparing for audio output.")
 
-                if tool_response_part:
-                    tool_response_parts.append(tool_response_part)
-                    await self._process_tool_response_part(
-                        tool_response_part, tool_context
+                    tool_result_part = await self.tool_registry.execute_function(
+                        function_name=function_call.name,
+                        args=dict(function_call.args),
+                        context=tool_context,
                     )
 
-            for tr_part in tool_response_parts:
-                contents_for_gemini.append(gemini_types.Content(parts=[tr_part]))
+                    tool_class_name = self.tool_registry.function_to_tool_map.get(
+                        function_call.name
+                    )
+                    if tool_class_name:
+                        tool_emoji = self.tool_registry.tool_emojis.get(tool_class_name)
+                        if tool_emoji:
+                            used_tool_emojis.append(tool_emoji)
 
-            response = await self.core.generate_content(
-                model=self.config.MODEL_ID,
-                contents=contents_for_gemini,
-                **generate_content_kwargs,
-            )
-            model_response = response
+                    if tool_result_part:
+                        tool_response_parts.append(tool_result_part)
+                        await self._process_tool_response_part(
+                            tool_result_part, tool_context
+                        )
+
+                for tr_part in tool_response_parts:
+                    contents_for_gemini.append(
+                        gemini_types.Content(role="function", parts=[tr_part])
+                    )
+
+                if current_model_text_parts:
+                    model_text_content = gemini_types.Content(
+                        role="model", parts=current_model_text_parts
+                    )
+                    contents_for_gemini.append(model_text_content)
+                    final_text_parts.extend(p.text for p in current_model_text_parts)
+
+                response = await self.core.generate_content(
+                    model=self.config.MODEL_ID,
+                    contents=contents_for_gemini,
+                    **generate_content_kwargs,
+                )
+                model_response = response
 
         final_text, final_media = self._build_final_response_data(
             tool_context, final_text_parts
