@@ -190,15 +190,11 @@ class DiscordEventTool(BaseTool):
                 name=event.name,
                 url=event_url,
             )
-            logger.debug(f"create_discord_event response: {response.model_dump()}")
             return response
         except Exception as e:
             logger.exception(f"Failed to create event: {e}")
             response = self.function_response_error(
                 "create_discord_event", f"An unexpected error occurred: {e}"
-            )
-            logger.debug(
-                f"create_discord_event error response: {response.model_dump()}"
             )
             return response
 

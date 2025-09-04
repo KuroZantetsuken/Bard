@@ -243,6 +243,20 @@ This tool allows the AI to generate new images based on textual descriptions usi
     *   **Results:** Upon successful generation, the tool returns information about the generated image, including its filename and confirmation of generation. The generated image will be sent as an attachment.
     *   **Guidelines:** Use this tool when a visual output is explicitly requested or when a detailed image generation task is provided. Provide comprehensive and descriptive prompts to guide the image generation process effectively.
 
+### 4.7. Diagnose Tool
+
+*   **File:** [`bard/tools/diagnose.py`](bard/tools/diagnose.py)
+*   **Emoji:** 🔍
+
+This tool allows the AI to inspect its own project structure and file contents.
+
+*   **`inspect_project`:**
+    *   **Purpose:** To inspect its own project structure and file contents, which is essential for self-diagnosis, understanding the existing codebase, and verifying changes. It provides a way for the AI to dynamically explore its own environment.
+    *   **Arguments:**
+        *   `path` (string, required): The relative path to the file or folder to be inspected. Use '.' to inspect the project's root directory.
+    *   **Results:** If a path to a folder is provided, the tool returns a JSON object representing the folder's file hierarchy, including nested files and directories. If a path to a file is provided, it returns the raw content of that file as a string.
+    *   **Guidelines:** Use this tool when you need to understand the structure of the project or the content of a specific file. It is a read-only tool and does not modify any files or directories. Do not use this tool to execute code or interact with external services.
+
 ---
 
 ## 5. Development Workflow
@@ -374,9 +388,9 @@ This package encapsulates all Discord-specific functionality and orchestrates th
 *   [`bard/bot/bot.py`](bard/bot/bot.py): Initializes all core components and sets up the `BotHandlers` cog, which contains the listeners for all Discord events. The `on_ready` event logic for setting the bot's user ID in other relevant components.
 *   [`bard/bot/core/container.py`](bard/bot/core/container.py): The `Container` class manages dependency injection, instantiating and providing access to all major services like the `Coordinator`, `AIConversation`, and `ThreadTitler`.
 *   [`bard/bot/core/handlers.py`](bard/bot/core/handlers.py): Defines the `BotHandlers` class, a `commands.Cog` that acts as the raw entry point for `discord.py` events, delegating them immediately to the appropriate handlers without additional logic. The `on_ready` method contains logic to set the bot's user ID and delegates presence updates to the `PresenceManager`.
+*   [`bard/bot/core/coordinator.py`](bard/bot/core/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
 *   [`bard/bot/lifecycle/events.py`](bard/bot/lifecycle/events.py): The `DiscordEventHandler` contains the specific business logic for handling Discord events that modify an ongoing process, such as message edits, deletions, and retry reactions. It coordinates with the `TaskLifecycleManager` to reprocess or cancel tasks as needed. When a user's message is edited or deleted, it correctly handles the cleanup of the bot's response, ensuring that if the response started a thread, only the initial message is deleted, preserving the thread's history.
 *   [`bard/bot/message/parser.py`](bard/bot/message/parser.py): The `MessageParser` transforms a raw `discord.Message` object into a clean, structured `ParsedMessageContext` dataclass. It delegates reply chain processing to the `ReplyChainConstructor` and handles the extraction of message content, attachments, and other Discord context, preparing the data for AI interaction.
-*   [`bard/bot/core/coordinator.py`](bard/bot/core/coordinator.py): The `Coordinator` orchestrates the high-level workflow for a single message processing run. It delegates to the `MessageParser` for input parsing, the `AIConversation` for AI interaction, the `MessageSender` for sending responses, and the `ReactionManager` for handling message reactions, ensuring a cohesive flow from message reception to final reply.
 *   [`bard/bot/message/sender.py`](bard/bot/message/sender.py): The `MessageSender` handles all outbound communication to Discord. It delegates the complex tasks of sending voice messages, creating threads for long responses, and managing temporary files to specialized managers, focusing solely on the final act of sending the message content.
 *   [`bard/bot/lifecycle/presence.py`](bard/bot/lifecycle/presence.py): The `PresenceManager` is responsible for setting the bot's Discord presence (activity status).
 *   [`bard/bot/message/reactions.py`](bard/bot/message/reactions.py): The `ReactionManager` is responsible for adding and removing reactions on bot messages.
@@ -396,6 +410,7 @@ This package contains the implementations of the external functions the AI can c
 *   [`bard/tools/memory.py`](bard/tools/memory.py): User memory management tool. This file contains the `MemoryManager` class. It employs standard Python list types.
 *   [`bard/tools/registry.py`](bard/tools/registry.py): Tool discovery and registration.
 *   [`bard/tools/tts.py`](bard/tools/tts.py): Text-to-speech tool. It employs `self.gemini_client.generate_content` with `stream=True` for speech synthesis.
+*   [`bard/tools/diagnose.py`](bard/tools/diagnose.py): Project inspection tool.
 
 #### `bard/util/` Package
 

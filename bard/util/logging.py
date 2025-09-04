@@ -135,17 +135,19 @@ def prettify_json_for_logging(data: Any) -> str:
     """
     Formats a JSON-like data structure into a human-readable, indented string for logging.
     It also sanitizes the data before pretty-printing.
-
-    Args:
-        data: The JSON-like data (can be a string or a Python object).
-
-    Returns:
-        A pretty-printed and sanitized JSON string, or a string representation of the data
-        if JSON parsing fails.
+    It now handles google.genai.types objects by converting them to dictionaries.
     """
     try:
+        if hasattr(data, "model_dump"):
+            data = data.model_dump()
+        elif hasattr(data, "to_dict"):
+            data = data.to_dict()
+
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                return str(data)
 
         sanitized_data = sanitize_response_for_logging(data)
 

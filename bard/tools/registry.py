@@ -257,6 +257,20 @@ class ToolRegistry:
                 timeout=context.config.TOOL_TIMEOUT_SECONDS,
             )
 
+            if (
+                result
+                and hasattr(result, "function_response")
+                and result.function_response
+                and hasattr(result.function_response, "response")
+            ):
+                logger.info(
+                    f"Tool function {function_name} returned: {prettify_json_for_logging(clean_dict(result.function_response.response))}"
+                )
+            else:
+                logger.info(
+                    f"Tool function {function_name} returned: {prettify_json_for_logging(clean_dict(result))}"
+                )
+
             if isinstance(result, gemini_types.FunctionResponse):
                 return gemini_types.Part(function_response=result)
             elif isinstance(result, gemini_types.Part):

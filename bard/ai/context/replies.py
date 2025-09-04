@@ -67,7 +67,6 @@ class ReplyChainConstructor:
         if not chain:
             return "", [], []
 
-        # The chain is built from newest to oldest, so we reverse it
         chain.reverse()
 
         formatted_chain = ["[REPLY_CHAIN:START]"]

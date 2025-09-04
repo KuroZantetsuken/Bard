@@ -20,6 +20,7 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
     - **Code Execution:** Generate and run Python code to aid responses.
     - **Discord Event Management:** Create and manage scheduled events directly within Discord.
     - **Image Generation:** Generate new images based on textual descriptions.
+    - **Project Diagnosis:** Inspect the bot's own project structure and file contents.
 - **Context-Aware:** Understands message reply chains along with any attachments.
 - **Dynamic Interaction:** Adapts its responses if the user edits or deletes their messages.
     - Re-evaluates messages if edited or deleted.

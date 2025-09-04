@@ -32,7 +32,7 @@ class DiagnoseTool(BaseTool):
         return [
             types.FunctionDeclaration(
                 name="inspect_project",
-                description="Inspects the project structure and file contents. If a path to a folder is provided, it returns the folder's file hierarchy. If a path to a file is provided, it returns the file's contents.",
+                description="Purpose: This tool allows the AI to inspect its own project structure and file contents, which is essential for self-diagnosis, understanding the existing codebase, and verifying changes. It provides a way for the AI to dynamically explore its own environment. Results: If a path to a folder is provided, the tool returns a JSON object representing the folder's file hierarchy, including nested files and directories. If a path to a file is provided, it returns the raw content of that file as a string. Arguments: This function accepts a `path` argument, which is the relative path to the file or folder to be inspected. Use '.' to inspect the project's root directory. Restrictions/Guidelines: Use this tool when you need to understand the structure of the project or the content of a specific file. It is a read-only tool and does not modify any files or directories. Do not use this tool to execute code or interact with external services.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -64,7 +64,7 @@ class DiagnoseTool(BaseTool):
                     )
                 )
             elif os.path.isdir(path_arg):
-                hierarchy = self._get_directory_hierarchy(path_arg)
+                hierarchy = self._get_directory_json(path_arg)
                 return types.Part(
                     function_response=self.function_response_success(
                         function_name,
@@ -86,12 +86,24 @@ class DiagnoseTool(BaseTool):
                 )
             )
 
-    def _get_directory_hierarchy(self, path: str) -> str:
+    def _get_directory_json(self, path: str) -> Dict[str, Any]:
         """
-        Generates a string representing the directory hierarchy, excluding dotfiles and dunder directories.
+        Generates a dictionary representing the directory hierarchy.
         """
-        lines = []
+        # Get the absolute path to handle "." and other relative paths correctly
+        abs_path = os.path.abspath(path)
+
+        # Create the root of the structure
+        dir_structure = {
+            "name": os.path.basename(abs_path),
+            "path": path,
+            "type": "directory",
+            "children": [],
+        }
+
+        # Walk through the directory
         for root, dirs, files in os.walk(path, topdown=True):
+            # Filter out dot-prefixed and dunder-style directories
             dirs[:] = [
                 d
                 for d in dirs
@@ -99,22 +111,47 @@ class DiagnoseTool(BaseTool):
                 and not (d.startswith("__") and d.endswith("__"))
             ]
 
-            level = root.replace(path, "").count(os.sep)
+            # Find the current directory's node in the structure
+            parts = os.path.relpath(root, path).split(os.sep)
+            if parts[0] == ".":
+                current_level = dir_structure["children"]
+            else:
+                # Find the correct place in the tree to add new nodes
+                node = dir_structure
+                for part in parts:
+                    # Find the child that matches the part
+                    child_node = next(
+                        (
+                            child
+                            for child in node.get("children", [])
+                            if child["name"] == part
+                        ),
+                        None,
+                    )
+                    if child_node:
+                        node = child_node
+                    # This case should ideally not be hit if os.walk works as expected
+                current_level = node.get("children", [])
 
-            if level == 0 and (
-                os.path.basename(root).startswith(".")
-                or (
-                    os.path.basename(root).startswith("__")
-                    and os.path.basename(root).endswith("__")
+            # Add subdirectories
+            for d in sorted(dirs):
+                current_level.append(
+                    {
+                        "name": d,
+                        "path": os.path.join(os.path.relpath(root, "."), d),
+                        "type": "directory",
+                        "children": [],
+                    }
                 )
-            ):
-                continue
 
-            indent = " " * 4 * level
-            lines.append(f"{indent}{os.path.basename(root)}/")
-
-            sub_indent = " " * 4 * (level + 1)
-
+            # Add files, filtering out dot-prefixed files
             for f in sorted([f for f in files if not f.startswith(".")]):
-                lines.append(f"{sub_indent}{f}")
-        return "\n".join(lines)
+                current_level.append(
+                    {
+                        "name": f,
+                        "path": os.path.join(os.path.relpath(root, "."), f),
+                        "type": "file",
+                    }
+                )
+
+        return dir_structure
