@@ -221,8 +221,8 @@ This tool enables the AI to create and manage scheduled events directly within D
         *   `name` (string, required): The name of the event (maximum 100 characters).
         *   `start_time` (string, required): The scheduled start time in ISO 8601 format (e.g., `"2025-09-01T17:00:00Z"`).
         *   `description` (string, optional): A detailed description for the event (maximum 1000 characters). The AI can generate this if not provided.
-        *   `end_time` (string, optional): The scheduled end time in ISO 8601 format.
-        *   `location` (string, optional): The location of the event (e.g., a website URL). If omitted, it defaults to the channel where the request was made.
+        *   `end_time` (string, optional): The scheduled end time in ISO 8601 format. Required if `location` is specified.
+        *   `location` (string, optional): The location of the event (e.g., a website URL). If provided, `end_time` must also be set. If omitted, the event defaults to the channel where the request was made.
         *   `image_url` (string, optional): A direct URL for the event's cover image (e.g., ending in .png, .jpg).
     *   **Results:** Upon success, returns the ID, name, and URL of the newly created event.
     *   **Guidelines:** Only use if event creation is requested. If the request involves a known topic (e.g., a game release), use the `InternetTool` first to find official details like date, time, and a relevant cover image URL.
@@ -297,7 +297,7 @@ This sub-package contains the central components that orchestrate the message pr
     3.  The resulting AI response is then passed to the [`MessageSender`](bard/bot/message/sender.py:1), which orchestrates the final delivery to Discord, delegating tasks like message splitting, threading, and voice message handling to specialized managers.
     4.  Finally, it uses the [`ReactionManager`](bard/bot/message/reactions.py:1) to add any relevant tool-use emojis to the bot's message and to handle reaction-based events like retries.
 
-This coordinated delegation ensures a clean separation of concerns, where each component has a distinct and well-defined responsibility.
+    This coordinated delegation ensures a clean separation of concerns, where each component has a distinct and well-defined responsibility. In the event of a `google.genai.errors.ServerError` (e.g., when the model is overloaded), the `Coordinator` gracefully handles the exception by sending a user-friendly error message and adding a retry reaction, ensuring a consistent user experience.
 
 *   **[`bard/bot/core/handlers.py`](bard/bot/core/handlers.py:1):** This file defines the `BotHandlers` class, which is implemented as a `commands.Cog`. It serves as the raw entry point for all incoming `discord.py` events. True to its name, this class acts purely as a handler and dispatcher, containing no business logic itself. It immediately delegates events to the appropriate specialized services. For instance, new messages are passed to the `TaskLifecycleManager` to initiate the main processing workflow via the `Coordinator`, while other events like message edits, deletions, or reactions are forwarded directly to the `DiscordEventHandler`. The `on_ready` method has the specific responsibility of setting the bot's user ID in other services and delegating presence updates to the `PresenceManager`.
 

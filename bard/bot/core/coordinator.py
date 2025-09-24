@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional, Tuple
 
 from discord import Message, Reaction, User
+from google.genai import errors as genai_errors
 
 from bard.ai.chat.conversation import AIConversation
 from bard.ai.types import FinalAIResponse
@@ -96,6 +97,16 @@ class Coordinator:
 
             if reaction_to_remove:
                 await self.reaction_manager.remove_reaction(reaction_to_remove)
+
+        except genai_errors.ServerError as e:
+            logger.error(f"Google API server error for message ID {message.id}: {e}")
+            error_messages = await self.message_sender.send(
+                message,
+                "The model is currently overloaded. Please try again shortly.",
+                existing_bot_messages_to_edit=bot_messages_to_edit,
+            )
+            if error_messages:
+                await self.reaction_manager.add_reactions(error_messages[0])
 
         except Exception as e:
             logger.error(

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import yt_dlp
 
@@ -18,7 +18,7 @@ class VideoProcessor:
     """
 
     @staticmethod
-    async def get_video_info(url: str) -> Optional[dict]:
+    async def get_video_info(url: str) -> Optional[dict[str, Any]]:
         """
         Extracts video information from a given URL using yt-dlp.
 
@@ -28,7 +28,7 @@ class VideoProcessor:
         Returns:
             An optional dictionary containing video information, or None if extraction fails.
         """
-        ydl_opts = {
+        ydl_opts: dict[str, Any] = {
             "executable": Config.YTDLP_PATH,
             "force_generic_extractor": True,
             "noplaylist": True,
@@ -37,14 +37,14 @@ class VideoProcessor:
             "dump_single_json": True,
         }
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return await asyncio.to_thread(ydl.extract_info, url, download=False)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
+                return await asyncio.to_thread(ydl.extract_info, url, download=False)  # type: ignore
         except Exception as e:
             logger.error(f"Error extracting video info for {url}: {e}", exc_info=True)
             return None
 
     @staticmethod
-    def _create_video_metadata(url: str, info_dict: dict) -> VideoMetadata:
+    def _create_video_metadata(url: str, info_dict: dict[str, Any]) -> VideoMetadata:
         """
         Creates a VideoMetadata object from a yt-dlp info dictionary.
 
@@ -82,7 +82,7 @@ class VideoProcessor:
         Returns:
             An optional string containing the streamable URL, or None if retrieval fails.
         """
-        ydl_opts = {
+        ydl_opts: dict[str, Any] = {
             "executable": Config.YTDLP_PATH,
             "format": format_selector,
             "get_url": True,
@@ -91,8 +91,8 @@ class VideoProcessor:
             "no_warnings": True,
         }
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
+                info: dict[str, Any] | None = await asyncio.to_thread(ydl.extract_info, url, download=False)  # type: ignore
                 return info.get("url") if info else None
         except Exception as e:
             logger.error(f"Error getting stream URL for {url}: {e}", exc_info=True)
