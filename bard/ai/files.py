@@ -125,6 +125,11 @@ class AttachmentProcessor:
                     elif content_type.startswith("image/"):
                         data = await response.read()
                         mime_type = MimeDetector.detect(data)
+                        if mime_type == "image/svg+xml":
+                            logger.warning(
+                                f"Skipping unsupported image type 'image/svg+xml' from URL: {url}"
+                            )
+                            return None
                         if not mime_type.startswith("image/"):
                             logger.warning(
                                 f"URL {url} did not resolve to an image. Detected MIME type: {mime_type}"
@@ -243,6 +248,8 @@ class AttachmentProcessor:
 
         if not video_metadata:
             return None, None
+
+        logger.info(f"Processing video with metadata: {video_metadata.title}")
 
         if video_metadata.is_youtube:
             return (

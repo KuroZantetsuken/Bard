@@ -35,6 +35,7 @@ class VideoProcessor:
             "ignoreerrors": True,
             "no_warnings": True,
             "dump_single_json": True,
+            "quiet": True,
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
@@ -89,10 +90,13 @@ class VideoProcessor:
             "noplaylist": True,
             "ignoreerrors": True,
             "no_warnings": True,
+            "quiet": True,
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
-                info: dict[str, Any] | None = await asyncio.to_thread(ydl.extract_info, url, download=False)  # type: ignore
+                info: dict[str, Any] | None = await asyncio.to_thread(
+                    ydl.extract_info, url, download=False
+                )  # type: ignore
                 return info.get("url") if info else None
         except Exception as e:
             logger.error(f"Error getting stream URL for {url}: {e}", exc_info=True)
