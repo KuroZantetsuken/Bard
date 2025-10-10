@@ -106,7 +106,7 @@ The bot can process and comprehend a wide array of inputs beyond just text, than
 *   **Enhanced Video Understanding:** The bot uses `yt-dlp` for advanced video analysis.
     *   For most video URLs (excluding YouTube, which Gemini handles directly), `yt-dlp` extracts comprehensive metadata (title, description, duration, etc.) without downloading the entire file. This metadata is then provided to the AI as textual context.
     *   Based on an estimated token cost, the bot decides whether to stream the full video content to the AI or just the audio track, ensuring efficient processing. This logic is encapsulated within the `_get_video_processing_details` helper method for clarity.
-*   **Image Processing:** If a URL is identified as an image, it is uploaded to Gemini, allowing the AI to "see" and analyze its content.
+*   **Image Processing:** If a URL is identified as an image, it is uploaded to Gemini, allowing the AI to "see" and analyze its content. Unsupported image types, such as `image/svg+xml`, are skipped.
 *   **Web Page Analysis:** URLs that are not identified as video or image content are passed directly to the model. The AI can then intelligently decide to use its `InternetTool` to access and analyze the content of these web pages.
 
 ### 3.2. Context-Aware Conversations
