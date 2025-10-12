@@ -1,11 +1,9 @@
 import logging
-from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from google.genai import types as gemini_types
 
 from bard.ai.config import GeminiConfigManager
-from bard.ai.context.history import ChatHistoryManager, HistoryEntry
 from bard.ai.context.prompts import PromptBuilder
 from bard.ai.core import GeminiCore
 from bard.ai.types import FinalAIResponse
@@ -23,8 +21,8 @@ logger = logging.getLogger("Bard")
 class AIConversation:
     """
     Manages the complete, stateful, multi-step conversational turn with the Gemini API.
-    This includes loading chat history, building prompts, generating responses,
-    executing tools, and saving updated history.
+    This includes building prompts, generating responses,
+    executing tools.
     """
 
     def __init__(
@@ -33,7 +31,6 @@ class AIConversation:
         core: GeminiCore,
         config_manager: GeminiConfigManager,
         prompt_builder: PromptBuilder,
-        chat_history_manager: ChatHistoryManager,
         tool_registry: ToolRegistry,
     ):
         """
@@ -44,14 +41,12 @@ class AIConversation:
             core: Core Gemini API interaction handler.
             config_manager: Manages Gemini generation configuration.
             prompt_builder: Constructs prompts for the Gemini API.
-            chat_history_manager: Manages short-term chat history.
             tool_registry: Manages available tools and their execution.
         """
         self.config = config
         self.core = core
         self.config_manager = config_manager
         self.prompt_builder = prompt_builder
-        self.chat_history_manager = chat_history_manager
         self.tool_registry = tool_registry
         self.mime_detector = MimeDetector()
         self.memory_manager = MemoryManager(
@@ -184,8 +179,7 @@ class AIConversation:
         tool_context.guild = parsed_context.guild
         tool_context.user_id = str(user_id)
 
-        history_entries = self.chat_history_manager.load_history()
-        contents_for_gemini = [entry.content for entry in history_entries]
+        contents_for_gemini: List[gemini_types.Content] = []
 
         memories = await self.memory_manager.load_memories(str(user_id))
         formatted_memories = self.memory_manager.format_memories(str(user_id), memories)
@@ -274,9 +268,26 @@ class AIConversation:
         model_response = response
         while True:
             if not model_response.candidates:
+                logger.warning(
+                    f"Model response has no candidates. Prompt feedback: {response.prompt_feedback}"
+                )
+                final_text_parts.append(
+                    "My response was blocked. I am unable to provide the requested information."
+                )
                 break
 
-            current_model_content = model_response.candidates[0].content
+            candidate = model_response.candidates[0]
+            current_model_content = candidate.content
+
+            if current_model_content is None:
+                logger.warning(
+                    f"Model response content is empty. Finish reason: {candidate.finish_reason}. "
+                    f"Safety ratings: {candidate.safety_ratings}"
+                )
+                final_text_parts.append(
+                    "My response was blocked. I am unable to provide the requested information."
+                )
+                break
 
             current_model_text_parts = [
                 p for p in current_model_content.parts if p.text
@@ -344,14 +355,6 @@ class AIConversation:
         final_text, final_media = self._build_final_response_data(
             tool_context, final_text_parts
         )
-
-        new_history_content = contents_for_gemini[len(history_entries) :]
-        for content in new_history_content:
-            history_entries.append(
-                HistoryEntry(timestamp=datetime.now(timezone.utc), content=content)
-            )
-
-        self.chat_history_manager.save_history(history_entries)
 
         return FinalAIResponse(
             text_content=final_text,

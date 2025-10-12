@@ -53,7 +53,7 @@ class DiscordEventTool(BaseTool):
                             description="A direct URL for the event's cover image (e.g., ending in .png, .jpg, .gif). The AI should use the InternetTool to find a suitable direct image URL.",
                         ),
                     },
-                    required=["name", "start_time"],
+                    required=["name", "start_time", "end_time"],
                 ),
             ),
             FunctionDeclaration(
@@ -108,6 +108,11 @@ class DiscordEventTool(BaseTool):
         if not start_time_str:
             return self.function_response_error(
                 "create_discord_event", "start_time is required."
+            )
+
+        if not end_time_str:
+            return self.function_response_error(
+                "create_discord_event", "end_time is required."
             )
 
         if not location:

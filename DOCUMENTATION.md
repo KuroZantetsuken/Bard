@@ -11,7 +11,7 @@ The Bard Discord Bot is an AI-powered agent designed for seamless integration in
 *   **Intelligent Assistance:** To provide a highly responsive and intelligent AI assistant within the Discord ecosystem.
 *   **Multimodal Interaction:** To showcase and utilize the advanced multimodal capabilities of the Gemini AI, including the processing of text, images, audio, video, and the generation of new images.
 *   **Extensible Functionality:** To enable powerful, real-world actions through Gemini's function calling feature, integrating with external tools like Google Search and a code execution environment.
-*   **Persistent Context:** To ensure continuous and contextually-aware interactions through robust short-term and long-term memory systems.
+*   **Persistent Context:** To ensure continuous and contextually-aware interactions through robust long-term memory systems.
 
 ---
 
@@ -111,12 +111,8 @@ The bot can process and comprehend a wide array of inputs beyond just text, than
 
 ### 3.2. Context-Aware Conversations
 
-The bot maintains two layers of memory to provide a coherent and personalized conversational experience.
+The bot maintains a layer of memory to provide a coherent and personalized conversational experience.
 
-*   **Short-Term Memory (History):**
-    *   The bot maintains a transient, in-memory record of recent conversations for each channel or DM, managed by the `ChatHistoryManager` class. This history is not stored persistently.
-    *   It allows the AI to follow the immediate conversational flow within a channel.
-    *   The history is automatically pruned based on two criteria defined in [`config.py`](config.py:1): messages older than `MAX_HISTORY_AGE` are discarded, and if the conversation exceeds `MAX_HISTORY_TURNS`, the oldest turns are removed to keep the context focused.
 *   **Long-Term Memory (User-Specific):**
     *   The bot can store user-specific information (e.g., preferences, key facts) for long-term recall.
     *   This memory is private to each user and persists across all servers where they interact with the bot.
@@ -131,7 +127,7 @@ The bot is designed to be a dynamic participant in conversations, capable of ada
 *   **Response Retry:** Users can request a new response by reacting to a bot's message with the retry emoji (`🔄`). The `DiscordEventHandler` verifies the reactor is the original author and re-runs the generation process for the initial prompt.
 *   **Thread-Based Message Splitting:** For long text-only responses, the bot enhances readability by creating a thread. It sends the first sentence as a reply and then posts the remainder of the message in a new thread. To provide immediate context, the bot asynchronously generates a concise and relevant title for the thread using a dedicated, lightweight AI model. This keeps channels clean while providing the full response. All reaction emojis (retry, tool use) are placed on the first message that starts the thread.
 *   **Discord Environment Context:** The bot injects a dynamic context block into its prompts to provide the AI with real-time information about its current environment. This block, wrapped in `[CONTEXT:START]` and `[CONTEXT:END]` tags, includes the channel name, topic, a list of present users, and the current UTC time, allowing for more grounded and contextually relevant responses.
-*   **Comprehensive Reply Chain Context:** When a user replies to a message, the bot traces the conversation backward through the reply chain, up to a configurable depth (`MAX_REPLY_DEPTH`). The `ReplyChainConstructor` class handles this by fetching each parent message, collecting its textual content and any attachments. It then assembles this information into a single, formatted string that clearly delineates the conversation history for the AI. Crucially, it also gathers the raw data and MIME types of all attachments from every message in the chain, providing a complete multimodal context. This ensures the AI can understand the full scope of the conversation, including all shared images and files, even if those messages are no longer in its short-term memory.
+*   **Comprehensive Reply Chain Context:** When a user replies to a message, the bot traces the conversation backward through the reply chain, up to a configurable depth (`MAX_REPLY_DEPTH`). The `ReplyChainConstructor` class handles this by fetching each parent message, collecting its textual content and any attachments. It then assembles this information into a single, formatted string that clearly delineates the conversation for the AI. Crucially, it also gathers the raw data and MIME types of all attachments from every message in the chain, providing a complete multimodal context. This ensures the AI can understand the full scope of the conversation, including all shared images and files.
 
 ---
 
@@ -318,7 +314,7 @@ This sub-package is responsible for managing the bot's response to Discord event
 This sub-package is responsible for parsing incoming messages, formatting and sending outgoing responses, and managing other message-related interactions.
 
 *   **[`bard/bot/message/parser.py`](bard/bot/message/parser.py:1):** The `MessageParser` is a critical component responsible for the initial processing of all incoming Discord messages. It transforms a raw `discord.Message` object into a structured `ParsedMessageContext` dataclass, preparing the data for the AI. Its key responsibilities include:
-    *   **Reply Chain Processing:** It delegates to the `ReplyChainConstructor` to recursively trace a conversation's reply chain, gathering text and attachments from previous messages to provide a complete conversational history.
+    *   **Reply Chain Processing:** It delegates to the `ReplyChainConstructor` to recursively trace a conversation's reply chain, gathering text and attachments from previous messages to provide a complete conversational context.
     *   **Content Extraction:** It extracts the message content, attachments, and URLs from both the current message and the entire reply chain.
     *   **Contextualization:** It creates a detailed `DiscordContext` object containing environmental information like the channel, server, and present users.
     *   **Data Structuring:** It assembles all the extracted information into the `ParsedMessageContext`, a clean and organized dataclass that serves as the single source of truth for the `AIConversation` service.
@@ -350,7 +346,7 @@ This sub-package is responsible for parsing incoming messages, formatting and se
 
 ### 5.2. The `bard/ai` Package
 
-The `bard/ai` package encapsulates all logic related to interacting with the Gemini AI model. It is responsible for building prompts, managing conversation history, and handling the final AI response.
+The `bard/ai` package encapsulates all logic related to interacting with the Gemini AI model. It is responsible for building prompts, and handling the final AI response.
 
 #### 5.2.1. `bard/ai/types.py`: AI Data Structures
 

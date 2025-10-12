@@ -6,9 +6,6 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 - **Multimodal:** Understands text, images, audio, videos, and documents.
     - Enhanced video understanding for comprehensive analysis.
     - Web page analysis for real-time information access.
-- **History:** Short-term memory per server.
-    - Only accessible in the respective server, by any user.
-    - Not saved locally.
 - **Function Calling:** Uses Gemini's function calling feature for robust tool usage.
     - **Memory:** Long-term memory per user.
         - Only accessible by the respective user, in any server.

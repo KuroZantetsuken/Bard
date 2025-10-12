@@ -304,10 +304,10 @@ class AttachmentProcessor:
         """
         video_part, video_metadata = await self._process_video_url(url)
         if video_part:
-            return video_part, None, video_metadata, None
+            return video_part, None, video_metadata, url
 
         image_part = await self.process_image_url(url)
         if image_part:
-            return None, image_part, None, None
+            return None, image_part, None, url
 
         return None, None, None, url

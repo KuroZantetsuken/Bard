@@ -5,7 +5,6 @@ from bard.ai.chat.conversation import AIConversation
 from bard.ai.chat.responses import ResponseExtractor
 from bard.ai.chat.titler import ThreadTitler
 from bard.ai.config import GeminiConfigManager
-from bard.ai.context.history import ChatHistoryManager
 from bard.ai.context.prompts import PromptBuilder, load_prompts_from_directory
 from bard.ai.core import GeminiCore
 from bard.ai.files import AttachmentProcessor
@@ -41,7 +40,6 @@ class Container:
 
         self._service_factories: Dict[str, Callable[[], Any]] = {
             "gemini_client": self._create_gemini_client,
-            "chat_history_mgr": self._create_chat_history_manager,
             "mime_detector": lambda: MimeDetector(),
             "ffmpeg_wrapper": lambda: FFmpegWrapper(),
             "attachment_processor": self._create_attachment_processor,
@@ -85,13 +83,6 @@ class Container:
         if not self.config.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is not set in the configuration.")
         return GeminiCore(api_key=self.config.GEMINI_API_KEY)
-
-    def _create_chat_history_manager(self) -> ChatHistoryManager:
-        """Creates and returns an instance of ChatHistoryManager."""
-        return ChatHistoryManager(
-            max_history_turns=self.config.MAX_HISTORY_TURNS,
-            max_history_age=self.config.MAX_HISTORY_AGE,
-        )
 
     def _create_attachment_processor(self) -> AttachmentProcessor:
         """Creates and returns an instance of AttachmentProcessor."""
@@ -155,7 +146,6 @@ class Container:
             core=self.get("gemini_client"),
             config_manager=self.get("gemini_config_manager"),
             prompt_builder=self.get("prompt_builder"),
-            chat_history_manager=self.get("chat_history_mgr"),
             tool_registry=self.get("tool_registry"),
         )
 

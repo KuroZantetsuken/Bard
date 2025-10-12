@@ -148,7 +148,6 @@ class ToolContext:
         attachment_processor: AttachmentProcessorProtocol,
         ffmpeg_wrapper: FFmpegWrapperProtocol,
         mime_detector: MimeDetectorProtocol,
-        full_conversation_for_tooling: Optional[List[Any]] = None,
         guild: Optional[discord.Guild] = None,
         user_id: Optional[str] = None,
     ):
@@ -162,7 +161,6 @@ class ToolContext:
             attachment_processor: An object implementing AttachmentProcessorProtocol.
             ffmpeg_wrapper: An object implementing FFmpegWrapperProtocol.
             mime_detector: An object implementing MimeDetectorProtocol.
-            full_conversation_for_tooling: Optional; the full conversation history for tool context.
             guild: Optional; the Discord guild object.
             user_id: Optional; the Discord user ID.
         """
@@ -184,7 +182,6 @@ class ToolContext:
         self.is_final_output: Optional[bool] = None
         self.tool_response_data: Dict[str, Any] = {}
         self.grounding_sources_md: Optional[str] = None
-        self.full_conversation_for_tooling = full_conversation_for_tooling
         self.guild = guild
         self.user_id = user_id
 

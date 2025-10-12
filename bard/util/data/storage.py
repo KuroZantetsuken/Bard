@@ -21,7 +21,7 @@ class JsonStorageManager:
 
         Args:
             storage_dir: The base directory where JSON files will be stored.
-            file_suffix: The suffix to append to filenames (e.g., ".history.json").
+            file_suffix: The suffix to append to filenames (e.g., ".memory.json").
         """
         self.storage_dir = storage_dir
         self.file_suffix = file_suffix
