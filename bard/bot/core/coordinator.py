@@ -100,9 +100,12 @@ class Coordinator:
 
         except genai_errors.ServerError as e:
             logger.error(f"Google API server error for message ID {message.id}: {e}")
+            error_message = (
+                "The model is currently overloaded. Please try again shortly."
+            )
             error_messages = await self.message_sender.send(
                 message,
-                "The model is currently overloaded. Please try again shortly.",
+                error_message,
                 existing_bot_messages_to_edit=bot_messages_to_edit,
             )
             if error_messages:
@@ -114,8 +117,13 @@ class Coordinator:
                 exc_info=True,
             )
 
-            await self.message_sender.send(
+            error_message = (
+                f"An error occurred while processing your request.\n```\n{e}\n```"
+            )
+            error_messages = await self.message_sender.send(
                 message,
-                "An error occurred while processing your request.",
+                error_message,
                 existing_bot_messages_to_edit=bot_messages_to_edit,
             )
+            if error_messages:
+                await self.reaction_manager.add_reactions(error_messages[0])
