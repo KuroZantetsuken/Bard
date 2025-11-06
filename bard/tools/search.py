@@ -130,13 +130,13 @@ class SearchTool(BaseTool):
                 )
             )
 
-        gemini_client = context.gemini_client
+        gemini_core = context.gemini_core
         response_extractor = context.response_extractor
 
-        if not gemini_client or not response_extractor:
+        if not gemini_core or not response_extractor:
             missing_services = []
-            if not gemini_client:
-                missing_services.append("gemini_client")
+            if not gemini_core:
+                missing_services.append("gemini_core")
             if not response_extractor:
                 missing_services.append("response_extractor")
             error_msg = (
@@ -174,7 +174,7 @@ class SearchTool(BaseTool):
             )
 
             logger.info("Calling Gemini API for search tool.")
-            tooling_response = await gemini_client.generate_content(
+            tooling_response = await gemini_core.generate_content(
                 model=self.context.config.MODEL_ID,
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
@@ -216,9 +216,11 @@ class SearchTool(BaseTool):
             tooling_text_result = response_extractor.extract_response(tooling_response)
 
             response_data = {
-                "tool_output": tooling_text_result
-                if tooling_text_result
-                else "No textual output from tools."
+                "tool_output": (
+                    tooling_text_result
+                    if tooling_text_result
+                    else "No textual output from tools."
+                )
             }
 
             if (

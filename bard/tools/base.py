@@ -1,14 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-    runtime_checkable,
-)
+from typing import (Any, Dict, List, Optional, Protocol, Tuple,
+                    runtime_checkable)
 
 import discord
 from google.genai import types
@@ -17,9 +10,9 @@ logger = logging.getLogger("Bard")
 
 
 @runtime_checkable
-class GeminiClientProtocol(Protocol):
+class GeminiCoreProtocol(Protocol):
     """
-    Defines the required interface for a Gemini client service used by tools.
+    Defines the required interface for a Gemini core service used by tools.
     This ensures that tools interact with the Gemini API consistently.
     """
 
@@ -131,7 +124,7 @@ class ToolContext:
     def __init__(
         self,
         config: Any,
-        gemini_client: GeminiClientProtocol,
+        gemini_core: GeminiCoreProtocol,
         response_extractor: ResponseExtractorProtocol,
         attachment_processor: AttachmentProcessorProtocol,
         ffmpeg_wrapper: FFmpegWrapperProtocol,
@@ -144,7 +137,7 @@ class ToolContext:
 
         Args:
             config: Application configuration settings.
-            gemini_client: An object implementing GeminiClientProtocol.
+            gemini_core: An object implementing GeminiCoreProtocol.
             response_extractor: An object implementing ResponseExtractorProtocol.
             attachment_processor: An object implementing AttachmentProcessorProtocol.
             ffmpeg_wrapper: An object implementing FFmpegWrapperProtocol.
@@ -153,11 +146,11 @@ class ToolContext:
             user_id: Optional; the Discord user ID.
         """
         self.config = config
-        self._validate_service(gemini_client, GeminiClientProtocol)
+        self._validate_service(gemini_core, GeminiCoreProtocol)
         self._validate_service(response_extractor, ResponseExtractorProtocol)
         self._validate_service(attachment_processor, AttachmentProcessorProtocol)
         self._validate_service(ffmpeg_wrapper, FFmpegWrapperProtocol)
-        self.gemini_client = gemini_client
+        self.gemini_core = gemini_core
         self.response_extractor = response_extractor
         self.attachment_processor = attachment_processor
         self.ffmpeg_wrapper = ffmpeg_wrapper

@@ -28,7 +28,11 @@ def get_audio_duration_and_waveform(
 
     try:
         with io.BytesIO(audio_bytes) as audio_io:
-            audio_data, samplerate = soundfile.read(audio_io)
+            read_result = soundfile.read(audio_io)
+            if read_result is None:
+                logger.error("soundfile.read returned None.")
+                return 1.0, DEFAULT_WAVEFORM
+            audio_data, samplerate = read_result
 
         if audio_data is None or samplerate is None:
             logger.error("soundfile.read returned None for audio_data or samplerate.")

@@ -43,7 +43,7 @@ class Container:
         self.services: Dict[str, Any] = {}
 
         self._service_factories: Dict[str, Callable[[], Any]] = {
-            "gemini_client": self._create_gemini_client,
+            "gemini_core": self._create_gemini_core,
             "mime_detector": lambda: MimeDetector(),
             "ffmpeg_wrapper": lambda: FFmpegWrapper(),
             "video_handler": lambda: VideoHandler(),
@@ -86,7 +86,7 @@ class Container:
             logger.debug(f"Service created: {service_name}")
         return self.services[service_name]
 
-    def _create_gemini_client(self) -> GeminiCore:
+    def _create_gemini_core(self) -> GeminiCore:
         """Creates and returns an instance of GeminiCore."""
         if not self.config.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is not set in the configuration.")
@@ -94,13 +94,13 @@ class Container:
 
     def _create_attachment_processor(self) -> AttachmentProcessor:
         """Creates and returns an instance of AttachmentProcessor."""
-        return AttachmentProcessor(gemini_core=self.get("gemini_client"))
+        return AttachmentProcessor(gemini_core=self.get("gemini_core"))
 
     def _create_tool_registry(self) -> ToolRegistry:
         """Creates and returns an instance of ToolRegistry."""
         return ToolRegistry(
             config=self.config,
-            gemini_client=self.get("gemini_client"),
+            gemini_core=self.get("gemini_core"),
             response_extractor=self.get("response_extractor"),
             attachment_processor=self.get("attachment_processor"),
             ffmpeg_wrapper=self.get("ffmpeg_wrapper"),
@@ -161,7 +161,7 @@ class Container:
     def _create_thread_titler(self) -> ThreadTitler:
         """Creates and returns an instance of ThreadTitler."""
         return ThreadTitler(
-            gemini_core=self.get("gemini_client"),
+            gemini_core=self.get("gemini_core"),
             gemini_config_manager=self.get("gemini_config_manager"),
             config=self.config,
         )
@@ -170,7 +170,7 @@ class Container:
         """Creates and returns an instance of AIConversation."""
         return AIConversation(
             config=self.config,
-            core=self.get("gemini_client"),
+            core=self.get("gemini_core"),
             config_manager=self.get("gemini_config_manager"),
             prompt_builder=self.get("prompt_builder"),
             tool_registry=self.get("tool_registry"),

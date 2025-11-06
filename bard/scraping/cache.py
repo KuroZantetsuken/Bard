@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from bard.scraping.models import CachedObject, ScrapedData, ScrapedMedia, VideoDetails
+from bard.scraping.models import (CachedObject, ScrapedData, ScrapedMedia,
+                                  VideoDetails)
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -46,7 +47,7 @@ class CacheManager:
         url_hash = hashlib.md5(resolved_url.encode()).hexdigest()
         return domain_dir / f"{url_hash}.json"
 
-    def get(self, resolved_url: str) -> Optional[ScrapedData]:
+    def get_from_cache(self, resolved_url: str) -> Optional[ScrapedData]:
         """
         Retrieves a ScrapedData object from the cache if a valid, unexpired
         CachedObject exists for the given resolved URL.
@@ -86,7 +87,7 @@ class CacheManager:
                 screenshot_path.unlink()
             return None
 
-    def set(self, resolved_url: str, data: ScrapedData):
+    def set_to_cache(self, resolved_url: str, data: ScrapedData):
         """
         Serializes a ScrapedData object into a CachedObject and stores it
         in the cache, saving the screenshot as a separate file.

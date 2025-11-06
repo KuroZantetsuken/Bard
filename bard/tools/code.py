@@ -124,9 +124,9 @@ class CodeExecutionTool(BaseTool):
                     },
                 )
             )
-        gemini_client = context.get("gemini_client")
-        if not gemini_client:
-            error_msg = "Missing 'gemini_client' from context."
+        gemini_core = context.get("gemini_core")
+        if not gemini_core:
+            error_msg = "Missing 'gemini_core' from context."
             logger.error(f"CodeExecutionTool: {error_msg}")
             return types.Part(
                 function_response=types.FunctionResponse(
@@ -156,7 +156,7 @@ class CodeExecutionTool(BaseTool):
             logger.debug(
                 f"Gemini API (code_execution) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
             )
-            response = await gemini_client.aio.models.generate_content(
+            response = await gemini_core.aio.models.generate_content(
                 model=self.context.config.MODEL_ID,
                 contents=contents_for_code_exec,
                 config=code_exec_config,

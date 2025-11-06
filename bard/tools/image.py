@@ -79,9 +79,9 @@ class ImageGenerationTool(BaseTool):
                 function_response=self.function_response_error(function_name, error_msg)
             )
 
-        gemini_client = context.get("gemini_client")
-        if not gemini_client:
-            error_msg = "Missing 'gemini_client' from context."
+        gemini_core = context.get("gemini_core")
+        if not gemini_core:
+            error_msg = "Missing 'gemini_core' from context."
             logger.error(f"ImageGenerationTool: {error_msg}")
             return types.Part(
                 function_response=self.function_response_error(function_name, error_msg)
@@ -108,7 +108,7 @@ class ImageGenerationTool(BaseTool):
                 f"Gemini API (image_generation) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
             )
 
-            response = await gemini_client.aio.models.generate_content(
+            response = await gemini_core.aio.models.generate_content(
                 model=image_model_id,
                 contents=[prompt],
             )

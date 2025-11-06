@@ -27,7 +27,7 @@ class TTSGenerator(BaseTool):
             context: The ToolContext object providing shared resources.
         """
         super().__init__(context)
-        self.gemini_client = context.gemini_client
+        self.gemini_core = context.gemini_core
         self.ffmpeg_wrapper = context.ffmpeg_wrapper
 
     async def synthesize(self, text: str, voice_id: str) -> AsyncGenerator[bytes, None]:
@@ -59,7 +59,7 @@ class TTSGenerator(BaseTool):
             logger.debug(
                 f"Gemini API (tts_synthesis) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
             )
-            async for chunk in await self.gemini_client.generate_content(
+            async for chunk in await self.gemini_core.generate_content(
                 model=Config.MODEL_ID_TTS,
                 contents=[types.Content(parts=[types.Part(text=text)])],
                 config=speech_generation_config,
@@ -95,8 +95,8 @@ class TTSGenerator(BaseTool):
             A tuple containing the OGG Opus audio bytes, its duration in seconds,
             and a base64 encoded waveform string, or None if generation fails.
         """
-        if not self.gemini_client:
-            logger.error("Gemini client not initialized. Cannot generate TTS.")
+        if not self.gemini_core:
+            logger.error("Gemini core not initialized. Cannot generate TTS.")
             return None
 
         if style:
@@ -128,7 +128,7 @@ class TTSGenerator(BaseTool):
             f"Gemini API (tts_generate_ogg) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
         )
 
-        gemini_response_object = await self.gemini_client.generate_content(
+        gemini_response_object = await self.gemini_core.generate_content(
             model=Config.MODEL_ID_TTS,
             contents=[types.Content(parts=[types.Part(text=text_for_tts)])],
             config=speech_generation_config,

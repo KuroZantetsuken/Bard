@@ -4,7 +4,8 @@ from typing import Any, Dict, List
 
 import aiohttp
 import discord
-from google.genai.types import FunctionDeclaration, FunctionResponse, Part, Schema, Type
+from google.genai.types import (FunctionDeclaration, FunctionResponse, Part,
+                                Schema, Type)
 
 from bard.tools.base import BaseTool, ToolContext
 
@@ -281,9 +282,9 @@ class DiscordEventTool(BaseTool):
                     "id": str(event.id),
                     "name": event.name,
                     "description": event.description,
-                    "start_time": event.start_time.isoformat()
-                    if event.start_time
-                    else None,
+                    "start_time": (
+                        event.start_time.isoformat() if event.start_time else None
+                    ),
                     "end_time": event.end_time.isoformat() if event.end_time else None,
                     "location": event.location,
                     "status": str(event.status),

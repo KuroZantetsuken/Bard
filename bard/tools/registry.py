@@ -9,15 +9,10 @@ from typing import Any, Dict, List, Optional
 
 from google.genai import types as gemini_types
 
-from bard.tools.base import (
-    AttachmentProcessorProtocol,
-    BaseTool,
-    FFmpegWrapperProtocol,
-    GeminiClientProtocol,
-    MimeDetectorProtocol,
-    ResponseExtractorProtocol,
-    ToolContext,
-)
+from bard.tools.base import (AttachmentProcessorProtocol, BaseTool,
+                             FFmpegWrapperProtocol, GeminiCoreProtocol,
+                             MimeDetectorProtocol, ResponseExtractorProtocol,
+                             ToolContext)
 from bard.util.logging import clean_dict, prettify_json_for_logging
 from config import Config
 
@@ -34,7 +29,7 @@ class ToolRegistry:
     def __init__(
         self,
         config: Config,
-        gemini_client: GeminiClientProtocol,
+        gemini_core: GeminiCoreProtocol,
         response_extractor: ResponseExtractorProtocol,
         attachment_processor: AttachmentProcessorProtocol,
         ffmpeg_wrapper: FFmpegWrapperProtocol,
@@ -45,14 +40,14 @@ class ToolRegistry:
 
         Args:
             config: Application configuration settings.
-            gemini_client: An instance of GeminiClientProtocol.
+            gemini_core: An instance of GeminiCoreProtocol.
             response_extractor: An instance of ResponseExtractorProtocol.
             attachment_processor: An instance of AttachmentProcessorProtocol.
             ffmpeg_wrapper: An instance of FFmpegWrapperProtocol.
             mime_detector: An instance of MimeDetectorProtocol.
         """
         self.config = config
-        self.gemini_client = gemini_client
+        self.gemini_core = gemini_core
         self.response_extractor = response_extractor
         self.attachment_processor = attachment_processor
         self.ffmpeg_wrapper = ffmpeg_wrapper
@@ -78,7 +73,7 @@ class ToolRegistry:
 
         self.shared_tool_context = ToolContext(
             config=self.config,
-            gemini_client=self.gemini_client,
+            gemini_core=self.gemini_core,
             response_extractor=self.response_extractor,
             attachment_processor=self.attachment_processor,
             ffmpeg_wrapper=self.ffmpeg_wrapper,
@@ -111,9 +106,9 @@ class ToolRegistry:
                         )
                         continue
                     sys.modules[logical_module_name] = module
-                    assert spec.loader is not None, (
-                        f"ModuleSpec loader is None for {logical_module_name}"
-                    )
+                    assert (
+                        spec.loader is not None
+                    ), f"ModuleSpec loader is None for {logical_module_name}"
                     spec.loader.exec_module(module)
                     for attribute_name in dir(module):
                         attribute = getattr(module, attribute_name)
