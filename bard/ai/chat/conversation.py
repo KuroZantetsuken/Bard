@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any, Dict, List
 
 from google.genai import types as gemini_types
@@ -8,6 +9,7 @@ from bard.ai.context.prompts import PromptBuilder
 from bard.ai.core import GeminiCore
 from bard.ai.types import FinalAIResponse
 from bard.bot.types import ParsedMessageContext
+from bard.scraping.orchestrator import ScrapingOrchestrator
 from bard.tools.base import ToolContext
 from bard.tools.memory import MemoryManager
 from bard.tools.registry import ToolRegistry
@@ -16,6 +18,12 @@ from bard.util.media.media import MimeDetector
 from config import Config
 
 logger = logging.getLogger("Bard")
+
+
+def _parse_urls_from_markdown(markdown_text: str) -> List[str]:
+    """Extracts URLs from a markdown string."""
+
+    return re.findall(r"\[.*?\]\(<(https?://[^\s>]+)>", markdown_text)
 
 
 class AIConversation:
@@ -32,6 +40,7 @@ class AIConversation:
         config_manager: GeminiConfigManager,
         prompt_builder: PromptBuilder,
         tool_registry: ToolRegistry,
+        scraping_orchestrator: ScrapingOrchestrator,
     ):
         """
         Initializes the AIConversation with necessary dependencies.
@@ -42,12 +51,14 @@ class AIConversation:
             config_manager: Manages Gemini generation configuration.
             prompt_builder: Constructs prompts for the Gemini API.
             tool_registry: Manages available tools and their execution.
+            scraping_orchestrator: Manages scraping and caching of URLs.
         """
         self.config = config
         self.core = core
         self.config_manager = config_manager
         self.prompt_builder = prompt_builder
         self.tool_registry = tool_registry
+        self.scraping_orchestrator = scraping_orchestrator
         self.mime_detector = MimeDetector()
         self.memory_manager = MemoryManager(
             memory_dir=Config.MEMORY_DIR, max_memories=Config.MAX_MEMORIES
@@ -191,12 +202,11 @@ class AIConversation:
             user_message_content=parsed_context.cleaned_content,
             attachments_data=parsed_context.attachments_data,
             attachments_mime_types=parsed_context.attachments_mime_types,
-            processed_image_url_parts=parsed_context.processed_image_url_parts,
             video_urls=parsed_context.video_urls,
             video_metadata_list=parsed_context.video_metadata_list,
             reply_chain_context_text=parsed_context.cleaned_reply_chain_text,
             discord_context=parsed_context.discord_context,
-            raw_urls_for_model=parsed_context.raw_urls_for_model,
+            scraped_url_data=parsed_context.scraped_url_data,
             formatted_memories=formatted_memories,
         )
 
@@ -276,8 +286,8 @@ class AIConversation:
                 )
                 break
 
-            candidate = model_response.candidates[0]
-            current_model_content = candidate.content
+            candidate = model_response.candidates
+            current_model_content = candidate[0].content
 
             if current_model_content is None:
                 logger.warning(
@@ -332,6 +342,36 @@ class AIConversation:
                         await self._process_tool_response_part(
                             tool_result_part, tool_context
                         )
+
+                if tool_context.grounding_sources_md:
+                    urls = _parse_urls_from_markdown(tool_context.grounding_sources_md)
+                    if urls:
+                        scraped_data = (
+                            await self.scraping_orchestrator.process_grounding_urls(
+                                urls
+                            )
+                        )
+                        grounding_parts = []
+                        for data in scraped_data:
+                            if data.text_content:
+                                grounding_parts.append(
+                                    gemini_types.Part(
+                                        text=f"URL Content: {data.resolved_url}\n{data.text_content}"
+                                    )
+                                )
+                            if data.screenshot_data:
+                                grounding_parts.append(
+                                    gemini_types.Part(
+                                        inline_data=gemini_types.Blob(
+                                            mime_type="image/png",
+                                            data=data.screenshot_data,
+                                        )
+                                    )
+                                )
+                        if grounding_parts:
+                            contents_for_gemini.append(
+                                gemini_types.Content(role="user", parts=grounding_parts)
+                            )
 
                 for tr_part in tool_response_parts:
                     contents_for_gemini.append(

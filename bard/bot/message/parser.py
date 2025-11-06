@@ -1,15 +1,17 @@
 import logging
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import List, Optional
 
 import discord
 from discord import Message
-from google.genai import types as gemini_types
+from google.genai import types
 
 from bard.ai.context.replies import ReplyChainConstructor
 from bard.ai.files import AttachmentProcessor
 from bard.bot.types import DiscordContext, ParsedMessageContext, VideoMetadata
+from bard.scraping.orchestrator import ScrapingOrchestrator
+from bard.util.media.video import VideoProcessor
 
 logger = logging.getLogger("Bard")
 
@@ -24,6 +26,7 @@ class MessageParser:
     def __init__(
         self,
         attachment_processor: AttachmentProcessor,
+        scraping_orchestrator: ScrapingOrchestrator,
         bot_user_id: Optional[int] = None,
     ):
         """
@@ -31,11 +34,14 @@ class MessageParser:
 
         Args:
             attachment_processor: An instance of AttachmentProcessor for handling media.
+            scraping_orchestrator: An instance of ScrapingOrchestrator for web scraping.
             bot_user_id: The Discord user ID of the bot.
         """
         self.attachment_processor = attachment_processor
+        self.scraping_orchestrator = scraping_orchestrator
         self.bot_user_id = bot_user_id
         self.reply_chain_constructor = ReplyChainConstructor()
+        self.video_processor = VideoProcessor()
 
     async def _extract_discord_context(self, message: Message) -> DiscordContext:
         """
@@ -83,7 +89,7 @@ class MessageParser:
         )
         return discord_context
 
-    def _clean_content_from_urls(self, content: str, urls_to_remove: Set[str]) -> str:
+    def _clean_content_from_urls(self, content: str, urls_to_remove: set[str]) -> str:
         """
         Removes specified URLs from the given content string.
 
@@ -111,80 +117,93 @@ class MessageParser:
         """
         (
             reply_chain_text,
-            replied_attachments_data,
-            replied_attachments_mime_types,
+            replied_attachments,
         ) = await self.reply_chain_constructor.build_reply_chain(message)
-
-        cleaned_content = message.content
-
-        processed_video_parts = []
-        video_metadata_list: List[VideoMetadata] = []
-        processed_image_url_parts: List[gemini_types.Part] = []
-        raw_urls_for_model: List[str] = []
 
         url_pattern = r"https?://\S+"
         combined_content_for_url_extraction = f"{message.content} {reply_chain_text}"
-        urls_in_message = re.findall(url_pattern, combined_content_for_url_extraction)
+        urls_in_message = set(
+            re.findall(url_pattern, combined_content_for_url_extraction)
+        )
 
-        urls_to_remove_from_content = set()
+        scraped_data_list = []
+        if urls_in_message:
+            logger.info(
+                f"Found {len(urls_in_message)} URLs to scrape: {urls_in_message}"
+            )
+            scraped_data_list = await self.scraping_orchestrator.process_urls(
+                list(urls_in_message)
+            )
+            logger.info(f"Scraping complete. Got {len(scraped_data_list)} results.")
 
-        for url in urls_in_message:
-            (
-                video_part,
-                image_part,
-                video_metadata,
-                remaining_url,
-            ) = await self.attachment_processor.check_and_process_url(url)
+        processed_video_parts: List[types.Part] = []
+        video_metadata_list: List[VideoMetadata] = []
+        urls_to_remove_from_content: set[str] = set()
 
-            if video_part:
-                processed_video_parts.append(video_part)
-                if video_metadata:
-                    video_metadata_list.append(video_metadata)
-                urls_to_remove_from_content.add(url)
-            elif image_part:
-                processed_image_url_parts.append(image_part)
-                urls_to_remove_from_content.add(url)
-            elif remaining_url:
-                raw_urls_for_model.append(remaining_url)
+        for scraped_data in scraped_data_list:
+            if not scraped_data:
+                continue
+
+            urls_to_remove_from_content.add(scraped_data.resolved_url)
+
+            if scraped_data.video_details and scraped_data.video_details.is_video:
+                if scraped_data.video_details.is_youtube:
+                    video_part = types.Part(
+                        file_data=types.FileData(file_uri=scraped_data.resolved_url)
+                    )
+                    processed_video_parts.append(video_part)
+                    if scraped_data.video_details.metadata:
+                        video_metadata = self.video_processor._create_video_metadata(
+                            scraped_data.resolved_url,
+                            scraped_data.video_details.metadata,
+                        )
+                        video_metadata_list.append(video_metadata)
+                elif scraped_data.video_details.stream_url:
+                    stream_url = scraped_data.video_details.stream_url
+                    mime_type = (
+                        scraped_data.video_details.metadata.get("http_headers", {}).get(
+                            "Content-Type", "video/mp4"
+                        )
+                        if scraped_data.video_details.metadata
+                        else "video/mp4"
+                    )
+                    video_part = types.Part.from_uri(
+                        file_uri=stream_url, mime_type=mime_type
+                    )
+                    processed_video_parts.append(video_part)
 
         cleaned_content = self._clean_content_from_urls(
-            cleaned_content, urls_to_remove_from_content
+            message.content, urls_to_remove_from_content
         )
         cleaned_reply_chain_text = self._clean_content_from_urls(
             reply_chain_text, urls_to_remove_from_content
         )
 
-        current_attachments_data = []
-        current_attachments_mime_types = []
-        if message.attachments:
-            for attachment in message.attachments:
-                mime_type = (
-                    attachment.content_type
-                    if attachment.content_type
-                    else "application/octet-stream"
-                )
-                current_attachments_data.append(await attachment.read())
-                current_attachments_mime_types.append(mime_type)
-
-        combined_attachments_data = current_attachments_data + replied_attachments_data
-        combined_attachments_mime_types = (
-            current_attachments_mime_types + replied_attachments_mime_types
-        )
+        attachments_data = []
+        attachments_mime_types = []
+        all_attachments = message.attachments + replied_attachments
+        for attachment in all_attachments:
+            mime_type = (
+                attachment.content_type
+                if attachment.content_type
+                else "application/octet-stream"
+            )
+            attachments_data.append(await attachment.read())
+            attachments_mime_types.append(mime_type)
 
         discord_context = await self._extract_discord_context(message)
 
-        parsed_message_context = ParsedMessageContext(
+        return ParsedMessageContext(
             original_message=message,
             cleaned_content=cleaned_content,
             guild=message.guild,
             reply_content=cleaned_reply_chain_text,
             discord_context=discord_context,
-            attachments_data=combined_attachments_data,
-            attachments_mime_types=combined_attachments_mime_types,
-            processed_image_url_parts=processed_image_url_parts,
+            attachments_data=attachments_data,
+            attachments_mime_types=attachments_mime_types,
             video_urls=processed_video_parts,
             video_metadata_list=video_metadata_list,
             cleaned_reply_chain_text=cleaned_reply_chain_text,
-            raw_urls_for_model=raw_urls_for_model,
+            scraped_url_data=scraped_data_list,
+            raw_urls_for_model=[],
         )
-        return parsed_message_context

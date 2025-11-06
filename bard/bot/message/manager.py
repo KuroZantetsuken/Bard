@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Union
+from typing import Optional
 
 import discord
 
@@ -20,38 +20,28 @@ class MessageManager:
         """
         self.logger = logger
 
-    async def delete_message(self, message: Union[discord.Message, int]):
+    async def delete_message(self, message: discord.Message):
         """
         Deletes a Discord message.
 
         Args:
-            message: The discord.Message object or the message ID (int) to delete.
+            message: The discord.Message object to delete.
         """
         try:
-            if isinstance(message, int):
-                self.logger.warning(
-                    f"Cannot directly delete message by ID ({message}) without a discord.Message object or channel context. "
-                    "Please provide a discord.Message object for reliable deletion."
-                )
-                return
-
             await message.delete()
-
         except discord.NotFound:
             self.logger.warning(
-                f"Message not found, could not delete. ID: {message.id if isinstance(message, discord.Message) else message}."
+                f"Message not found, could not delete. ID: {message.id}."
             )
         except discord.Forbidden:
             self.logger.error(
-                f"Bot lacks permissions to delete message ID: {message.id if isinstance(message, discord.Message) else message}."
+                f"Bot lacks permissions to delete message ID: {message.id}."
             )
         except discord.HTTPException as e:
-            self.logger.error(
-                f"Error deleting message ID: {message.id if isinstance(message, discord.Message) else message}: {e}."
-            )
+            self.logger.error(f"Error deleting message ID: {message.id}: {e}.")
         except Exception as e:
             self.logger.error(
-                f"An unexpected error occurred while deleting message (ID: {message.id if isinstance(message, discord.Message) else message}): {e}"
+                f"An unexpected error occurred while deleting message (ID: {message.id}): {e}"
             )
 
     async def remove_reaction(

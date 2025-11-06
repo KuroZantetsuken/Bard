@@ -3,6 +3,7 @@ import logging
 from typing import Any, Optional
 
 import yt_dlp
+from yt_dlp.utils._utils import match_filter_func
 
 from bard.bot.types import VideoMetadata
 from bard.util.media.ffmpeg import FFmpegWrapper
@@ -18,30 +19,45 @@ class VideoProcessor:
     """
 
     @staticmethod
-    async def get_video_info(url: str) -> Optional[dict[str, Any]]:
+    def is_youtube_url(url: str) -> bool:
+        """Checks if a URL is a YouTube URL."""
+        return "youtube.com" in url or "youtu.be" in url
+
+    @staticmethod
+    async def get_video_info(
+        url: str, ignore_youtube: bool = False
+    ) -> Optional[dict[str, Any]]:
         """
         Extracts video information from a given URL using yt-dlp.
 
         Args:
             url: The URL of the video.
+            ignore_youtube: If True, yt-dlp will not process YouTube URLs.
 
         Returns:
             An optional dictionary containing video information, or None if extraction fails.
         """
         ydl_opts: dict[str, Any] = {
             "executable": Config.YTDLP_PATH,
-            "force_generic_extractor": True,
             "noplaylist": True,
             "ignoreerrors": True,
             "no_warnings": True,
             "dump_single_json": True,
             "quiet": True,
         }
+        if ignore_youtube:
+            ydl_opts["match_filter"] = match_filter_func(
+                "!is_live & !extractor_key 'Youtube'"
+            )
+
+        if not VideoProcessor.is_youtube_url(url):
+            ydl_opts["force_generic_extractor"] = True
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
                 return await asyncio.to_thread(ydl.extract_info, url, download=False)  # type: ignore
         except Exception as e:
-            logger.error(f"Error extracting video info for {url}: {e}", exc_info=True)
+            logger.debug(f"yt-dlp could not extract info from {url}: {e}")
             return None
 
     @staticmethod
@@ -56,7 +72,6 @@ class VideoProcessor:
         Returns:
             A VideoMetadata object populated with extracted information.
         """
-        is_youtube = "youtube.com" in url or "youtu.be" in url
         return VideoMetadata(
             url=url,
             title=info_dict.get("title"),
@@ -68,7 +83,7 @@ class VideoProcessor:
             average_rating=info_dict.get("average_rating"),
             categories=info_dict.get("categories"),
             tags=info_dict.get("tags"),
-            is_youtube=is_youtube,
+            is_youtube=VideoProcessor.is_youtube_url(url),
         )
 
     @staticmethod

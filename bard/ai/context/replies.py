@@ -21,7 +21,7 @@ class ReplyChainConstructor:
 
     async def build_reply_chain(
         self, message: discord.Message
-    ) -> Tuple[str, List[bytes], List[str]]:
+    ) -> Tuple[str, List[discord.Attachment]]:
         """
         Traverses a chain of replies, formats them into a single string, and collects their attachments.
 
@@ -31,15 +31,13 @@ class ReplyChainConstructor:
         Returns:
             A tuple containing:
             - A formatted string representing the conversation in the reply chain.
-            - A list of attachment data (bytes).
-            - A list of attachment MIME types.
+            - A list of discord.Attachment objects from the reply chain.
         """
         if not message.reference or not message.reference.message_id:
-            return "", [], []
+            return "", []
 
         chain = []
-        attachments_data = []
-        attachments_mime_types = []
+        attachments = []
 
         current_message = message
         for _ in range(self.max_depth):
@@ -56,16 +54,14 @@ class ReplyChainConstructor:
                 chain.append(replied_msg)
 
                 if replied_msg.attachments:
-                    for attachment in replied_msg.attachments:
-                        attachments_data.append(await attachment.read())
-                        attachments_mime_types.append(attachment.content_type)
+                    attachments.extend(replied_msg.attachments)
 
                 current_message = replied_msg
             except discord.NotFound:
                 break
 
         if not chain:
-            return "", [], []
+            return "", []
 
         chain.reverse()
 
@@ -74,4 +70,4 @@ class ReplyChainConstructor:
             formatted_chain.append(f"<{msg.author.name}>: {msg.content}")
         formatted_chain.append("[REPLY_CHAIN:END]")
 
-        return "\n".join(formatted_chain), attachments_data, attachments_mime_types
+        return "\n".join(formatted_chain), attachments

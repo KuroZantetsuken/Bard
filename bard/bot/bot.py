@@ -29,7 +29,11 @@ async def run():
     intents.message_content = True
     intents.members = True
 
-    bot = commands.Bot(command_prefix=commands.when_mentioned_or(""), intents=intents, help_command=None)
+    bot = commands.Bot(
+        command_prefix=commands.when_mentioned_or(""),
+        intents=intents,
+        help_command=None,
+    )
 
     try:
         container = Container(config)

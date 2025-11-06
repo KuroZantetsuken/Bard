@@ -8,6 +8,8 @@ import soundfile
 
 logger = logging.getLogger("Bard")
 
+DEFAULT_WAVEFORM = "FzYACgAAAAAAACQAAAAAAAA="
+
 
 def get_audio_duration_and_waveform(
     audio_bytes: bytes, max_waveform_points: int = 100
@@ -30,14 +32,13 @@ def get_audio_duration_and_waveform(
 
         if audio_data is None or samplerate is None:
             logger.error("soundfile.read returned None for audio_data or samplerate.")
-            return 1.0, "FzYACgAAAAAAACQAAAAAAAA="
+            return 1.0, DEFAULT_WAVEFORM
 
         duration_secs = len(audio_data) / float(samplerate)
         mono_audio_data = (
             np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
         )
         num_samples = len(mono_audio_data)
-        DEFAULT_WAVEFORM = "FzYACgAAAAAAACQAAAAAAAA="
         if num_samples == 0:
             return duration_secs, DEFAULT_WAVEFORM
         if not np.issubdtype(mono_audio_data.dtype, np.floating):

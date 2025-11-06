@@ -12,6 +12,10 @@ from bard.bot.core.coordinator import Coordinator
 from bard.bot.lifecycle.events import DiscordEventHandler
 from bard.bot.message.parser import MessageParser
 from bard.bot.message.sender import MessageSender
+from bard.scraping.cache import CacheManager
+from bard.scraping.orchestrator import ScrapingOrchestrator
+from bard.scraping.scraper import Scraper
+from bard.scraping.video import VideoHandler
 from bard.tools.registry import ToolRegistry
 from bard.util.media.ffmpeg import FFmpegWrapper
 from bard.util.media.media import MimeDetector
@@ -42,11 +46,15 @@ class Container:
             "gemini_client": self._create_gemini_client,
             "mime_detector": lambda: MimeDetector(),
             "ffmpeg_wrapper": lambda: FFmpegWrapper(),
+            "video_handler": lambda: VideoHandler(),
             "attachment_processor": self._create_attachment_processor,
             "response_extractor": lambda: ResponseExtractor(),
             "tool_registry": self._create_tool_registry,
             "prompt_builder": self._create_prompt_builder,
             "message_sender": self._create_message_sender,
+            "scraper": self._create_scraper,
+            "cache_manager": self._create_cache_manager,
+            "scraping_orchestrator": self._create_scraping_orchestrator,
             "message_parser": self._create_message_parser,
             "gemini_config_manager": self._create_gemini_config_manager,
             "thread_titler": self._create_thread_titler,
@@ -120,9 +128,28 @@ class Container:
             thread_titler=self.get("thread_titler"),
         )
 
+    def _create_scraper(self) -> Scraper:
+        """Creates and returns an instance of Scraper."""
+        return Scraper()
+
+    def _create_cache_manager(self) -> CacheManager:
+        """Creates and returns an instance of CacheManager."""
+        return CacheManager()
+
+    def _create_scraping_orchestrator(self) -> ScrapingOrchestrator:
+        """Creates and returns an instance of ScrapingOrchestrator."""
+        return ScrapingOrchestrator(
+            cache_manager=self.get("cache_manager"),
+            scraper=self.get("scraper"),
+            video_handler=self.get("video_handler"),
+        )
+
     def _create_message_parser(self) -> MessageParser:
         """Creates and returns an instance of MessageParser."""
-        return MessageParser(attachment_processor=self.get("attachment_processor"))
+        return MessageParser(
+            attachment_processor=self.get("attachment_processor"),
+            scraping_orchestrator=self.get("scraping_orchestrator"),
+        )
 
     def _create_gemini_config_manager(self) -> GeminiConfigManager:
         """Creates and returns an instance of GeminiConfigManager."""
@@ -147,6 +174,7 @@ class Container:
             config_manager=self.get("gemini_config_manager"),
             prompt_builder=self.get("prompt_builder"),
             tool_registry=self.get("tool_registry"),
+            scraping_orchestrator=self.get("scraping_orchestrator"),
         )
 
     def _create_task_lifecycle_manager(self) -> TaskLifecycleManager:
@@ -166,6 +194,7 @@ class Container:
             ai_conversation=self.get("ai_conversation"),
             message_sender=self.get("message_sender"),
             task_lifecycle_manager=self.get("task_lifecycle_manager"),
+            scraping_orchestrator=self.get("scraping_orchestrator"),
         )
 
     def _create_discord_event_handler(self) -> DiscordEventHandler:

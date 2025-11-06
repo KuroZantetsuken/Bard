@@ -10,6 +10,7 @@ from bard.bot.message.parser import MessageParser
 from bard.bot.message.reactions import ReactionManager
 from bard.bot.message.sender import MessageSender
 from bard.bot.types import ParsedMessageContext
+from bard.scraping.orchestrator import ScrapingOrchestrator
 from bard.util.system.lifecycle import TaskLifecycleManager
 
 logger = logging.getLogger("Bard")
@@ -28,6 +29,7 @@ class Coordinator:
         ai_conversation: AIConversation,
         message_sender: MessageSender,
         task_lifecycle_manager: TaskLifecycleManager,
+        scraping_orchestrator: ScrapingOrchestrator,
     ):
         """
         Initializes the Coordinator with instances of its collaborating services.
@@ -37,12 +39,14 @@ class Coordinator:
             ai_conversation: Service for managing AI conversational turns.
             message_sender: Service for sending messages back to Discord.
             task_lifecycle_manager: Service for managing asynchronous task lifecycles.
+            scraping_orchestrator: Service for scraping URLs.
         """
         self.message_parser = message_parser
         self.ai_conversation = ai_conversation
         self.message_sender = message_sender
         self.task_lifecycle_manager = task_lifecycle_manager
         self.reaction_manager = ReactionManager(self.message_sender.retry_emoji)
+        self.scraping_orchestrator = scraping_orchestrator
 
     async def process(
         self,

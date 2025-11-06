@@ -122,16 +122,6 @@ class MemoryManager(JsonStorageManager):
             return True
         return False
 
-    async def delete_all_memories(self, user_id: str) -> bool:
-        """
-        Delete all memories for a user.
-        Args:
-            user_id: The ID of the user.
-        Returns:
-            True if all memories were deleted, False otherwise.
-        """
-        return await self._delete_data(guild_id=None, user_id=user_id)
-
     def format_memories(
         self, user_id: Optional[str], memories: List[Dict[str, Any]]
     ) -> str:
@@ -152,62 +142,6 @@ class MemoryManager(JsonStorageManager):
             formatted.append(mem.get("content", "[Empty memory content]"))
         formatted.append(f"[{user_id}:MEMORY:END]")
         return "\n".join(formatted)
-
-    async def get_memory(self, user_id: str, memory_key: str) -> Optional[Any]:
-        """
-        Retrieves a specific memory for a user by content key.
-        Args:
-            user_id: The ID of the user.
-            memory_key: The content string to match for the memory.
-        Returns:
-            The content of the matching memory, or None if not found or an error occurs.
-        """
-        try:
-            memories = await self.load_memories(user_id)
-            for mem in memories:
-                if mem.get("content") == memory_key:
-                    return mem.get("content")
-        except Exception as e:
-            logger.error(
-                f"Error in get_memory for user {user_id}, key {memory_key}: {e}",
-                exc_info=True,
-            )
-        return None
-
-    async def set_memory(
-        self, user_id: str, memory_key: str, memory_value: Any
-    ) -> None:
-        """
-        Sets or updates a specific memory for a user by content key.
-        Args:
-            user_id: The ID of the user.
-            memory_key: The content string to identify the memory.
-            memory_value: The new value for the memory content.
-        """
-        try:
-            memories = await self.load_memories(user_id)
-            found = False
-            for mem in memories:
-                if mem.get("content") == memory_key:
-                    mem["content"] = memory_value
-                    mem["timestamp_added"] = datetime.now(timezone.utc).isoformat()
-                    found = True
-                    break
-            if not found:
-                new_id = self._next_memory_id(memories)
-                memories.append(
-                    {
-                        "id": new_id,
-                        "content": memory_value,
-                        "timestamp_added": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-            await self.save_memories(user_id, memories)
-        except Exception as e:
-            logger.error(
-                f"Error in set_memory for user {user_id}, key {memory_key}: {e}",
-                exc_info=True,
-            )
 
 
 class MemoryTool(BaseTool):

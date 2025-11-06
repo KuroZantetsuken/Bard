@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 import aiohttp
 import discord
-from google.genai.types import FunctionDeclaration, FunctionResponse, Schema, Type
+from google.genai.types import FunctionDeclaration, FunctionResponse, Part, Schema, Type
 
 from bard.tools.base import BaseTool, ToolContext
 
@@ -304,23 +304,28 @@ class DiscordEventTool(BaseTool):
 
     async def execute_tool(
         self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> FunctionResponse:
+    ) -> Part:
         """
         Executes a function based on the provided function name and arguments.
         """
         try:
+            function_response = None
             if function_name == "create_discord_event":
-                return await self._create_event(args, context)
+                function_response = await self._create_event(args, context)
             elif function_name == "delete_discord_event":
-                return await self._delete_event(args, context)
+                function_response = await self._delete_event(args, context)
             elif function_name == "get_discord_events":
-                return await self._get_events(args, context)
+                function_response = await self._get_events(args, context)
             else:
-                return self.function_response_error(
+                function_response = self.function_response_error(
                     function_name, f"Unknown function: {function_name}"
                 )
+
+            return Part(function_response=function_response)
         except Exception as e:
             logger.exception(f"Error executing tool '{function_name}': {e}")
-            return self.function_response_error(
-                function_name, f"An unexpected error occurred: {e}"
+            return Part(
+                function_response=self.function_response_error(
+                    function_name, f"An unexpected error occurred: {e}"
+                )
             )

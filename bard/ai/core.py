@@ -1,7 +1,7 @@
 import asyncio
 import io
 import logging
-from typing import Any, List
+from typing import Any
 
 from google.genai import client as genai_client
 from google.genai import errors as genai_errors
@@ -34,9 +34,7 @@ class GeminiCore:
         """
         return self.client.aio
 
-    async def generate_content(
-        self, model: str, contents: List[gemini_types.Content], **kwargs: Any
-    ) -> Any:
+    async def generate_content(self, model: str, contents: Any, **kwargs: Any) -> Any:
         """
         Generates content using the Gemini API's asynchronous method. Supports streaming
         if 'stream=True' is passed in kwargs.

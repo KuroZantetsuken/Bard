@@ -59,9 +59,6 @@ class BotHandlers(commands.Cog):
             logger.debug(
                 f"Main Gemini Model: {self.config.MODEL_ID}, Secondary Gemini Model: {self.config.MODEL_ID_SECONDARY}, TTS Gemini Model: {self.config.MODEL_ID_TTS}, Image Generation Gemini Model: {self.config.MODEL_ID_IMAGE_GENERATION}, Voice: {self.config.VOICE_NAME}."
             )
-            logger.debug(
-                f"Chat History Max Turns: {self.config.MAX_HISTORY_TURNS}, Max Age: {self.config.MAX_HISTORY_AGE} mins."
-            )
             logger.debug(f"User Memory Max Entries: {self.config.MAX_MEMORIES}.")
 
             self.discord_event_handler.bot_user_id = self.bot.user.id

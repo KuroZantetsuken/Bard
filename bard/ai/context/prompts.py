@@ -8,6 +8,7 @@ from bard.ai.context.dynamic import DynamicContextFormatter
 from bard.ai.context.videos import VideoFormatter
 from bard.ai.files import AttachmentProcessor
 from bard.bot.types import DiscordContext, VideoMetadata
+from bard.scraping.models import ScrapedData
 
 logger = logging.getLogger("Bard")
 
@@ -78,12 +79,11 @@ class PromptBuilder:
         user_message_content: str,
         attachments_data: List[bytes],
         attachments_mime_types: List[str],
-        processed_image_url_parts: List[gemini_types.Part],
         video_urls: List[gemini_types.Part],
         video_metadata_list: List[VideoMetadata],
         reply_chain_context_text: Optional[str],
         discord_context: DiscordContext,
-        raw_urls_for_model: List[str],
+        scraped_url_data: List[ScrapedData],
         formatted_memories: Optional[str] = None,
     ) -> Tuple[List[gemini_types.Part], bool]:
         """
@@ -94,12 +94,11 @@ class PromptBuilder:
             user_message_content: The main text content of the user's message.
             attachments_data: Raw byte data of direct attachments.
             attachments_mime_types: MIME types corresponding to attachments_data.
-            processed_image_url_parts: Already processed Gemini parts for image URLs.
             video_urls: Already processed Gemini parts for video URLs.
             video_metadata_list: Metadata for videos detected in the message.
             reply_chain_context_text: Text from the Discord reply chain.
             discord_context: Discord-specific context information.
-            raw_urls_for_model: Raw URLs extracted from the message for tool use.
+            scraped_url_data: A list of ScrapedData objects.
             formatted_memories: Optional string containing formatted user memories.
 
         Returns:
@@ -128,11 +127,44 @@ class PromptBuilder:
         if user_message_content.strip():
             prompt_parts.append(gemini_types.Part(text=user_message_content))
 
-        if raw_urls_for_model:
-            raw_urls_text = "\n".join([f"URL: {url}" for url in raw_urls_for_model])
-            prompt_parts.append(
-                gemini_types.Part(text=f"[URLS:START]\n{raw_urls_text}\n[URLS:END]")
-            )
+        if scraped_url_data:
+            logger.info(f"Processing {len(scraped_url_data)} scraped URL data objects.")
+            for i, scraped_data in enumerate(scraped_url_data):
+                if not scraped_data:
+                    logger.warning(
+                        f"Scraped data object at index {i} is None. Skipping."
+                    )
+                    continue
+
+                text_len = (
+                    len(scraped_data.text_content) if scraped_data.text_content else 0
+                )
+                has_screenshot = "yes" if scraped_data.screenshot_data else "no"
+                logger.info(
+                    f"Scraped data for '{scraped_data.resolved_url}': text length {text_len}, has screenshot: {has_screenshot}"
+                )
+
+                if scraped_data.text_content:
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            text=f"[SCRAPED CONTENT: {scraped_data.resolved_url}]\n{scraped_data.text_content}\n[/SCRAPED CONTENT]"
+                        )
+                    )
+                else:
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            text=f"[SCRAPED URL: {scraped_data.resolved_url}]\n(No text content was extracted.)\n[/SCRAPED URL]"
+                        )
+                    )
+
+                if scraped_data.screenshot_data:
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            inline_data=gemini_types.Blob(
+                                mime_type="image/png", data=scraped_data.screenshot_data
+                            )
+                        )
+                    )
 
         for i, data in enumerate(attachments_data):
             mime_type = attachments_mime_types[i]
@@ -175,21 +207,6 @@ class PromptBuilder:
                         f"Skipping duplicate direct attachment {i} with identifier: {identifier}."
                     )
 
-        for part in processed_image_url_parts:
-            if part and part.file_data and part.file_data.file_uri:
-                identifier = part.file_data.file_uri
-                if identifier not in seen_media_identifiers:
-                    prompt_parts.append(part)
-                    seen_media_identifiers.add(identifier)
-                else:
-                    logger.debug(
-                        f"Skipping duplicate processed image URL part with identifier: {identifier}."
-                    )
-            elif part:
-                logger.debug(
-                    f"Processed image URL part has no file_uri or file_data: {part}. Skipping."
-                )
-
         for part in video_urls:
             if part and part.file_data and part.file_data.file_uri:
                 identifier = part.file_data.file_uri
@@ -224,7 +241,6 @@ class PromptBuilder:
             [
                 user_message_content.strip(),
                 prompt_parts,
-                raw_urls_for_model,
             ]
         )
 

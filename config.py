@@ -69,18 +69,24 @@ class Config:
     MAX_MEMORIES = 32
 
     # --- File and Path Settings ---
-    # The path to the FFmpeg executable.
+    # The directory to the FFmpeg executable.
     FFMPEG_PATH = "ffmpeg"
-    # The path to the yt-dlp executable.
+    # The directory to the yt-dlp executable.
     YTDLP_PATH = "yt-dlp"
     # The directory where prompt templates (.prompt.md) are stored.
-    PROMPT_DIR = "prompts"
+    PROMPT_DIR = "data/prompts/"
     # The directory where log files are saved.
-    LOG_DIR = "logs"
+    LOG_DIR = "data/logs/"
     # The directory for storing long-term user memories (.memory.json).
-    MEMORY_DIR = "memories"
+    MEMORY_DIR = "data/memories/"
+    # The directory where scraped content is cached.
+    CACHE_DIR = "data/cache/"
     # The directory where tool modules are located.
-    TOOLS_DIR = "bard/tools"
+    TOOLS_DIR = "bard/tools/"
+    # The directory containing Playwright browser extensions
+    PLAYWRIGHT_EXTENSIONS_PATH = "data/extensions/"
+    # The directory containing persistent browser data
+    PLAYWRIGHT_BROWSER_PATH = "data/browser/"
 
     # --- Logging Configuration ---
     # Enable or disable logging to the console.

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from google.genai import types as gemini_types
 
@@ -8,8 +8,8 @@ logger = logging.getLogger("Bard")
 
 class ResponseExtractor:
     """
-    Extracts textual content and metadata from a Gemini API response.
-    This utility class provides static methods for extracting relevant information
+    Extracts textual content from a Gemini API response.
+    This utility class provides a static method for extracting relevant information
     from various Gemini response structures.
     """
 
@@ -46,20 +46,3 @@ class ResponseExtractor:
         else:
             extracted_text = ""
         return extracted_text
-
-    @staticmethod
-    def extract_metadata(response: Any) -> Dict[str, Any]:
-        """
-        Extracts metadata from a Gemini API response.
-        Currently, this method returns an empty dictionary as no specific metadata
-        extraction logic is implemented. This can be extended to parse various
-        metadata fields from the Gemini response object.
-
-        Args:
-            response: The Gemini API response object.
-
-        Returns:
-            A dictionary containing extracted metadata.
-        """
-        metadata = {}
-        return metadata

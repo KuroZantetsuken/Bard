@@ -3,6 +3,9 @@ __pycache__
 .venv
 .patch
 .vscode
-logs
+data/logs
+data/memories
+data/browser
+data/cache
+data/extensions
 docs
-memories

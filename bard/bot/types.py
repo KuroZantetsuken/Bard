@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, TypedDict
 import discord
 from google.genai import types as gemini_types
 
+from bard.scraping.models import ScrapedData
+
 
 class DiscordContext(TypedDict):
     """
@@ -55,8 +57,8 @@ class ParsedMessageContext:
     discord_context: Optional[DiscordContext] = None
     attachments_data: List[bytes] = field(default_factory=list)
     attachments_mime_types: List[str] = field(default_factory=list)
-    processed_image_url_parts: List[gemini_types.Part] = field(default_factory=list)
     video_urls: List[gemini_types.Part] = field(default_factory=list)
     video_metadata_list: List[VideoMetadata] = field(default_factory=list)
     cleaned_reply_chain_text: str = ""
     raw_urls_for_model: List[str] = field(default_factory=list)
+    scraped_url_data: List[ScrapedData] = field(default_factory=list)

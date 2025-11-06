@@ -84,7 +84,6 @@ class CodeExecutionTool(BaseTool):
 
         Args:
             code_task: A description of the Python code to be generated.
-            `google.generative_ai` does not exist. `google.genai` is correct.
         Returns:
             A list of Gemini Content objects forming the prompt.
         """

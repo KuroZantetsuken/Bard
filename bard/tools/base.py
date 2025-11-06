@@ -24,9 +24,7 @@ class GeminiClientProtocol(Protocol):
     """
 
     @abstractmethod
-    async def generate_content(
-        self, model: str, contents: List[Any], **kwargs: Any
-    ) -> Any:
+    async def generate_content(self, model: str, contents: Any, **kwargs: Any) -> Any:
         """Generates content using the Gemini API."""
         ...
 
@@ -42,17 +40,12 @@ class GeminiClientProtocol(Protocol):
 class ResponseExtractorProtocol(Protocol):
     """
     Defines the required interface for a response extraction service used by tools.
-    This ensures consistent extraction of content and metadata from API responses.
+    This ensures consistent extraction of content from API responses.
     """
 
     @abstractmethod
     def extract_response(self, response: Any) -> str:
         """Extracts textual content from an API response."""
-        ...
-
-    @abstractmethod
-    def extract_metadata(self, response: Any) -> Dict[str, Any]:
-        """Extracts metadata from an API response."""
         ...
 
 
@@ -72,11 +65,6 @@ class AttachmentProcessorProtocol(Protocol):
         original_url: Optional[str] = None,
     ) -> types.Part:
         """Uploads raw media bytes to the Gemini File API."""
-        ...
-
-    @abstractmethod
-    async def process_image_url(self, url: str) -> Optional[types.Part]:
-        """Downloads an image from a given URL and processes it for Gemini."""
         ...
 
     @abstractmethod
@@ -169,8 +157,6 @@ class ToolContext:
         self._validate_service(response_extractor, ResponseExtractorProtocol)
         self._validate_service(attachment_processor, AttachmentProcessorProtocol)
         self._validate_service(ffmpeg_wrapper, FFmpegWrapperProtocol)
-        self._validate_service(mime_detector, MimeDetectorProtocol)
-
         self.gemini_client = gemini_client
         self.response_extractor = response_extractor
         self.attachment_processor = attachment_processor

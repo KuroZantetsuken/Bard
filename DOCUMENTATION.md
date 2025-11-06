@@ -67,7 +67,7 @@ Proper configuration is crucial for the bot's operation.
         *   **Server Members Intent:** Allows the bot to access the full list of members in a server, which is necessary for features like user context injection.
 
 3.  **Prompt Customization (Optional):**
-    *   The bot's core behavior, personality, and capabilities are defined by a series of prompt files located in the [`prompts/`](prompts/) directory.
+    *   The bot's core behavior, personality, and capabilities are defined by a series of prompt files located in the [`data/prompts/`](data/prompts/) directory.
     *   Any file in this directory ending with `.prompt.md` will be automatically loaded and concatenated to form the system prompt.
     *   You can customize the bot by adding, editing, or removing these files.
 
@@ -99,15 +99,24 @@ The Bard Discord Bot is equipped with a rich set of features that enable advance
 
 ### 3.1. Multimodal Understanding
 
-The bot can process and comprehend a wide array of inputs beyond just text, thanks to the Gemini AI's native multimodal capabilities and a sophisticated internal `AttachmentProcessor`.
+The bot can process and comprehend a wide array of inputs beyond just text, thanks to the Gemini AI's native multimodal capabilities and a sophisticated internal processing pipeline.
 
-*   **Centralized URL Processing:** All URLs detected in a user's message, or in a message they are replying to, are routed through the `attachment_processor.check_and_process_url` method. This function intelligently identifies whether a URL points to a video or an image and processes it accordingly.
-*   **Image Duplication Prevention:** The `PromptBuilder` includes a mechanism to prevent redundant image processing. It tracks already-processed images within a conversational turn, ensuring that images from direct attachments, replied messages, or URLs are only included once in the API prompt if their content or URL is identical.
-*   **Enhanced Video Understanding:** The bot uses `yt-dlp` for advanced video analysis.
-    *   For most video URLs (excluding YouTube, which Gemini handles directly), `yt-dlp` extracts comprehensive metadata (title, description, duration, etc.) without downloading the entire file. This metadata is then provided to the AI as textual context.
-    *   Based on an estimated token cost, the bot decides whether to stream the full video content to the AI or just the audio track, ensuring efficient processing. This logic is encapsulated within the `_get_video_processing_details` helper method for clarity.
-*   **Image Processing:** If a URL is identified as an image, it is uploaded to Gemini, allowing the AI to "see" and analyze its content. Unsupported image types, such as `image/svg+xml`, are skipped.
-*   **Web Page Analysis:** URLs that are not identified as video or image content are passed directly to the model. The AI can then intelligently decide to use its `InternetTool` to access and analyze the content of these web pages.
+*   **Centralized URL Processing:** All URLs detected in a user's message are routed through the [`ScrapingOrchestrator`](bard/scraping/orchestrator.py), which manages a robust, multi-stage process.
+    1.  **Cache Check:** The orchestrator first checks the [`CacheManager`](bard/scraping/cache.py) for a recent, valid copy of the URL's content. If a hit is found, the cached data is returned immediately.
+    2.  **Live Processing:** If the URL is not in the cache, the orchestrator concurrently runs the [`Scraper`](bard/scraping/scraper.py) and the [`VideoHandler`](bard/scraping/video.py).
+        *   **Web Page Scraping:** The `Scraper` uses `Playwright` to launch a headless browser with the `uBlock Origin` and `Consent-O-Matic` extensions to block ads and automatically handle cookie banners. The scraper is configured to be aggressive in its blocking. It has a 30-second timeout and will retry up to three times with exponential backoff to handle transient network issues. It extracts the text content and a full-page screenshot.
+        *   **Video Detection:** The `VideoHandler` uses `yt-dlp` to determine if the URL points to a video and extracts its metadata.
+    3.  **Data Structuring:** The results from the scraper and video handler are combined into a single `ScrapedData` object.
+    4.  **Caching:** The `ScrapingOrchestrator` instructs the `CacheManager` to save the new `ScrapedData` object for future requests.
+
+*   **Caching Mechanism:**
+    *   The [`CacheManager`](bard/scraping/cache.py) stores cached data in a structured directory format. Each domain (e.g., `theverge.com`) has its own subdirectory within the `CACHE_DIR`.
+    *   For each scraped URL, a JSON file is created containing the text content, metadata, and other relevant information.
+    *   Screenshots are saved as PNG files with the same name as the JSON file, but with a `.png` extension. This keeps the screenshot and its corresponding data together.
+
+*   **Direct Attachment Handling:** The [`MessageParser`](bard/bot/message/parser.py) gathers all direct attachments from the current message and the reply chain. The [`AIConversation`](bard/ai/chat/conversation.py) service then uses the [`AttachmentProcessor`](bard/ai/files.py) to upload the media to the Gemini File API, making it available to the model.
+
+*   **Overall Goal:** This comprehensive pipeline ensures the AI always has sufficient information from URLs and direct attachments to simulate human-level understanding, enabling it to process and respond to web content and user-provided files with a level of comprehension akin to a human observer.
 
 ### 3.2. Context-Aware Conversations
 
@@ -120,14 +129,14 @@ The bot maintains a layer of memory to provide a coherent and personalized conve
 
 ### 3.3. Dynamic Interaction & Adaptation
 
-The bot is designed to be a dynamic participant in conversations, capable of adapting to real-time user actions. This is primarily managed by the [`DiscordEventHandler`](bard/bot/lifecycle/events.py:13).
+The bot is designed to be a dynamic participant in conversations, capable of adapting to real-time user actions. This is primarily managed by the [`DiscordEventHandler`](bard/bot/lifecycle/events.py:1).
 
-*   **Response Adaptation (Edits & Deletions):** If a user edits a message that the bot is processing, the `DiscordEventHandler` cancels the current task and starts a new one with the updated content. If a message is deleted, the corresponding task is cancelled, and any bot responses are removed. This ensures the bot's output always reflects the latest user input.
+*   **Response Adaptation (Edits & Deletions):** If a user edits a message that the bot is in the process of responding to, the `DiscordEventHandler` cancels the current task and starts a new one with the updated content. If a message is deleted, the corresponding task is cancelled, and any bot responses are removed. This ensures the bot's output always reflects the latest user input.
 *   **Response Cancellation:** Users can cancel a response that is currently being generated by reacting to their own message with the cancel emoji (`🚫`). The `DiscordEventHandler` detects this and stops the processing task.
 *   **Response Retry:** Users can request a new response by reacting to a bot's message with the retry emoji (`🔄`). The `DiscordEventHandler` verifies the reactor is the original author and re-runs the generation process for the initial prompt.
 *   **Thread-Based Message Splitting:** For long text-only responses, the bot enhances readability by creating a thread. It sends the first sentence as a reply and then posts the remainder of the message in a new thread. To provide immediate context, the bot asynchronously generates a concise and relevant title for the thread using a dedicated, lightweight AI model. This keeps channels clean while providing the full response. All reaction emojis (retry, tool use) are placed on the first message that starts the thread.
 *   **Discord Environment Context:** The bot injects a dynamic context block into its prompts to provide the AI with real-time information about its current environment. This block, wrapped in `[CONTEXT:START]` and `[CONTEXT:END]` tags, includes the channel name, topic, a list of present users, and the current UTC time, allowing for more grounded and contextually relevant responses.
-*   **Comprehensive Reply Chain Context:** When a user replies to a message, the bot traces the conversation backward through the reply chain, up to a configurable depth (`MAX_REPLY_DEPTH`). The `ReplyChainConstructor` class handles this by fetching each parent message, collecting its textual content and any attachments. It then assembles this information into a single, formatted string that clearly delineates the conversation for the AI. Crucially, it also gathers the raw data and MIME types of all attachments from every message in the chain, providing a complete multimodal context. This ensures the AI can understand the full scope of the conversation, including all shared images and files.
+*   **Comprehensive Reply Chain Context:** When a user replies to a message, the bot traces the conversation backward through the reply chain, up to a configurable depth (`MAX_REPLY_DEPTH`). The [`ReplyChainConstructor`](bard/ai/context/replies.py) class handles this by fetching each parent message, collecting its textual content and any attachments. It then assembles this information into a single, formatted string that clearly delineates the conversation for the AI. Crucially, it also gathers all attachments from every message in the chain, providing a complete multimodal context. This ensures the AI can understand the full scope of the conversation, including all shared images and files.
 
 ---
 
@@ -164,24 +173,24 @@ This tool transforms the bot's textual responses into natural-sounding speech, l
         *   `style` (string, optional): A parameter to influence the vocal style (e.g., tone, emotion).
     *   **Results:** The tool orchestrates a multi-step process to generate a native Discord voice message. It first obtains raw PCM audio data from the Gemini TTS API and pipes it directly to FFmpeg for efficient conversion into the OGG Opus format. Subsequently, it analyzes the generated audio to calculate its exact duration and produce a base64-encoded visual waveform. The final output—a tuple containing the OGG Opus audio bytes, its duration, and the waveform—is precisely what Discord requires to display a native, interactive voice message.
     *   **Guidelines:** Use when an audio response is explicitly requested or when a spoken reply would be more effective than text. Any text generated by the AI alongside the audio will be sent as a caption.
-    *   **Optimization Note:** To minimize initial memory footprint and reduce startup time, the `numpy` and `soundfile` libraries, which are required for waveform generation, are loaded lazily only when this tool is actively used.
 
-### 4.3. Internet Tool
+### 4.3. Search Tool
 
-*   **File:** [`bard/tools/internet.py`](bard/tools/internet.py:1)
+*   **File:** [`bard/tools/search.py`](bard/tools/search.py:1)
 *   **Emoji:** 🌐
 
-This tool empowers the AI to access and process real-time information from the internet by leveraging the Gemini API's built-in Google Search functionality. It provides a secure and powerful way to answer questions about current events, verify facts, or analyze content from web pages.
+This tool empowers the AI to access and process real-time information from the internet by leveraging the Gemini API's built-in Google Search functionality. It provides a secure and powerful way to answer questions about current events or verify facts.
 
-*   **`use_built_in_tools`:**
-    *   **Purpose:** To perform a web search or analyze the content of a URL to answer questions that are outside the AI's internal knowledge base.
+*   **`search_internet`:**
+    *   **Purpose:** To perform a web search to answer questions that are outside the AI's internal knowledge base.
     *   **Arguments:**
-        *   `search_query` (string, required): A concise query for a web search or the URL of a page to analyze.
+        *   `search_query` (string, required): A concise query for a web search.
     *   **Process:**
         1.  When invoked, the tool makes a secondary, internal call to the Gemini API.
         2.  This internal call is specially configured to enable the `GoogleSearch` tool, instructing the model to use its native search capabilities to fulfill the `search_query`.
     *   **Results:** The tool captures the summarized output from the search. The Gemini API automatically provides `grounding_metadata`, which this tool processes to extract and format source links. The final result includes a summarized overview of the information found and markdown-formatted links to the original sources for user verification.
-    *   **Guidelines:** Use for tasks requiring up-to-date information or analysis of external web content. Avoid using it for simple questions or tasks that can be answered from the AI's internal knowledge or solved with other tools like code execution.
+        *   **Grounding Source Scraping:** After the search, the [`AIConversation`](bard/ai/chat/conversation.py) service extracts the grounding source URLs from the response metadata and passes them to the `ScrapingOrchestrator`'s `process_grounding_urls` method. This triggers the standard scraping workflow for each source, providing the AI with additional context, especially visual (screenshots), for the pages it used to generate the search-based answer.
+    *   **Guidelines:** Use for tasks requiring up-to-date information. Avoid using it for simple questions or tasks that can be answered from the AI's internal knowledge or solved with other tools like code execution.
 
 ### 4.4. Code Execution Tool
 
@@ -217,11 +226,11 @@ This tool enables the AI to create and manage scheduled events directly within D
         *   `name` (string, required): The name of the event (maximum 100 characters).
         *   `start_time` (string, required): The scheduled start time in ISO 8601 format (e.g., `"2025-09-01T17:00:00Z"`).
         *   `description` (string, optional): A detailed description for the event (maximum 1000 characters). The AI can generate this if not provided.
-        *   `end_time` (string, optional): The scheduled end time in ISO 8601 format. Required if `location` is specified.
+        *   `end_time` (string, required): The scheduled end time in ISO 8601 format. Required if `location` is specified.
         *   `location` (string, optional): The location of the event (e.g., a website URL). If provided, `end_time` must also be set. If omitted, the event defaults to the channel where the request was made.
         *   `image_url` (string, optional): A direct URL for the event's cover image (e.g., ending in .png, .jpg).
     *   **Results:** Upon success, returns the ID, name, and URL of the newly created event.
-    *   **Guidelines:** Only use if event creation is requested. If the request involves a known topic (e.g., a game release), use the `InternetTool` first to find official details like date, time, and a relevant cover image URL.
+    *   **Guidelines:** Only use if event creation is requested. If the request involves a known topic (e.g., a game release), use the `SearchTool` first to find official details like date, time, and a relevant cover image URL.
 
 *   **`delete_discord_event`:**
     *   **Purpose:** Deletes an existing scheduled event from the Discord server. This action is permanent.
@@ -277,11 +286,19 @@ This section delves into the high-level architecture of the bot, explaining how 
 
 The `bard/bot` package is the heart of the bot's interaction logic, responsible for handling Discord events, processing messages, and managing the bot's lifecycle.
 
-#### 5.1.1. `bard/bot/types.py`: Core Data Structures
+#### 5.1.1. `bard/ai/chat/conversation.py`: The AI's Brain
+
+*   **[`bard/ai/chat/conversation.py`](bard/ai/chat/conversation.py:1):** The `AIConversation` class is the central nervous system of the bot's AI logic. It orchestrates the entire process of generating a response, from building the initial prompt to handling complex, multi-step tool calls. Its responsibilities include:
+    *   **Prompt Construction:** It uses the [`PromptBuilder`](bard/ai/context/prompts.py) to assemble all contextual information—including user messages, attachments, scraped data, and system instructions—into a coherent prompt for the Gemini model.
+    *   **Main AI Call:** It makes the primary call to the Gemini API to get the initial response.
+    *   **Tool Execution Loop:** If the model requests to use a tool, `AIConversation` enters a loop. It calls the appropriate tool via the [`ToolRegistry`](bard/tools/registry.py), sends the tool's output back to the model, and waits for the next response, continuing this process until the model generates a final answer.
+    *   **Response Finalization:** It consolidates all the text, media, and tool usage indicators from the conversation into a single `FinalAIResponse` object, which is then passed to the `MessageSender`.
+
+#### 5.1.2. `bard/bot/types.py`: Core Data Structures
 
 *   **[`bard/bot/types.py`](bard/bot/types.py:1):** This file defines the essential data structures used throughout the bot's operations. It contains dataclasses like `ParsedMessageContext` and `VideoMetadata`, which provide structured, type-safe containers for passing complex data between different services. By centralizing these core types, it ensures consistency and improves code readability across the application.
 
-#### 5.1.2. `bard/bot/core`: Core Orchestration
+#### 5.1.3. `bard/bot/core`: Core Orchestration
 
 This sub-package contains the central components that orchestrate the message processing workflow.
 
@@ -293,29 +310,29 @@ This sub-package contains the central components that orchestrate the message pr
     3.  The resulting AI response is then passed to the [`MessageSender`](bard/bot/message/sender.py:1), which orchestrates the final delivery to Discord, delegating tasks like message splitting, threading, and voice message handling to specialized managers.
     4.  Finally, it uses the [`ReactionManager`](bard/bot/message/reactions.py:1) to add any relevant tool-use emojis to the bot's message and to handle reaction-based events like retries.
 
-    This coordinated delegation ensures a clean separation of concerns, where each component has a distinct and well-defined responsibility. In the event of a `google.genai.errors.ServerError` (e.g., when the model is overloaded), the `Coordinator` gracefully handles the exception by sending a user-friendly error message and adding a retry reaction, ensuring a consistent user experience.
+    This coordinated delegation ensures a clean separation of concerns, where each component has a distinct and well-defined responsibility. In the event of a `google.api_core.exceptions.ServerError` (e.g., when the model is overloaded), the `Coordinator` gracefully handles the exception by sending a user-friendly error message and adding a retry reaction, ensuring a consistent user experience.
 
 *   **[`bard/bot/core/handlers.py`](bard/bot/core/handlers.py:1):** This file defines the `BotHandlers` class, which is implemented as a `commands.Cog`. It serves as the raw entry point for all incoming `discord.py` events. True to its name, this class acts purely as a handler and dispatcher, containing no business logic itself. It immediately delegates events to the appropriate specialized services. For instance, new messages are passed to the `TaskLifecycleManager` to initiate the main processing workflow via the `Coordinator`, while other events like message edits, deletions, or reactions are forwarded directly to the `DiscordEventHandler`. The `on_ready` method has the specific responsibility of setting the bot's user ID in other services and delegating presence updates to the `PresenceManager`.
 
-#### 5.1.3. `bard/bot/lifecycle`: Lifecycle Event Management
+#### 5.1.4. `bard/bot/lifecycle`: Lifecycle Event Management
 
 This sub-package is responsible for managing the bot's response to Discord events that affect the state of in-flight message processing tasks.
 
 *   **[`bard/bot/lifecycle/events.py`](bard/bot/lifecycle/events.py:1):** The `DiscordEventHandler` class is the core of this package. It contains the specific business logic for handling events that can modify an ongoing task, such as message edits, deletions, and specific user reactions. It works in close coordination with the `TaskLifecycleManager` to orchestrate the cancellation, reprocessing, or cleanup of tasks. For example:
-    *   `handle_edit`: When a user edits a message, this handler cancels the existing processing task and starts a new one with the updated content. If the edit removes the bot's mention, it cleans up by deleting any previous bot responses, including the initial message of a thread.
+    *   `handle_edit`: When a user edits a message, this handler cancels the existing processing task and starts a new one with the updated content.
     *   `handle_delete`: If a user deletes a message being processed, this handler cancels the task and removes all associated bot responses.
     *   `handle_retry_reaction`: Listens for the retry emoji (`🔄`) on a bot message. If the reaction is from the original user, it triggers the `TaskLifecycleManager` to re-process the initial prompt.
     *   `handle_cancel_reaction`: Listens for the cancel emoji (`🚫`) on a user's message. If the bot is processing that message, it cancels the task.
 
 *   **[`bard/bot/lifecycle/presence.py`](bard/bot/lifecycle/presence.py:1):** The `PresenceManager` class is responsible for setting the bot's Discord presence upon startup. It reads the desired activity type (e.g., "Playing", "Watching") and status text directly from the [`config.py`](config.py:1) file. This provides a simple and direct way to configure the bot's appearance in the server member list without requiring code changes.
 
-#### 5.1.4. `bard/bot/message`: Message Content and Delivery
+#### 5.1.5. `bard/bot/message`: Message Content and Delivery
 
 This sub-package is responsible for parsing incoming messages, formatting and sending outgoing responses, and managing other message-related interactions.
 
 *   **[`bard/bot/message/parser.py`](bard/bot/message/parser.py:1):** The `MessageParser` is a critical component responsible for the initial processing of all incoming Discord messages. It transforms a raw `discord.Message` object into a structured `ParsedMessageContext` dataclass, preparing the data for the AI. Its key responsibilities include:
-    *   **Reply Chain Processing:** It delegates to the `ReplyChainConstructor` to recursively trace a conversation's reply chain, gathering text and attachments from previous messages to provide a complete conversational context.
-    *   **Content Extraction:** It extracts the message content, attachments, and URLs from both the current message and the entire reply chain.
+    *   **Reply Chain Processing:** It delegates to the [`ReplyChainConstructor`](bard/ai/context/replies.py) to recursively trace a conversation's reply chain, gathering text and attachments from previous messages to provide a complete conversational context.
+    *   **URL and Attachment Processing:** It extracts all URLs from the message content and reply chain, delegating their processing to the `ScrapingOrchestrator`. All scraped URLs, even those without extracted text, are passed to the AI model for full context. It also gathers all direct attachments from the current message and the reply chain.
     *   **Contextualization:** It creates a detailed `DiscordContext` object containing environmental information like the channel, server, and present users.
     *   **Data Structuring:** It assembles all the extracted information into the `ParsedMessageContext`, a clean and organized dataclass that serves as the single source of truth for the `AIConversation` service.
 
@@ -390,11 +407,9 @@ This sub-package contains modules related to system-level tasks, such as managin
 
 #### 5.4.2. `bard/util/data`: Data Persistence and Parsing Utilities
 
-This sub-package contains modules for handling data persistence, storage, and parsing.
+This sub-package contains modules for handling data persistence and storage.
 
 *   **[`bard/util/data/storage.py`](bard/util/data/storage.py:1):** This module provides the `JsonStorageManager` class, a thread-safe base for managing data stored in JSON files. It uses `asyncio` locks to prevent race conditions and data corruption when reading from or writing to files. The class includes methods for loading and saving data, ensuring that file operations are atomic and robust.
-
-*   **[`bard/util/data/parser.py`](bard/util/data/parser.py:1):** This module provides helper functions for parsing various data formats. A key utility, `extract_image_url_from_html`, intelligently scans HTML content to find the most representative image URL. It prioritizes social media meta tags (Open Graph `og:image` and Twitter `twitter:image`) before falling back to the first `<img>` tag, and it correctly resolves relative URLs to absolute ones.
 
 #### 5.4.3. `bard/util/media`: Media Processing Utilities
 
