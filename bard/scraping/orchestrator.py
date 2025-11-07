@@ -57,14 +57,6 @@ class ScrapingOrchestrator:
         results = await asyncio.gather(*tasks)
         return [data for data in results if data]
 
-    async def process_grounding_urls(self, urls: List[str]) -> List[ScrapedData]:
-        """
-        Processes a list of grounding source URLs from a search tool call.
-        This is meant to provide additional visual context (screenshots) for the AI.
-        """
-        logger.info(f"Processing {len(urls)} grounding source URLs.")
-        return await self.process_urls(urls)
-
     async def process_url(self, url: str) -> Optional[ScrapedData]:
         """
         Processes a single URL by first resolving redirects, then checking the cache,

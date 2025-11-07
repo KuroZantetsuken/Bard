@@ -189,7 +189,6 @@ This tool empowers the AI to access and process real-time information from the i
         1.  When invoked, the tool makes a secondary, internal call to the Gemini API.
         2.  This internal call is specially configured to enable the `GoogleSearch` tool, instructing the model to use its native search capabilities to fulfill the `search_query`.
     *   **Results:** The tool captures the summarized output from the search. The Gemini API automatically provides `grounding_metadata`, which this tool processes to extract and format source links. The final result includes a summarized overview of the information found and markdown-formatted links to the original sources for user verification.
-        *   **Grounding Source Scraping:** After the search, the [`AIConversation`](bard/ai/chat/conversation.py) service extracts the grounding source URLs from the response metadata and passes them to the `ScrapingOrchestrator`'s `process_grounding_urls` method. This triggers the standard scraping workflow for each source, providing the AI with additional context, especially visual (screenshots), for the pages it used to generate the search-based answer.
     *   **Guidelines:** Use for tasks requiring up-to-date information. Avoid using it for simple questions or tasks that can be answered from the AI's internal knowledge or solved with other tools like code execution.
 
 ### 4.4. Code Execution Tool

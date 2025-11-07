@@ -343,36 +343,6 @@ class AIConversation:
                             tool_result_part, tool_context
                         )
 
-                if tool_context.grounding_sources_md:
-                    urls = _parse_urls_from_markdown(tool_context.grounding_sources_md)
-                    if urls:
-                        scraped_data = (
-                            await self.scraping_orchestrator.process_grounding_urls(
-                                urls
-                            )
-                        )
-                        grounding_parts = []
-                        for data in scraped_data:
-                            if data.text_content:
-                                grounding_parts.append(
-                                    gemini_types.Part(
-                                        text=f"URL Content: {data.resolved_url}\n{data.text_content}"
-                                    )
-                                )
-                            if data.screenshot_data:
-                                grounding_parts.append(
-                                    gemini_types.Part(
-                                        inline_data=gemini_types.Blob(
-                                            mime_type="image/png",
-                                            data=data.screenshot_data,
-                                        )
-                                    )
-                                )
-                        if grounding_parts:
-                            contents_for_gemini.append(
-                                gemini_types.Content(role="user", parts=grounding_parts)
-                            )
-
                 for tr_part in tool_response_parts:
                     contents_for_gemini.append(
                         gemini_types.Content(role="function", parts=[tr_part])
