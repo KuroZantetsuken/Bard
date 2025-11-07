@@ -405,13 +405,7 @@ This sub-package contains modules related to system-level tasks, such as managin
 
 *   **[`bard/util/system/files.py`](bard/util/system/files.py):** This module provides shared utilities for creating and managing temporary files. The `create_temp_file` async context manager is used across different parts of the application for handling attachments (like generated images or code files) and other file-based operations, ensuring that temporary files are reliably cleaned up after use.
 
-#### 5.4.2. `bard/util/data`: Data Persistence and Parsing Utilities
-
-This sub-package contains modules for handling data persistence and storage.
-
-*   **[`bard/util/data/storage.py`](bard/util/data/storage.py):** This module provides the `JsonStorageManager` class, a thread-safe base for managing data stored in JSON files. It uses `asyncio` locks to prevent race conditions and data corruption when reading from or writing to files. The class includes methods for loading and saving data, ensuring that file operations are atomic and robust.
-
-#### 5.4.3. `bard/util/media`: Media Processing Utilities
+#### 5.4.2. `bard/util/media`: Media Processing Utilities
 
 This sub-package provides a suite of tools for handling various media-related tasks, from MIME type detection to complex audio and video processing.
 
