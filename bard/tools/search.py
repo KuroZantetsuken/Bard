@@ -34,7 +34,7 @@ class SearchTool(BaseTool):
             types.FunctionDeclaration(
                 name="search_internet",
                 description=(
-                    "Purpose: This powerful tool enables the AI to access external, real-time information from the internet. This is crucial for answering factual questions, retrieving current events, and understanding content that are not part of the AI's internal knowledge base. Arguments: This function accepts a `search_query` argument, which is a clear and concise query for internet search. Results: Upon execution, this tool returns a concise, summarized overview of the information retrieved from web searches. This summary includes relevant snippets of information and, critically, provides markdown-formatted source links for full attribution and user verification, allowing users to easily access the original data sources. Restrictions/Guidelines: This tool should be primarily used for tasks that require up-to-date information or external factual verification. It is explicitly designed to expand the AI's knowledge beyond its training data. Conversely, this tool must not be used for retrieving information that is already part of the AI's internal knowledge, or for tasks that can be solved computationally or logically by other internal tools."
+                    "Purpose: This powerful tool enables the AI to access external, real-time information from the internet. This is crucial for answering factual questions, retrieving current events, and understanding content that are not part of the AI's internal knowledge base. Arguments: This function accepts a `search_query` argument, which is a clear and concise query for internet search. Results: Upon execution, this tool returns a concise, summarized overview of the information retrieved from web searches. This summary includes relevant snippets of information and, critically, provides markdown-formatted source links for full attribution and user verification, allowing users to easily access the original data sources. Restrictions/Guidelines: This tool should be primarily used for tasks that require up-to-date information or external factual verification. It is explicitly designed to expand the AI's knowledge beyond its training data. Conversely, this tool must not be used for retrieving information that is already part of the AI's internal knowledge, or for tasks that can be solved computationally or logically by other internal tools. Always preserve the citations and insert them inline during your final answer exactly how the tool returns its answer to you, including the URL markdown masking in this format: [[1]](<https://vertexaisearch.cloud.google.com/grounding-api-redirect/...>)."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
@@ -225,32 +225,33 @@ class SearchTool(BaseTool):
 
             if (
                 candidate.grounding_metadata
+                and candidate.grounding_metadata.grounding_supports
                 and candidate.grounding_metadata.grounding_chunks
             ):
+                text = tooling_text_result
+                supports = candidate.grounding_metadata.grounding_supports
                 chunks = candidate.grounding_metadata.grounding_chunks
-                if chunks:
-                    source_links = []
-                    unique_sources = {}
-                    for chunk in chunks:
-                        if (
-                            hasattr(chunk, "web")
-                            and hasattr(chunk.web, "uri")
-                            and hasattr(chunk.web, "title")
-                            and chunk.web.uri
-                            and chunk.web.title
-                        ):
-                            if chunk.web.uri not in unique_sources:
-                                title = chunk.web.title.replace("]", "").replace(
-                                    "[", ""
-                                )
-                                unique_sources[chunk.web.uri] = (
-                                    f"[{title}](<{chunk.web.uri}>)"
-                                )
-                    if unique_sources:
-                        source_links = list(unique_sources.values())
-                        grounding_sources_md = "-# " + ", ".join(source_links)
-                        setattr(context, "grounding_sources_md", grounding_sources_md)
 
+                sorted_supports = sorted(
+                    supports, key=lambda s: s.segment.end_index, reverse=True
+                )
+
+                for support in sorted_supports:
+                    end_index = support.segment.end_index
+                    if support.grounding_chunk_indices:
+                        citation_links = []
+                        for i in support.grounding_chunk_indices:
+                            if i < len(chunks):
+                                uri = chunks[i].web.uri
+                                citation_links.append(f"[[{i + 1}]](<{uri}>)")
+
+                        if citation_links:
+                            citation_string = "".join(citation_links)
+                            text = text[:end_index] + citation_string + text[end_index:]
+
+                tooling_text_result = text
+
+            response_data["tool_output"] = tooling_text_result
             return types.Part(
                 function_response=types.FunctionResponse(
                     name=function_name, response=response_data

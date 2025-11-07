@@ -188,7 +188,7 @@ This tool empowers the AI to access and process real-time information from the i
     *   **Process:**
         1.  When invoked, the tool makes a secondary, internal call to the Gemini API.
         2.  This internal call is specially configured to enable the `GoogleSearch` tool, instructing the model to use its native search capabilities to fulfill the `search_query`.
-    *   **Results:** The tool captures the summarized output from the search. The Gemini API automatically provides `grounding_metadata`, which this tool processes to extract and format source links. The final result includes a summarized overview of the information found and markdown-formatted links to the original sources for user verification.
+    *   **Results:** The tool captures the summarized output from the search. The Gemini API automatically provides `grounding_metadata`, which this tool processes to inject inline citations directly into the response text. Using the `grounding_supports` and `grounding_chunks` from the metadata, the tool inserts citations in the format `[[1]](<url>)` at the appropriate positions in the text, providing verifiable sources for the model's claims. The main AI is instructed to preserve these citations in its final response.
     *   **Guidelines:** Use for tasks requiring up-to-date information. Avoid using it for simple questions or tasks that can be answered from the AI's internal knowledge or solved with other tools like code execution.
 
 ### 4.4. Code Execution Tool
@@ -340,6 +340,7 @@ This sub-package is responsible for parsing incoming messages, formatting and se
     *   It relies on the `VoiceMessageSender` to handle the complexities of sending native Discord voice messages.
     *   It interfaces with the `MessageManager` to delete old messages when a response is being edited or retried.
     *   It leverages a utility for creating temporary files to manage attachments for images, code, and audio fallbacks.
+    *   It includes advanced logic to split long messages into chunks, ensuring that masked markdown URLs are never broken across multiple messages.
 
     By orchestrating these specialized handlers, the `MessageSender` ensures that the final message is formatted and delivered correctly, whether as a simple text reply, a multi-message thread, or a native voice message.
 

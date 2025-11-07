@@ -35,13 +35,7 @@ class ImageGenerationTool(BaseTool):
             types.FunctionDeclaration(
                 name="generate_image",
                 description=(
-                    "Generate a high-quality image based on a detailed text description. "
-                    "Use this tool for creative tasks requiring visual output, such as "
-                    "creating illustrations, photorealistic scenes, logos, or other visual assets. "
-                    "Provide a comprehensive and descriptive prompt to guide the image generation process. "
-                    "Example: 'A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, sun-etched wrinkles and a warm, knowing smile. He is carefully inspecting a freshly glazed tea bowl. The scene is illuminated by soft, golden hour light streaming through a window.' "
-                    "Arguments: This function accepts a `prompt` argument, which is a string containing the detailed description for the image to be generated."
-                    "Results: Upon successful generation, this tool returns information about the generated image, including its filename and confirmation of generation."
+                    "Generate a high-quality image based on a detailed text description. Use this tool for creative tasks requiring visual output, such ascreating illustrations, photorealistic scenes, logos, or other visual assets. Provide a comprehensive and descriptive prompt to guide the image generation process. Arguments: This function accepts a `prompt` argument, which is a string containing the detailed description for the image to be generated. Results: Upon successful generation, this tool returns information about the generated image, including its filename and confirmation of generation."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,

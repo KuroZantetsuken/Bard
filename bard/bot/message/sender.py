@@ -47,15 +47,62 @@ class MessageSender:
         self.voice_sender = VoiceMessageSender(bot_token, logger)
         self.message_manager = MessageManager(logger)
 
+    def _split_long_paragraph(self, paragraph: str) -> List[str]:
+        """
+        Splits a single long paragraph into chunks, attempting to avoid splitting
+        inside a masked markdown URL.
+        """
+        chunks = []
+        remaining_text = paragraph
+
+        while len(remaining_text) > self.max_message_length:
+            split_pos = self.max_message_length
+
+            best_split_pos = remaining_text.rfind(" ", 0, split_pos)
+            if best_split_pos != -1:
+                split_pos = best_split_pos
+
+            last_open_bracket = remaining_text.rfind("[", 0, split_pos)
+            if last_open_bracket != -1:
+                next_close_bracket = remaining_text.find("]", last_open_bracket)
+                if next_close_bracket != -1 and next_close_bracket < split_pos:
+                    if (
+                        remaining_text[next_close_bracket + 1 : next_close_bracket + 2]
+                        == "("
+                    ):
+                        link_end = remaining_text.find(")", next_close_bracket)
+                        if (
+                            link_end != -1
+                            and split_pos > last_open_bracket
+                            and split_pos < link_end
+                        ):
+                            if last_open_bracket > 0:
+                                split_pos = last_open_bracket
+
+            if last_open_bracket != -1:
+                last_close_bracket_before_split = remaining_text.rfind(
+                    "]", 0, split_pos
+                )
+                if last_open_bracket > last_close_bracket_before_split:
+                    if last_open_bracket > 0:
+                        split_pos = last_open_bracket
+
+            if split_pos == 0:
+                split_pos = self.max_message_length
+
+            chunks.append(remaining_text[:split_pos])
+            remaining_text = remaining_text[split_pos:].lstrip()
+
+        if remaining_text:
+            chunks.append(remaining_text)
+
+        return chunks
+
     def _split_message_into_chunks(self, text_content: str) -> List[str]:
         """
         Splits a long text message into chunks that fit Discord's message length limit.
-        It attempts to split by paragraphs first to maintain readability.
-
-        Args:
-            text_content: The full text content to split.
-        Returns:
-            A list of strings, where each string is a message chunk.
+        It attempts to split by paragraphs first to maintain readability and avoids
+        splitting masked markdown URLs.
         """
         if len(text_content) <= self.max_message_length:
             return [text_content]
@@ -74,17 +121,20 @@ class MessageSender:
                     current_chunk = ""
 
                 if len(paragraph_to_add) > self.max_message_length:
-                    for k in range(0, len(paragraph_to_add), self.max_message_length):
-                        chunks.append(paragraph_to_add[k : k + self.max_message_length])
+                    sub_chunks = self._split_long_paragraph(paragraph_to_add)
+                    if sub_chunks:
+                        chunks.extend(sub_chunks[:-1])
+                        current_chunk = sub_chunks[-1]
                 else:
                     current_chunk = paragraph_to_add
+
         if current_chunk.strip():
             chunks.append(current_chunk.strip())
 
-        if not chunks:
-            chunks = [text_content[: self.max_message_length]]
+        if not chunks and text_content:
+            chunks.extend(self._split_long_paragraph(text_content))
 
-        return chunks
+        return [chunk for chunk in chunks if chunk]
 
     async def _send_single_message_with_fallback(
         self,
