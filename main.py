@@ -2,12 +2,12 @@
 import logging
 import sys
 
-from bard.util.logging import setup_logging_config
+from bard.util.logging import LoggingConfigurator
 
 if __name__ == "__main__":
     logger = logging.getLogger("Bard")
 
-    setup_logging_config()
+    LoggingConfigurator().setup()
     try:
         from bard.bot.bot import run
 

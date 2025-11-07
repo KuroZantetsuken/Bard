@@ -8,7 +8,7 @@ from bard.ai.chat.titler import ThreadTitler
 from bard.bot.message.manager import MessageManager
 from bard.bot.message.threading import ThreadManager
 from bard.bot.message.voice import VoiceMessageSender
-from bard.util.system.files import create_temp_file
+from bard.util.system.files import TemporaryFile
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -299,7 +299,7 @@ class MessageSender:
 
         files_to_send: List[discord.File] = []
         if image_data:
-            async with create_temp_file(image_data, ".png") as temp_image_path:
+            async with TemporaryFile(image_data, ".png") as temp_image_path:
                 filename = image_filename or "image.png"
                 _, ext = os.path.splitext(filename)
                 if not ext:
@@ -307,7 +307,7 @@ class MessageSender:
                 files_to_send.append(discord.File(temp_image_path, filename=filename))
 
         if code_data:
-            async with create_temp_file(code_data, ".py") as temp_code_path:
+            async with TemporaryFile(code_data, ".py") as temp_code_path:
                 filename = code_filename or "code.py"
                 _, ext = os.path.splitext(filename)
                 if not ext:
@@ -332,7 +332,7 @@ class MessageSender:
                 all_sent_messages.append(sent_audio_message)
             else:
                 try:
-                    async with create_temp_file(audio_data, ".ogg") as temp_audio_path:
+                    async with TemporaryFile(audio_data, ".ogg") as temp_audio_path:
                         file = discord.File(
                             temp_audio_path, filename="voice_response.ogg"
                         )

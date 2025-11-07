@@ -5,7 +5,7 @@ from google.genai import types
 
 from bard.ai.config import GeminiConfigManager
 from bard.tools.base import BaseTool, ToolContext
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 
 logger = logging.getLogger("Bard")
 
@@ -154,7 +154,7 @@ class CodeExecutionTool(BaseTool):
                 "config": code_exec_config.model_dump(),
             }
             logger.debug(
-                f"Gemini API (code_execution) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+                f"Gemini API (code_execution) request:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(request_payload))}"
             )
             response = await gemini_core.aio.models.generate_content(
                 model=self.context.config.MODEL_ID,
@@ -162,7 +162,7 @@ class CodeExecutionTool(BaseTool):
                 config=code_exec_config,
             )
             logger.debug(
-                f"Gemini API (code_execution) response:\n{prettify_json_for_logging(clean_dict(response.dict()))}"
+                f"Gemini API (code_execution) response:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(response.dict()))}"
             )
             text_output = ""
             image_generated = False

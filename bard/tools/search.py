@@ -5,7 +5,7 @@ from google.genai import types
 
 from bard.ai.config import GeminiConfigManager
 from bard.tools.base import BaseTool, ToolContext
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 
 logger = logging.getLogger("Bard")
 
@@ -170,7 +170,7 @@ class SearchTool(BaseTool):
                 "config": tooling_gen_config.model_dump(),
             }
             logger.debug(
-                f"Gemini API (native_tools) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+                f"Gemini API (native_tools) request:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(request_payload))}"
             )
 
             logger.info("Calling Gemini API for search tool.")
@@ -181,7 +181,7 @@ class SearchTool(BaseTool):
             )
             logger.info("Finished calling Gemini API for search tool.")
             logger.debug(
-                f"Gemini API (native_tools) response:\n{prettify_json_for_logging(clean_dict(tooling_response.model_dump()))}"
+                f"Gemini API (native_tools) response:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(tooling_response.model_dump()))}"
             )
             if not tooling_response.candidates:
                 details = (

@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from bard.util.logging import setup_logging_config
+from bard.util.logging import LoggingConfigurator
 
 logger = logging.getLogger("Bard")
 
@@ -92,7 +92,7 @@ class BotRestarter(FileSystemEventHandler):
 
 
 if __name__ == "__main__":
-    setup_logging_config()
+    LoggingConfigurator().setup()
     load_dotenv()
     logger.info("Starting hot-reloader.")
 

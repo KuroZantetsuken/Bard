@@ -4,28 +4,32 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 
-@asynccontextmanager
-async def create_temp_file(data: bytes, suffix: str) -> AsyncIterator[str]:
-    """
-    Asynchronously creates a temporary file, writes data to it, and ensures it's cleaned up
-    upon exiting the context.
+class TemporaryFile:
+    def __init__(self, data: bytes, suffix: str):
+        self.data = data
+        self.suffix = suffix
+        self.temp_path = None
 
-    Args:
-        data: The bytes data to write to the temporary file.
-        suffix: The file extension (e.g., ".png", ".py", ".ogg").
+    async def __aenter__(self) -> str:
+        """
+        Asynchronously creates a temporary file and writes data to it.
 
-    Yields:
-        The path to the created temporary file.
-    """
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-            temp_path = temp_file.name
-            temp_file.write(data)
-        yield temp_path
-    finally:
-        if temp_path and os.path.exists(temp_path):
+        Returns:
+            The path to the created temporary file.
+        """
+        with tempfile.NamedTemporaryFile(
+            suffix=self.suffix, delete=False
+        ) as temp_file:
+            self.temp_path = temp_file.name
+            temp_file.write(self.data)
+        return self.temp_path
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Cleans up the temporary file upon exiting the context.
+        """
+        if self.temp_path and os.path.exists(self.temp_path):
             try:
-                os.unlink(temp_path)
+                os.unlink(self.temp_path)
             except OSError:
                 pass

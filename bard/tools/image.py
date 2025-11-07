@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from google.genai import types
 
 from bard.tools.base import BaseTool, ToolContext
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 
 logger = logging.getLogger("Bard")
 
@@ -105,7 +105,7 @@ class ImageGenerationTool(BaseTool):
                 f"ImageGenerationTool: Calling Gemini API with model: {image_model_id}, prompt: '{prompt}'"
             )
             logger.debug(
-                f"Gemini API (image_generation) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+                f"Gemini API (image_generation) request:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(request_payload))}"
             )
 
             response = await gemini_core.aio.models.generate_content(
@@ -116,7 +116,7 @@ class ImageGenerationTool(BaseTool):
                 f"ImageGenerationTool: Received response from Gemini API. Candidates: {len(response.candidates) if response.candidates else 0}"
             )
             logger.debug(
-                f"Gemini API (image_generation) response:\n{prettify_json_for_logging(clean_dict(response.dict()))}"
+                f"Gemini API (image_generation) response:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(response.dict()))}"
             )
 
             generated_filename = None

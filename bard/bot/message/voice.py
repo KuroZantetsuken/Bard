@@ -4,7 +4,7 @@ from typing import Optional
 import aiohttp
 import discord
 
-from bard.util.system.files import create_temp_file
+from bard.util.system.files import TemporaryFile
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -47,7 +47,7 @@ class VoiceMessageSender:
             The sent Discord Message object if successful, None otherwise.
         """
         try:
-            async with create_temp_file(audio_data, ".ogg") as temp_audio_path:
+            async with TemporaryFile(audio_data, ".ogg") as temp_audio_path:
                 async with aiohttp.ClientSession() as session:
                     channel_id = str(message_to_reply_to.channel.id)
                     upload_url = (

@@ -13,7 +13,7 @@ from bard.tools.base import (AttachmentProcessorProtocol, BaseTool,
                              FFmpegWrapperProtocol, GeminiCoreProtocol,
                              MimeDetectorProtocol, ResponseExtractorProtocol,
                              ToolContext)
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -218,7 +218,7 @@ class ToolRegistry:
             An optional Gemini types.Part object containing the result of the function execution.
         """
         logger.info(
-            f"Executing tool function: {function_name} with args: {prettify_json_for_logging(clean_dict(args))}"
+            f"Executing tool function: {function_name} with args: {LogFormatter.prettify_json(LogSanitizer.clean_dict(args))}"
         )
         tool_class_name = self.function_to_tool_map.get(function_name)
         if not tool_class_name:
@@ -259,11 +259,11 @@ class ToolRegistry:
                 and hasattr(result.function_response, "response")
             ):
                 logger.info(
-                    f"Tool function {function_name} returned: {prettify_json_for_logging(clean_dict(result.function_response.response))}"
+                    f"Tool function {function_name} returned: {LogFormatter.prettify_json(LogSanitizer.clean_dict(result.function_response.response))}"
                 )
             else:
                 logger.info(
-                    f"Tool function {function_name} returned: {prettify_json_for_logging(clean_dict(result))}"
+                    f"Tool function {function_name} returned: {LogFormatter.prettify_json(LogSanitizer.clean_dict(result))}"
                 )
 
             if isinstance(result, gemini_types.FunctionResponse):

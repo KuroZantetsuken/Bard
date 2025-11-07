@@ -5,15 +5,19 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
-def clean_dict(d: Any) -> Any:
-    """
-    Recursively removes keys with None values from a dictionary or list of dictionaries.
-    """
-    if isinstance(d, dict):
-        return {k: clean_dict(v) for k, v in d.items() if v is not None}
-    if isinstance(d, list):
-        return [clean_dict(i) for i in d if i is not None]
-    return d
+class LogSanitizer:
+    @staticmethod
+    def clean_dict(d: Any) -> Any:
+        """
+        Recursively removes keys with None values from a dictionary or list of dictionaries.
+        """
+        if isinstance(d, dict):
+            return {
+                k: LogSanitizer.clean_dict(v) for k, v in d.items() if v is not None
+            }
+        if isinstance(d, list):
+            return [LogSanitizer.clean_dict(i) for i in d if i is not None]
+        return d
 
 
 class JsonPayloadFilter(logging.Filter):
@@ -131,75 +135,85 @@ def json_serializer(obj: Any) -> str:
     return str(obj)
 
 
-def prettify_json_for_logging(data: Any) -> str:
-    """
-    Formats a JSON-like data structure into a human-readable, indented string for logging.
-    It also sanitizes the data before pretty-printing.
-    It now handles google.genai.types objects by converting them to dictionaries.
-    """
-    try:
-        if hasattr(data, "model_dump"):
-            data = data.model_dump()
-        elif hasattr(data, "to_dict"):
-            data = data.to_dict()
+class LogFormatter:
+    @staticmethod
+    def prettify_json(data: Any) -> str:
+        """
+        Formats a JSON-like data structure into a human-readable, indented string for logging.
+        It also sanitizes the data before pretty-printing.
+        It now handles google.genai.types objects by converting them to dictionaries.
+        """
+        try:
+            if hasattr(data, "model_dump"):
+                data = data.model_dump()
+            elif hasattr(data, "to_dict"):
+                data = data.to_dict()
 
-        if isinstance(data, str):
-            try:
-                data = json.loads(data)
-            except json.JSONDecodeError:
-                return str(data)
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    return str(data)
 
-        sanitized_data = sanitize_response_for_logging(data)
+            sanitized_data = sanitize_response_for_logging(data)
 
-        return json.dumps(sanitized_data, indent=2, default=json_serializer)
-    except (json.JSONDecodeError, TypeError):
-        return str(data)
+            return json.dumps(sanitized_data, indent=2, default=json_serializer)
+        except (json.JSONDecodeError, TypeError):
+            return str(data)
 
 
-def setup_logging_config():
-    """
-    Configures the application's logging system based on settings in `config.py`.
-    It initializes console and file handlers conditionally, applies filters,
-    and prunes old log files at startup.
-    """
-    from config import Config
+class LoggingConfigurator:
+    def __init__(self):
+        from config import Config
 
-    if Config.LOG_PRUNE_ON_STARTUP:
-        prune_old_logs(
-            Config.LOG_DIR, Config.LOG_FILE_MAX_AGE_DAYS, Config.LOG_FILE_MAX_COUNT
-        )
+        self.config = Config
 
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
+    def setup(self):
+        """
+        Configures the application's logging system based on settings in `config.py`.
+        It initializes console and file handlers conditionally, applies filters,
+        and prunes old log files at startup.
+        """
+        if self.config.LOG_PRUNE_ON_STARTUP:
+            prune_old_logs(
+                self.config.LOG_DIR,
+                self.config.LOG_FILE_MAX_AGE_DAYS,
+                self.config.LOG_FILE_MAX_COUNT,
+            )
 
-    logger = logging.getLogger("Bard")
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
 
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
+        logger = logging.getLogger("Bard")
 
-    if Config.LOG_CONSOLE_ENABLED:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(Config.LOG_CONSOLE_LEVEL)
-        console_formatter = logging.Formatter(
-            "%(asctime)s %(levelname)-8s %(message)s", "%H:%M:%S"
-        )
-        console_handler.setFormatter(console_formatter)
-        console_handler.addFilter(JsonPayloadFilter())
-        logger.addHandler(console_handler)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
 
-    if Config.LOG_FILE_ENABLED:
-        os.makedirs(Config.LOG_DIR, exist_ok=True)
-        log_filename = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.log")
-        log_filepath = os.path.join(Config.LOG_DIR, log_filename)
-        file_handler = logging.FileHandler(log_filepath, mode="w", encoding="utf-8")
-        file_handler.setLevel(Config.LOG_FILE_LEVEL)
-        detailed_formatter = logging.Formatter(
-            "%(asctime)s [%(levelname)-5s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s"
-        )
-        file_handler.setFormatter(detailed_formatter)
+        if self.config.LOG_CONSOLE_ENABLED:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(self.config.LOG_CONSOLE_LEVEL)
+            console_formatter = logging.Formatter(
+                "%(asctime)s %(levelname)-8s %(message)s", "%H:%M:%S"
+            )
+            console_handler.setFormatter(console_formatter)
+            console_handler.addFilter(JsonPayloadFilter())
+            logger.addHandler(console_handler)
 
-        logger.addHandler(file_handler)
+        if self.config.LOG_FILE_ENABLED:
+            os.makedirs(self.config.LOG_DIR, exist_ok=True)
+            log_filename = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.log")
+            log_filepath = os.path.join(self.config.LOG_DIR, log_filename)
+            file_handler = logging.FileHandler(
+                log_filepath, mode="w", encoding="utf-8"
+            )
+            file_handler.setLevel(self.config.LOG_FILE_LEVEL)
+            detailed_formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)-5s] [%(name)s:%(module)s:%(funcName)s:%(lineno)d] %(message)s"
+            )
+            file_handler.setFormatter(detailed_formatter)
 
-    log_message = "Logging configured."
-    logger.info(log_message)
-    return logger
+            logger.addHandler(file_handler)
+
+        log_message = "Logging configured."
+        logger.info(log_message)
+        return logger

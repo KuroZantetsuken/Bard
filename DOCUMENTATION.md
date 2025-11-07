@@ -403,7 +403,7 @@ This sub-package contains modules related to system-level tasks, such as managin
 
     A key architectural feature is its relationship with the `Coordinator`. The `TaskLifecycleManager` needs the `Coordinator` to start the processing workflow, but the `Coordinator` may also depend on services that need the manager. To solve this circular dependency, the `Coordinator` instance is injected *after* initialization via a property setter. This allows both components to be instantiated without a deadlock and then wired together. The manager also ensures robust operation by using a `done_callback` to clean up completed or cancelled tasks, log any unhandled exceptions, and remove the `🚫` cancel reaction from the original message, preventing resource leaks and providing clear error visibility.
 
-*   **[`bard/util/system/files.py`](bard/util/system/files.py):** This module provides shared utilities for creating and managing temporary files. The `create_temp_file` async context manager is used across different parts of the application for handling attachments (like generated images or code files) and other file-based operations, ensuring that temporary files are reliably cleaned up after use.
+*   **[`bard/util/system/files.py`](bard/util/system/files.py):** This module provides shared utilities for creating and managing temporary files. The `TemporaryFile` async context manager is used across different parts of the application for handling attachments (like generated images or code files) and other file-based operations, ensuring that temporary files are reliably cleaned up after use.
 
 #### 5.4.2. `bard/util/media`: Media Processing Utilities
 

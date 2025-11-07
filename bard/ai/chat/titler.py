@@ -5,7 +5,7 @@ from google.genai import types
 
 from bard.ai.config import GeminiConfigManager
 from bard.ai.core import GeminiCore
-from bard.util.logging import prettify_json_for_logging
+from bard.util.logging import LogFormatter
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -73,7 +73,7 @@ class ThreadTitler:
             }
             logger.debug(
                 f"REQUEST to Gemini (model: {self.config.MODEL_ID_SECONDARY}):\n"
-                f"{prettify_json_for_logging(loggable_request_payload)}"
+                f"{LogFormatter.prettify_json(loggable_request_payload)}"
             )
 
             response = await self.gemini_core.generate_content(
@@ -85,7 +85,7 @@ class ThreadTitler:
             loggable_response = response.model_dump()
             logger.debug(
                 f"RESPONSE from Gemini (model: {self.config.MODEL_ID_SECONDARY}):\n"
-                f"{prettify_json_for_logging(loggable_response)}"
+                f"{LogFormatter.prettify_json(loggable_response)}"
             )
 
             if response and response.text:

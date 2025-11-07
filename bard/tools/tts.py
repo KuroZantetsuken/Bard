@@ -8,7 +8,7 @@ import soundfile
 from google.genai import types
 
 from bard.tools.base import BaseTool, ToolContext
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 from config import Config
 
 logger = logging.getLogger("Bard")
@@ -131,7 +131,7 @@ class TTSGenerator(BaseTool):
                 "config": speech_generation_config.model_dump(),
             }
             logger.debug(
-                f"Gemini API (tts_synthesis) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+                f"Gemini API (tts_synthesis) request:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(request_payload))}"
             )
             async for chunk in await self.gemini_core.generate_content(
                 model=Config.MODEL_ID_TTS,
@@ -140,7 +140,7 @@ class TTSGenerator(BaseTool):
                 stream=True,
             ):
                 logger.debug(
-                    f"Gemini API (tts_synthesis) response chunk:\n{prettify_json_for_logging(clean_dict(chunk.dict()))}"
+                    f"Gemini API (tts_synthesis) response chunk:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(chunk.dict()))}"
                 )
                 if (
                     chunk.candidates
@@ -199,7 +199,7 @@ class TTSGenerator(BaseTool):
             "config": speech_generation_config.model_dump(),
         }
         logger.debug(
-            f"Gemini API (tts_generate_ogg) request:\n{prettify_json_for_logging(clean_dict(request_payload))}"
+            f"Gemini API (tts_generate_ogg) request:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(request_payload))}"
         )
 
         gemini_response_object = await self.gemini_core.generate_content(
@@ -208,7 +208,7 @@ class TTSGenerator(BaseTool):
             config=speech_generation_config,
         )
         logger.debug(
-            f"Gemini API (tts_generate_ogg) response:\n{prettify_json_for_logging(clean_dict(gemini_response_object.model_dump()))}"
+            f"Gemini API (tts_generate_ogg) response:\n{LogFormatter.prettify_json(LogSanitizer.clean_dict(gemini_response_object.model_dump()))}"
         )
 
         reason = "Unknown"

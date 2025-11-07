@@ -13,7 +13,7 @@ from bard.scraping.orchestrator import ScrapingOrchestrator
 from bard.tools.base import ToolContext
 from bard.tools.memory import MemoryManager
 from bard.tools.registry import ToolRegistry
-from bard.util.logging import clean_dict, prettify_json_for_logging
+from bard.util.logging import LogFormatter, LogSanitizer
 from bard.util.media.media import MimeDetector
 from config import Config
 
@@ -254,10 +254,10 @@ class AIConversation:
             "contents": [c.model_dump() for c in contents_for_gemini],
             "generation_config": main_config.model_dump(),
         }
-        cleaned_loggable_payload = clean_dict(loggable_request_payload)
+        cleaned_loggable_payload = LogSanitizer.clean_dict(loggable_request_payload)
         logger.debug(
             f"REQUEST to Gemini (model: {self.config.MODEL_ID}):\n"
-            f"{prettify_json_for_logging(cleaned_loggable_payload)}"
+            f"{LogFormatter.prettify_json(cleaned_loggable_payload)}"
         )
 
         response = await self.core.generate_content(
@@ -269,7 +269,7 @@ class AIConversation:
         loggable_response = response.model_dump()
         logger.debug(
             f"RESPONSE from Gemini (model: {self.config.MODEL_ID}):\n"
-            f"{prettify_json_for_logging(clean_dict(loggable_response))}"
+            f"{LogFormatter.prettify_json(LogSanitizer.clean_dict(loggable_response))}"
         )
 
         final_text_parts = []
