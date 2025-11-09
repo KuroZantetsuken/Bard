@@ -37,48 +37,61 @@ A Discord bot powered by Google's Gemini AI, capable of engaging in conversation
 ### **Cancel a Response:**
 - React to your own message with the cancel emoji `🚫` to cancel a response that is currently being generated.
 
+## Setup
+
+This section outlines the critical processes for setting up, configuring, and running the application.
+
 ### **Prerequisites:**
 - Python 3.10+
 - FFmpeg
-- requirements.txt
 
-### **Clone the Repository:**
-    ```bash
-    git clone https://github.com/KuroZantetsuken/Bard.git
-    cd Bard
-    ```
+### **1. Clone the Repository:**
+```bash
+git clone https://github.com/KuroZantetsuken/Bard.git
+cd Bard
+```
 
-### **Install Dependencies:**
-    ```bash
-    # Set up a Virtual Environment (Recommended):
-    python3 -m venv .venv
-    source .venv/bin/activate
-    # Install Python Dependencies:
-    pip install -r requirements.txt
-    ```
+### **2. Install Dependencies:**
+```bash
+# Set up a Virtual Environment (Recommended):
+python3 -m venv .venv
+source .venv/bin/activate
+# Install Python Dependencies:
+pip install -r requirements.txt
+```
 
-### **Configuration:**
-- Rename `example.env` to `.env`.
-- Open `.env` and fill in the required values:
+### **3. Configuration:**
+- Copy `example.env` to a new file named `.env`.
+  ```bash
+  cp example.env .env
+  ```
+- Open the `.env` file and fill in the required environment variables:
     - `DISCORD_BOT_TOKEN`: Your Discord bot token.
-    - `GEMINI_API_KEY`: Your Gemini API key.
-- Edit `prompts/personality.prompt.md` to define the bot's personality.
-- `prompts/capabilities.prompt.md` is highly optimized for the bot's capabilities, take care in editing it.
+    - `GEMINI_API_KEY`: Your Google Gemini API key.
+- Edit `personality.prompt.md` to define the bot's personality.
+- `capabilities.prompt.md` is highly optimized for the bot's capabilities, take care in editing it.
 - **Discord Privileged Intents:** Enable Presence Intent and Server Members Intent in the Discord Developer Portal.
+
+### **4. Browser Setup (Optional)**
+This optional step is for pre-configuring the browser with custom settings, extensions, or other preferences. If you skip this, the project will automatically set up its own browser instance, but without any custom configurations.
+```bash
+python setup_browser.py
+```
+This script launches a Chromium browser, allowing you to manually configure extensions or settings. When you close the browser, a `data/browser` directory is created, preserving your custom setup.
 
 ## Running the Bot
 
-Once set up, you can run the bot using:
-
+To run the bot, execute the main application script.
 ```bash
-python main.py
+python3 src/main.py
 ```
 
 ## Development
 
 ### **Hot Reloading:**
-- To streamline development, the bot supports hot-reloading using `watchdog`, automatically restarting when changes are detected in `.py`, `.env`, and `.prompt.md` files.
-- To use, ensure `watchdog` is installed (`pip install -r requirements.txt`) and run:
-    ```bash
-    python3 hotloading.py
-    ```
+To streamline development, the bot supports hot-reloading, which automatically restarts the application when changes are detected in `.py`, `.env`, and `.prompt.md` files.
+
+To run with hot-reloading enabled:
+```bash
+python3 src/hotload.py
+```

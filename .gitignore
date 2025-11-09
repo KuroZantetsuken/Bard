@@ -1,11 +1,6 @@
 __pycache__
 .env
 .venv
-.patch
 .vscode
-data/logs
-data/memories
-data/browser
-data/cache
-data/extensions
-docs
+data
+!prompts
