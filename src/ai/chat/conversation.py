@@ -151,9 +151,7 @@ class AIConversation:
 
         final_text = "\n".join(final_text_parts).strip()
 
-        if "audio_data" in final_media:
-            final_text = final_text.strip()
-        else:
+        if not final_media:
             final_text = (
                 final_text.strip()
                 or "I processed your request but have nothing to add."
@@ -311,12 +309,9 @@ class AIConversation:
                 )
                 break
 
-            current_model_text_parts = [
-                p for p in current_model_content.parts if p.text
-            ]
-            current_model_function_call_parts = [
-                p for p in current_model_content.parts if p.function_call
-            ]
+            parts = current_model_content.parts or []
+            current_model_text_parts = [p for p in parts if p.text]
+            current_model_function_call_parts = [p for p in parts if p.function_call]
 
             if not current_model_function_call_parts:
                 final_text_parts.extend(p.text for p in current_model_text_parts)

@@ -30,9 +30,9 @@ class Settings:
     # --- Bot Presence Settings ---
     # The type of activity for the bot's presence.
     # Options: "playing", "listening", "watching", "custom"
-    PRESENCE_TYPE = "listening"
+    PRESENCE_TYPE = "custom"
     # The text to display for the presence.
-    PRESENCE_TEXT = "your questions"
+    PRESENCE_TEXT = "gooning"
     # The emoji for "custom" statuses (optional).
     PRESENCE_EMOJI = "❓"
 
