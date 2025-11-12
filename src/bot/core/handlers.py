@@ -4,9 +4,9 @@ import discord
 from discord import Message, Reaction, User
 from discord.ext import commands
 
-from bot.lifecycle.events import DiscordEventHandler
-from bot.lifecycle.presence import PresenceManager
-from bot.lifecycle.tasks import TaskLifecycleManager
+from bot.core.events import DiscordEventHandler
+from bot.core.lifecycle import RequestManager
+from bot.core.presence import PresenceManager
 from bot.message.parser import MessageParser
 from settings import Settings
 
@@ -22,7 +22,7 @@ class BotHandlers(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        task_lifecycle_manager: TaskLifecycleManager,
+        request_manager: RequestManager,
         discord_event_handler: DiscordEventHandler,
         settings: Settings,
         message_parser: MessageParser,
@@ -32,13 +32,13 @@ class BotHandlers(commands.Cog):
 
         Args:
             bot: The Discord bot instance.
-            task_lifecycle_manager: Manages the lifecycle of processing tasks.
+            request_manager: Manages the lifecycle of processing requests.
             discord_event_handler: Handles Discord-specific events.
             settings: Application configuration settings.
             message_parser: Parses Discord messages into structured data.
         """
         self.bot = bot
-        self.task_lifecycle_manager = task_lifecycle_manager
+        self.request_manager = request_manager
         self.discord_event_handler = discord_event_handler
         self.settings = settings
         self.message_parser = message_parser
@@ -107,7 +107,7 @@ class BotHandlers(commands.Cog):
                     "is_mentioned": is_mentioned,
                 },
             )
-            await self.task_lifecycle_manager.start_new_task(message)
+            await self.discord_event_handler._start_new_request(message)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: Message, after: Message):

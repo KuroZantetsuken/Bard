@@ -50,7 +50,7 @@ async def run():
             await bot.add_cog(
                 BotHandlers(
                     bot,
-                    container.get("task_lifecycle_manager"),
+                    container.get("request_manager"),
                     container.get("discord_event_handler"),
                     settings,
                     container.get("message_parser"),

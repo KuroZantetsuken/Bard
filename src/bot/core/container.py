@@ -9,9 +9,11 @@ from ai.context.prompts import PromptBuilder, load_prompts_from_directory
 from ai.core import GeminiCore
 from ai.tools.registry import ToolRegistry
 from bot.core.coordinator import Coordinator
-from bot.lifecycle.events import DiscordEventHandler
-from bot.lifecycle.tasks import TaskLifecycleManager
+from bot.core.events import DiscordEventHandler
+from bot.core.lifecycle import RequestManager
+from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
+from bot.message.reactions import ReactionManager
 from bot.message.sender import MessageSender
 from scraping.cache import CacheManager
 from scraping.orchestrator import ScrapingOrchestrator
@@ -54,7 +56,9 @@ class Container:
             "gemini_config_manager": self._create_gemini_config_manager,
             "thread_titler": self._create_thread_titler,
             "ai_conversation": self._create_ai_conversation,
-            "task_lifecycle_manager": self._create_task_lifecycle_manager,
+            "typing_manager": self._create_typing_manager,
+            "request_manager": self._create_request_manager,
+            "reaction_manager": self._create_reaction_manager,
             "coordinator": self._create_coordinator,
             "discord_event_handler": self._create_discord_event_handler,
         }
@@ -189,17 +193,26 @@ class Container:
             scraping_orchestrator=self.get("scraping_orchestrator"),
         )
 
-    def _create_task_lifecycle_manager(self) -> TaskLifecycleManager:
-        """
-        Creates and returns an instance of TaskLifecycleManager.
-        Handles circular dependency by temporarily storing the manager.
-        """
-        log.debug("Creating TaskLifecycleManager and handling circular dependency.")
-        manager = TaskLifecycleManager()
-        self.services["task_lifecycle_manager"] = manager
-        manager.coordinator = self.get("coordinator")
-        log.debug("TaskLifecycleManager instance created and coordinator assigned.")
-        return manager
+    def _create_typing_manager(self) -> TypingManager:
+        """Creates and returns an instance of TypingManager."""
+        log.debug("TypingManager instance created.")
+        return TypingManager()
+
+    def _create_request_manager(self) -> RequestManager:
+        """Creates and returns an instance of RequestManager."""
+        log.debug("RequestManager instance created.")
+        return RequestManager(
+            reaction_manager=self.get("reaction_manager"),
+            typing_manager=self.get("typing_manager"),
+        )
+
+    def _create_reaction_manager(self) -> ReactionManager:
+        """Creates and returns an instance of ReactionManager."""
+        log.debug("ReactionManager instance created.")
+        return ReactionManager(
+            retry_emoji=self.settings.RETRY_EMOJI,
+            cancel_emoji=self.settings.CANCEL_EMOJI,
+        )
 
     def _create_coordinator(self) -> Coordinator:
         """Creates and returns an instance of Coordinator."""
@@ -208,15 +221,20 @@ class Container:
             message_parser=self.get("message_parser"),
             ai_conversation=self.get("ai_conversation"),
             message_sender=self.get("message_sender"),
-            task_lifecycle_manager=self.get("task_lifecycle_manager"),
+            request_manager=self.get("request_manager"),
+            reaction_manager=self.get("reaction_manager"),
             scraping_orchestrator=self.get("scraping_orchestrator"),
+            typing_manager=self.get("typing_manager"),
         )
 
     def _create_discord_event_handler(self) -> DiscordEventHandler:
         """Creates and returns an instance of DiscordEventHandler."""
         log.debug("DiscordEventHandler instance created.")
         return DiscordEventHandler(
-            task_lifecycle_manager=self.get("task_lifecycle_manager"),
+            request_manager=self.get("request_manager"),
+            coordinator=self.get("coordinator"),
+            reaction_manager=self.get("reaction_manager"),
+            typing_manager=self.get("typing_manager"),
             settings=self.settings,
             bot_user_id=None,
         )

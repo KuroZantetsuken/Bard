@@ -129,6 +129,58 @@ When logging complex objects, ensure they are converted to a JSON-serializable f
 log.debug("Discord intents configured.", extra={"data": dict(intents)})
 ```
 
+## Request Lifecycle Management
+
+The project features a robust, decoupled architecture for managing user requests, retries, and cancellations. This system is centered around a suite of specialized components that work together to ensure reliability and a clean separation of concerns.
+
+### Core Components
+
+*   **`RequestManager` ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** The central component that creates, tracks, and manages the state of all user requests. It is the single source of truth for request status and is responsible for initiating the cancellation process.
+*   **`Request` Data Class ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** A simple data class holding all information about a single user request, including its unique ID, state (`RequestState`), and associated data.
+*   **`RequestState` Enum ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** An enum defining the possible states of a request: `PENDING`, `PROCESSING`, `DONE`, `CANCELLED`, and `ERROR`.
+*   **`ReactionManager` ([`src/bot/message/reactions.py`](src/bot/message/reactions.py)):** A dedicated service that handles all UI feedback related to the request lifecycle. It is responsible for adding, removing, and clearing reactions on user and bot messages to reflect the current state of a request (e.g., adding a "cancel" emoji on creation, or a "retry" emoji on cancellation).
+*   **`TypingManager` ([`src/bot/core/typing.py`](src/bot/core/typing.py)):** A component that manages the bot's typing indicator. It ensures the indicator is reliably started and stopped, even when requests are cancelled.
+*   **`Coordinator` ([`src/bot/core/coordinator.py`](src/bot/core/coordinator.py)):** The main processing logic that orchestrates the AI response generation. It accepts a `Request` object and periodically checks its `state` to gracefully halt processing if it becomes `CANCELLED`.
+*   **`DiscordEventHandler` ([`src/bot/core/events.py`](src/bot/core/events.py)):** The event handler for Discord events (message edits, reactions) that interacts with the `RequestManager` to initiate, cancel, or retry requests.
+
+### Request Processing Flow
+
+1.  A user action (e.g., sending a message) triggers an event in `DiscordEventHandler`.
+2.  The event handler creates a new `Request` object via the `RequestManager`.
+3.  The `ReactionManager` is notified of the new request and adds the "cancel" emoji to the user's message.
+4.  The `TypingManager` starts the typing indicator in the channel.
+5.  A new `asyncio.Task` is created to run the `Coordinator.process()` method, passing the `Request` object.
+6.  The `RequestManager` associates the task with the request.
+7.  The `Coordinator` updates the request's state to `PROCESSING` and begins its work.
+8.  Throughout its execution, the `Coordinator` checks if `request.state` is `CANCELLED` at key checkpoints. If it is, it stops processing immediately.
+9.  Upon successful completion, an error, or cancellation, the `TypingManager` stops the typing indicator.
+10. The `Coordinator` notifies the `ReactionManager`, which then updates the message reactions accordingly (e.g., adding tool or retry emojis).
+
+### Cancellation and Retry Flows
+
+#### Request Cancellation
+
+Users can cancel a request in two ways:
+
+1.  **Message Edit:** If a user edits their message, the `DiscordEventHandler` finds the corresponding active request and calls `request_manager.cancel_request()`.
+2.  **Cancel Emoji:** If a user reacts with the configured "cancel" emoji, the `DiscordEventHandler` performs the same cancellation logic.
+
+In both cases, `request_manager.cancel_request()` does the following:
+1.  Sets the request's state to `CANCELLED`.
+2.  Stops the typing indicator via the `TypingManager`.
+3.  Cancels the running `asyncio.Task` associated with the request.
+4.  Calls `reaction_manager.handle_request_cancellation()`, which removes all reactions from the user's message and the bot's response (if any) and adds a "retry" emoji to the user's original message.
+
+#### Request Retry
+
+Users can retry a request in two ways:
+1.  Reacting with the "retry" emoji on a bot's response message (for completed or failed requests).
+2.  Reacting with the "retry" emoji on their own message (after a cancellation).
+
+In both scenarios, the `DiscordEventHandler` detects the reaction, identifies the original message, and starts a new request flow.
+
+This decoupled design ensures that the system can gracefully handle interruptions and user-initiated changes, with a clear separation between the core processing logic and the UI feedback.
+
 ## Project Structure
 
 This section provides a detailed breakdown of the project's files and directories.
@@ -207,7 +259,6 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`bot.py`](src/bot/bot.py) | The main file for the bot, defining its class and core functionalities. |
 | [`types.py`](src/bot/types.py) | Defines custom data types and classes used throughout the bot module. |
 | [`core/`](src/bot/core/) | Contains the core components of the bot's architecture. |
-| [`lifecycle/`](src/bot/lifecycle/) | Manages the bot's lifecycle events, such as startup and shutdown. |
 | [`message/`](src/bot/message/) | Handles all aspects of message processing, from parsing to sending. |
 
 ### `src/bot/core/` Directory
@@ -216,15 +267,11 @@ This section provides a detailed breakdown of the project's files and directorie
 | :--- | :--- |
 | [`container.py`](src/bot/core/container.py) | Manages the dependency injection container for the bot. |
 | [`coordinator.py`](src/bot/core/coordinator.py) | Coordinates actions and workflows between different parts of the bot. |
+| [`events.py`](src/bot/core/events.py) | Defines and manages lifecycle events. |
 | [`handlers.py`](src/bot/core/handlers.py) | Defines event handlers for various bot events. |
-
-### `src/bot/lifecycle/` Directory
-
-| File/Directory | Purpose |
-| :--- | :--- |
-| [`events.py`](src/bot/lifecycle/events.py) | Defines and manages lifecycle events. |
-| [`presence.py`](src/bot/lifecycle/presence.py) | Manages the bot's online presence and status. |
-| [`tasks.py`](src/bot/lifecycle/tasks.py) | Manages background tasks that run during the bot's lifecycle. |
+| [`request_manager.py`](src/bot/core/lifecycle.py) | Manages the lifecycle of user requests, including creation, cancellation, and state tracking. |
+| [`presence.py`](src/bot/core/presence.py) | Manages the bot's online presence and status. |
+| [`typing.py`](src/bot/core/typing.py) | Manages the bot's typing indicator, ensuring it is reliably started and stopped. |
 
 ### `src/bot/message/` Directory
 

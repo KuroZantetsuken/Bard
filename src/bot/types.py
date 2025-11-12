@@ -1,4 +1,7 @@
+import asyncio
+import uuid
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any, Dict, List, Optional, TypedDict
 
 import discord
@@ -22,6 +25,22 @@ class DiscordContext(TypedDict):
     current_time_utc: str
     guild_id: Optional[int]
     message_id: int
+
+
+class RequestState(Enum):
+    PENDING = auto()
+    PROCESSING = auto()
+    DONE = auto()
+    CANCELLED = auto()
+    ERROR = auto()
+
+
+@dataclass
+class Request:
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    state: RequestState = RequestState.PENDING
+    task: Optional[asyncio.Task] = None
+    data: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

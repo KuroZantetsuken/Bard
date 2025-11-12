@@ -6,11 +6,12 @@ from google.genai import errors as genai_errors
 
 from ai.chat.conversation import AIConversation
 from ai.types import FinalAIResponse
-from bot.lifecycle.tasks import TaskLifecycleManager
+from bot.core.lifecycle import RequestManager
+from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
 from bot.message.sender import MessageSender
-from bot.types import ParsedMessageContext
+from bot.types import ParsedMessageContext, Request, RequestState
 from scraping.orchestrator import ScrapingOrchestrator
 
 log = logging.getLogger("Bard")
@@ -28,8 +29,10 @@ class Coordinator:
         message_parser: MessageParser,
         ai_conversation: AIConversation,
         message_sender: MessageSender,
-        task_lifecycle_manager: TaskLifecycleManager,
+        request_manager: RequestManager,
+        reaction_manager: ReactionManager,
         scraping_orchestrator: ScrapingOrchestrator,
+        typing_manager: TypingManager,
     ):
         """
         Initializes the Coordinator with instances of its collaborating services.
@@ -38,20 +41,23 @@ class Coordinator:
             message_parser: Service for parsing incoming Discord messages.
             ai_conversation: Service for managing AI conversational turns.
             message_sender: Service for sending messages back to Discord.
-            task_lifecycle_manager: Service for managing asynchronous task lifecycles.
+            request_manager: Service for managing request lifecycles.
+            reaction_manager: Service for managing message reactions.
             scraping_orchestrator: Service for scraping URLs.
+            typing_manager: Service for managing the typing indicator.
         """
         self.message_parser = message_parser
         self.ai_conversation = ai_conversation
         self.message_sender = message_sender
-        self.task_lifecycle_manager = task_lifecycle_manager
-        self.reaction_manager = ReactionManager(self.message_sender.retry_emoji)
+        self.request_manager = request_manager
+        self.reaction_manager = reaction_manager
         self.scraping_orchestrator = scraping_orchestrator
+        self.typing_manager = typing_manager
         log.debug("Coordinator initialized with all services.")
 
     async def process(
         self,
-        message: Message,
+        request: Request,
         bot_messages_to_edit: Optional[List[Message]] = None,
         reaction_to_remove: Optional[Tuple[Reaction, User]] = None,
     ) -> None:
@@ -61,72 +67,93 @@ class Coordinator:
         and message sending, including error handling and reaction management.
 
         Args:
-            message: The Discord message object to process.
+            request: The request object to process.
             bot_messages_to_edit: Optional list of bot messages that can be edited.
             reaction_to_remove: Optional tuple containing a Reaction and User to remove after processing.
         """
+        if reaction_to_remove:
+            await self.reaction_manager.remove_reaction(reaction_to_remove)
+
+        message: Message = request.data["message"]
         log.info(
             "Starting message processing.",
-            extra={"message_id": message.id, "user_id": message.author.id},
+            extra={
+                "request_id": request.id,
+                "message_id": message.id,
+                "user_id": message.author.id,
+            },
         )
+        self.request_manager.update_request_state(request.id, RequestState.PROCESSING)
         final_ai_response: Optional[FinalAIResponse] = None
         bot_messages: Optional[List[Message]] = None
         try:
-            log.debug("Entering typing context.", extra={"message_id": message.id})
-            async with message.channel.typing():
-                log.debug("Parsing message content.", extra={"message_id": message.id})
-                parsed_context: ParsedMessageContext = await self.message_parser.parse(
-                    message
-                )
-                log.debug(
-                    "Message parsed successfully.",
-                    extra={"message_id": message.id, "context": parsed_context},
+            self.typing_manager.start_typing(message.channel)
+
+            if request.state == RequestState.CANCELLED:
+                log.info(f"Request {request.id} was cancelled before processing.")
+                return
+
+            log.debug("Parsing message content.", extra={"message_id": message.id})
+            parsed_context: ParsedMessageContext = await self.message_parser.parse(
+                message
+            )
+            log.debug(
+                "Message parsed successfully.",
+                extra={"message_id": message.id, "context": parsed_context},
+            )
+
+            if request.state == RequestState.CANCELLED:
+                log.info(f"Request {request.id} was cancelled after parsing.")
+                return
+
+            log.debug("Starting AI conversation.", extra={"message_id": message.id})
+            final_ai_response = await self.ai_conversation.run(parsed_context)
+            log.debug(
+                "AI conversation completed.",
+                extra={"message_id": message.id, "response": final_ai_response},
+            )
+
+            if request.state == RequestState.CANCELLED:
+                log.info(f"Request {request.id} was cancelled after AI conversation.")
+                return
+
+            log.debug("Sending AI response.", extra={"message_id": message.id})
+            bot_messages = await self.message_sender.send(
+                message_to_reply_to=message,
+                text_content=final_ai_response.text_content,
+                existing_bot_messages_to_edit=bot_messages_to_edit,
+                **final_ai_response.media,
+                tool_emojis=final_ai_response.tool_emojis,
+            )
+            log.info(
+                "AI response sent.",
+                extra={
+                    "message_id": message.id,
+                    "bot_message_ids": [m.id for m in bot_messages]
+                    if bot_messages
+                    else [],
+                },
+            )
+
+            if bot_messages:
+                request.data["bot_messages"] = bot_messages
+
+            if final_ai_response:
+                await self.reaction_manager.handle_request_completion(
+                    request, final_ai_response.tool_emojis
                 )
 
-                log.debug("Starting AI conversation.", extra={"message_id": message.id})
-                final_ai_response = await self.ai_conversation.run(parsed_context)
-                log.debug(
-                    "AI conversation completed.",
-                    extra={"message_id": message.id, "response": final_ai_response},
-                )
-
-                log.debug("Sending AI response.", extra={"message_id": message.id})
-                bot_messages = await self.message_sender.send(
-                    message_to_reply_to=message,
-                    text_content=final_ai_response.text_content,
-                    existing_bot_messages_to_edit=bot_messages_to_edit,
-                    **final_ai_response.media,
-                    tool_emojis=final_ai_response.tool_emojis,
-                )
-                log.info(
-                    "AI response sent.",
-                    extra={
-                        "message_id": message.id,
-                        "bot_message_ids": [m.id for m in bot_messages]
-                        if bot_messages
-                        else [],
-                    },
-                )
-
-                if bot_messages:
-                    self.task_lifecycle_manager.active_bot_responses[message.id] = (
-                        bot_messages
-                    )
-            log.debug("Exited typing context.", extra={"message_id": message.id})
-
-            if bot_messages and final_ai_response:
-                first_message = bot_messages[0]
-                await self.reaction_manager.add_reactions(
-                    first_message, final_ai_response.tool_emojis
-                )
-
-            if reaction_to_remove:
-                await self.reaction_manager.remove_reaction(reaction_to_remove)
+            self.request_manager.update_request_state(request.id, RequestState.DONE)
 
         except genai_errors.ServerError as e:
+            self.request_manager.update_request_state(request.id, RequestState.ERROR)
             log.error(
                 "Google API server error during message processing.",
-                extra={"message_id": message.id, "error": str(e)},
+                extra={
+                    "request_id": request.id,
+                    "message_id": message.id,
+                    "error": str(e),
+                },
                 exc_info=True,
             )
             error_message = (
@@ -138,12 +165,18 @@ class Coordinator:
                 existing_bot_messages_to_edit=bot_messages_to_edit,
             )
             if error_messages:
-                await self.reaction_manager.add_reactions(error_messages[0])
+                request.data["bot_messages"] = error_messages
+                await self.reaction_manager.handle_request_error(request)
 
         except Exception as e:
+            self.request_manager.update_request_state(request.id, RequestState.ERROR)
             log.error(
                 "Unhandled error during message processing.",
-                extra={"message_id": message.id, "error": str(e)},
+                extra={
+                    "request_id": request.id,
+                    "message_id": message.id,
+                    "error": str(e),
+                },
                 exc_info=True,
             )
             error_message = (
@@ -155,8 +188,11 @@ class Coordinator:
                 existing_bot_messages_to_edit=bot_messages_to_edit,
             )
             if error_messages:
-                await self.reaction_manager.add_reactions(error_messages[0])
-        log.info(
-            "Finished message processing.",
-            extra={"message_id": message.id},
-        )
+                request.data["bot_messages"] = error_messages
+                await self.reaction_manager.handle_request_error(request)
+        finally:
+            self.typing_manager.stop_typing(message.channel)
+            log.info(
+                "Finished message processing.",
+                extra={"request_id": request.id, "message_id": message.id},
+            )
