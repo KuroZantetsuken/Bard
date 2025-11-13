@@ -2,7 +2,6 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List
 
-import aiohttp
 import discord
 from google.genai.types import FunctionDeclaration, FunctionResponse, Part, Schema, Type
 
@@ -24,7 +23,7 @@ class DiscordEventTool(BaseTool):
         return [
             FunctionDeclaration(
                 name="create_discord_event",
-                description="Purpose: This tool creates a new scheduled event in the Discord server. Arguments: Fill out as many arguments as you can using the user's message, supplementing it with information gathered using other tools first. Results: Upon success, will create a Discord event, with no specific further tasks from the AI other than acknowledging this appropriately. Restrictions/Guidelines: Only use this tool if event creation is requested. If the user's request is about a known topic (e.g., a game release, movie premiere), use other tools first to find the specific details like the official date, time, description, and a relevant cover image URL. If no location is specified, the AI should use context clues to put something useful and relevant, such as a website URL, or default to the channel where the request was made.",
+                description="Purpose: This tool creates a new scheduled event in the Discord server. Arguments: Fill out as many arguments as you can using the user's message, supplementing it with information gathered using other tools first. Results: Upon success, will create a Discord event, with no specific further tasks from the AI other than acknowledging this appropriately. Restrictions/Guidelines: Only use this tool if event creation is requested. If the user's request is about a known topic (e.g., a game release, movie premiere), use other tools first to find the specific details like the official date, time, and description. If no location is specified, the AI should use context clues to put something useful and relevant, such as a website URL, or default to the channel where the request was made. Include the event URL in your response as a markdown masked link.",
                 parameters=Schema(
                     type=Type.OBJECT,
                     properties={
@@ -48,12 +47,12 @@ class DiscordEventTool(BaseTool):
                             type=Type.STRING,
                             description="The location of the event (e.g., most likely a website URL, or default to the channel where the request was made).",
                         ),
-                        "image_url": Schema(
+                        "banner_search_terms": Schema(
                             type=Type.STRING,
-                            description="A direct URL for the event's cover image (e.g., ending in .png, .jpg, .gif). The AI should use the InternetTool to find a suitable direct image URL.",
+                            description="Search terms to find a suitable banner image for the event.",
                         ),
                     },
-                    required=["name", "start_time", "end_time"],
+                    required=["name", "start_time", "end_time", "location"],
                 ),
             ),
             FunctionDeclaration(
@@ -103,7 +102,7 @@ class DiscordEventTool(BaseTool):
         start_time_str = args.get("start_time")
         end_time_str = args.get("end_time")
         location = args.get("location")
-        image_url = args.get("image_url")
+        banner_search_terms = args.get("banner_search_terms")
 
         if not start_time_str:
             return self.function_response_error(
@@ -149,18 +148,18 @@ class DiscordEventTool(BaseTool):
                 )
 
         image_bytes = None
-        if image_url:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(image_url) as resp:
-                        if resp.status == 200:
-                            image_bytes = await resp.read()
-                        else:
-                            log.warning(
-                                f"Failed to fetch image from {image_url}: HTTP status {resp.status}. Proceeding without image."
-                            )
-            except aiohttp.ClientError as e:
-                log.error(f"Error fetching image: {e}. Proceeding without image.")
+        if banner_search_terms:
+            log.info(
+                "Searching for event banner image.",
+                extra={"search_terms": banner_search_terms},
+            )
+            image_bytes = await self.context.image_scraper.scrape_image_data(
+                banner_search_terms
+            )
+            if not image_bytes:
+                log.warning(
+                    "Could not find an image for the event banner. Proceeding without an image."
+                )
 
         try:
             event_params = {
@@ -179,7 +178,7 @@ class DiscordEventTool(BaseTool):
             log.debug(
                 "Attempting to create event",
                 extra={
-                    "name": name,
+                    "event_name": name,
                     "description": description,
                     "start_time": start_time,
                     "end_time": end_time,

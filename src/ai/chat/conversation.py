@@ -1,9 +1,10 @@
+import asyncio
 import logging
 import mimetypes
-import re
 from typing import Any, Dict, List
 
 from google.genai import types as gemini_types
+from google.genai.chats import Chat
 
 from ai.config import GeminiConfigManager
 from ai.context.prompts import PromptBuilder
@@ -17,12 +18,6 @@ from scraper.orchestrator import ScrapingOrchestrator
 from settings import Settings
 
 log = logging.getLogger("Bard")
-
-
-def _parse_urls_from_markdown(markdown_text: str) -> List[str]:
-    """Extracts URLs from a markdown string."""
-
-    return re.findall(r"\[.*?\]\(<(https?://[^\s>]+)>", markdown_text)
 
 
 class AIConversation:
@@ -172,12 +167,15 @@ class AIConversation:
         )
         return final_text, final_media
 
-    async def run(self, parsed_context: ParsedMessageContext) -> FinalAIResponse:
+    async def run(
+        self, parsed_context: ParsedMessageContext, chat: Chat
+    ) -> FinalAIResponse:
         """
-        Executes a full AI conversational turn.
+        Executes a full AI conversational turn using a stateful Chat object.
 
         Args:
-            parsed_context: The parsed input message context, including Discord-specific details.
+            parsed_context: The parsed input message context.
+            chat: The stateful Chat object for the current conversation.
 
         Returns:
             A FinalAIResponse object containing the AI's generated text, media,
@@ -203,8 +201,6 @@ class AIConversation:
         tool_context.guild = parsed_context.guild
         tool_context.user_id = str(user_id)
 
-        contents_for_gemini: List[gemini_types.Content] = []
-
         memories = await self.memory_manager.load_memories(str(user_id))
         formatted_memories = self.memory_manager.format_memories(str(user_id), memories)
 
@@ -223,7 +219,7 @@ class AIConversation:
             formatted_memories=formatted_memories,
         )
 
-        if is_empty and not contents_for_gemini:
+        if is_empty:
             return FinalAIResponse(
                 text_content="Hello! How can I help you today?",
                 media={},
@@ -231,55 +227,27 @@ class AIConversation:
                 message_id=parsed_context.discord_context.get("message_id"),
             )
 
-        if contents_for_gemini and contents_for_gemini[-1].role == "user":
-            if contents_for_gemini[-1].parts is None:
-                contents_for_gemini[-1].parts = []
-            contents_for_gemini[-1].parts.extend(gemini_prompt_parts)
-        else:
-            user_turn_content = gemini_types.Content(
-                role="user", parts=gemini_prompt_parts
-            )
-            contents_for_gemini.append(user_turn_content)
-
-        tool_declarations = self.tool_registry.get_all_function_declarations()
-
-        system_instruction_str = None
-        if (
-            hasattr(self.prompt_builder, "system_prompt")
-            and self.prompt_builder.system_prompt
-        ):
-            system_instruction_str = self.prompt_builder.system_prompt
-
-        tools_for_config = None
-        if tool_declarations:
-            tools_for_config = tool_declarations
-
-        main_config = self.config_manager.create_config(
-            system_instruction_str=system_instruction_str,
-            tool_declarations=tools_for_config,
-        )
-
-        generate_content_kwargs: Dict[str, Any] = {
-            "config": main_config,
-        }
-
         log.debug(
             f"REQUEST to Gemini (model: {self.settings.MODEL_ID})",
             extra={
-                "contents": [c.model_dump() for c in contents_for_gemini],
-                "generation_config": main_config.model_dump(),
+                "parts_count": len(gemini_prompt_parts),
             },
         )
 
-        response = await self.core.generate_content(
-            model=self.settings.MODEL_ID,
-            contents=contents_for_gemini,
-            **generate_content_kwargs,
-        )
+        response = await asyncio.to_thread(chat.send_message, gemini_prompt_parts)
 
+        response_text_for_log = ""
+        if (
+            response.candidates
+            and response.candidates[0].content
+            and response.candidates[0].content.parts
+        ):
+            response_text_for_log = "".join(
+                p.text for p in response.candidates[0].content.parts if p.text
+            )
         log.debug(
             f"RESPONSE from Gemini (model: {self.settings.MODEL_ID})",
-            extra={"response": response.model_dump()},
+            extra={"response_text": response_text_for_log},
         )
 
         final_text_parts = []
@@ -296,8 +264,8 @@ class AIConversation:
                 )
                 break
 
-            candidate = model_response.candidates
-            current_model_content = candidate[0].content
+            candidate = model_response.candidates[0]
+            current_model_content = candidate.content
 
             if current_model_content is None:
                 log.warning(
@@ -315,24 +283,24 @@ class AIConversation:
 
             if not current_model_function_call_parts:
                 final_text_parts.extend(p.text for p in current_model_text_parts)
-                contents_for_gemini.append(current_model_content)
                 break
             else:
-                contents_for_gemini.append(
-                    gemini_types.Content(
-                        role="model", parts=current_model_function_call_parts
-                    )
-                )
-
                 tool_response_parts = []
                 for function_call_part in current_model_function_call_parts:
                     function_call = function_call_part.function_call
+                    if not function_call or not function_call.name:
+                        continue
+
                     if function_call.name == "generate_speech_ogg":
                         log.info("TTS tool detected. Preparing for audio output.")
 
+                    args_for_tool = {}
+                    if function_call.args:
+                        args_for_tool = {k: v for k, v in function_call.args.items()}
+
                     tool_result_part = await self.tool_registry.execute_function(
                         function_name=function_call.name,
-                        args=dict(function_call.args),
+                        args=args_for_tool,
                         context=tool_context,
                     )
 
@@ -350,22 +318,11 @@ class AIConversation:
                             tool_result_part, tool_context
                         )
 
-                for tr_part in tool_response_parts:
-                    contents_for_gemini.append(
-                        gemini_types.Content(role="function", parts=[tr_part])
-                    )
-
                 if current_model_text_parts:
-                    model_text_content = gemini_types.Content(
-                        role="model", parts=current_model_text_parts
-                    )
-                    contents_for_gemini.append(model_text_content)
                     final_text_parts.extend(p.text for p in current_model_text_parts)
 
-                response = await self.core.generate_content(
-                    model=self.settings.MODEL_ID,
-                    contents=contents_for_gemini,
-                    **generate_content_kwargs,
+                response = await asyncio.to_thread(
+                    chat.send_message, tool_response_parts
                 )
                 model_response = response
 

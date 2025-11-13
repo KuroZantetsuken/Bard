@@ -140,7 +140,7 @@ class MessageParser:
             },
         )
 
-        url_pattern = r"https?://\S+"
+        url_pattern = r"(?:https?://|www\.)[a-zA-Z0-9\-\._~:/?#\[\]@!$&'()*+,;=%]+"
         combined_content_for_url_extraction = f"{message.content} {reply_chain_text}"
         urls_in_message = set(
             re.findall(url_pattern, combined_content_for_url_extraction)

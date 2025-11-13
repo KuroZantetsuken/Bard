@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict
 
 from ai.chat.conversation import AIConversation
 from ai.chat.files import AttachmentProcessor
+from ai.chat.sessions import ChatSessionManager
 from ai.chat.titler import ThreadTitler
 from ai.config import GeminiConfigManager
 from ai.context.prompts import PromptBuilder, load_prompts_from_directory
@@ -16,6 +17,7 @@ from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
 from bot.message.sender import MessageSender
 from scraper.cache import CacheManager
+from scraper.image import ImageScraper
 from scraper.orchestrator import ScrapingOrchestrator
 from scraper.scraper import Scraper
 from scraper.video import VideoHandler
@@ -61,6 +63,8 @@ class Container:
             "reaction_manager": self._create_reaction_manager,
             "coordinator": self._create_coordinator,
             "discord_event_handler": self._create_discord_event_handler,
+            "image_scraper": self._create_image_scraper,
+            "chat_session_manager": self._create_chat_session_manager,
         }
 
     def get(self, service_name: str) -> Any:
@@ -108,6 +112,7 @@ class Container:
             settings=self.settings,
             gemini_core=self.get("gemini_core"),
             attachment_processor=self.get("attachment_processor"),
+            image_scraper=self.get("image_scraper"),
         )
 
     def _create_prompt_builder(self) -> PromptBuilder:
@@ -154,6 +159,7 @@ class Container:
             cache_manager=self.get("cache_manager"),
             scraper=self.get("scraper"),
             video_handler=self.get("video_handler"),
+            image_scraper=self.get("image_scraper"),
         )
 
     def _create_message_parser(self) -> MessageParser:
@@ -225,6 +231,7 @@ class Container:
             reaction_manager=self.get("reaction_manager"),
             scraping_orchestrator=self.get("scraping_orchestrator"),
             typing_manager=self.get("typing_manager"),
+            chat_session_manager=self.get("chat_session_manager"),
         )
 
     def _create_discord_event_handler(self) -> DiscordEventHandler:
@@ -237,4 +244,20 @@ class Container:
             typing_manager=self.get("typing_manager"),
             settings=self.settings,
             bot_user_id=None,
+        )
+
+    def _create_image_scraper(self) -> ImageScraper:
+        """Creates and returns an instance of ImageScraper."""
+        log.debug("ImageScraper instance created.")
+        return ImageScraper(scraper=self.get("scraper"))
+
+    def _create_chat_session_manager(self) -> ChatSessionManager:
+        """Creates and returns an instance of ChatSessionManager."""
+        log.debug("ChatSessionManager instance created.")
+        return ChatSessionManager(
+            settings=self.settings,
+            gemini_core=self.get("gemini_core"),
+            prompt_builder=self.get("prompt_builder"),
+            config_manager=self.get("gemini_config_manager"),
+            tool_registry=self.get("tool_registry"),
         )

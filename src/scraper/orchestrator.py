@@ -4,6 +4,7 @@ import time
 from typing import List, Optional
 
 from scraper.cache import CacheManager
+from scraper.image import ImageScraper
 from scraper.models import ResolvedURL, ScrapedData
 from scraper.scraper import Scraper
 from scraper.video import VideoHandler
@@ -23,10 +24,12 @@ class ScrapingOrchestrator:
         cache_manager: CacheManager,
         scraper: Scraper,
         video_handler: VideoHandler,
+        image_scraper: ImageScraper,
     ):
         self.cache_manager = cache_manager
         self.scraper = scraper
         self.video_handler = video_handler
+        self.image_scraper = image_scraper
 
     async def process_urls(self, urls: List[str]) -> List[ScrapedData]:
         """
@@ -101,3 +104,21 @@ class ScrapingOrchestrator:
         finally:
             if page:
                 await page.close()
+
+    async def process_image_search(self, search_terms: str) -> Optional[bytes]:
+        """
+        Processes an image search query and returns the image data.
+        """
+        log.debug("Processing image search.", extra={"search_terms": search_terms})
+        image_data = await self.image_scraper.scrape_image_data(search_terms)
+        if image_data:
+            log.info(
+                "Successfully scraped image data for search terms.",
+                extra={"search_terms": search_terms},
+            )
+        else:
+            log.warning(
+                "Failed to scrape image data for search terms.",
+                extra={"search_terms": search_terms},
+            )
+        return image_data

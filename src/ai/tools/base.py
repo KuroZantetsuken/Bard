@@ -47,6 +47,18 @@ class AttachmentProcessorProtocol(Protocol):
         ...
 
 
+@runtime_checkable
+class ImageScraperProtocol(Protocol):
+    """
+    Defines the required interface for an image scraping service.
+    """
+
+    @abstractmethod
+    async def scrape_image_data(self, search_terms: str) -> Optional[bytes]:
+        """Scrapes an image and returns its data."""
+        ...
+
+
 class ToolContext:
     """
     A container to pass shared resources and context-specific data to tools.
@@ -58,6 +70,7 @@ class ToolContext:
         settings: Any,
         gemini_core: GeminiCoreProtocol,
         attachment_processor: AttachmentProcessorProtocol,
+        image_scraper: ImageScraperProtocol,
         guild: Optional[discord.Guild] = None,
         user_id: Optional[str] = None,
     ):
@@ -68,6 +81,7 @@ class ToolContext:
             settings: Application configuration settings.
             gemini_core: An object implementing GeminiCoreProtocol.
             attachment_processor: An object implementing AttachmentProcessorProtocol.
+            image_scraper: An object implementing ImageScraperProtocol.
             guild: Optional; the Discord guild object.
             user_id: Optional; the Discord user ID.
         """
@@ -78,8 +92,10 @@ class ToolContext:
         self.settings = settings
         self._validate_service(gemini_core, GeminiCoreProtocol)
         self._validate_service(attachment_processor, AttachmentProcessorProtocol)
+        self._validate_service(image_scraper, ImageScraperProtocol)
         self.gemini_core = gemini_core
         self.attachment_processor = attachment_processor
+        self.image_scraper = image_scraper
 
         self.image_data: Optional[Any] = None
         self.image_filename: Optional[str] = None

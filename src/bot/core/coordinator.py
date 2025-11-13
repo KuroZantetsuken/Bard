@@ -5,6 +5,7 @@ from discord import Message, Reaction, User
 from google.genai import errors as genai_errors
 
 from ai.chat.conversation import AIConversation
+from ai.chat.sessions import ChatSessionManager
 from ai.types import FinalAIResponse
 from bot.core.lifecycle import RequestManager
 from bot.core.typing import TypingManager
@@ -33,6 +34,7 @@ class Coordinator:
         reaction_manager: ReactionManager,
         scraping_orchestrator: ScrapingOrchestrator,
         typing_manager: TypingManager,
+        chat_session_manager: ChatSessionManager,
     ):
         """
         Initializes the Coordinator with instances of its collaborating services.
@@ -53,6 +55,7 @@ class Coordinator:
         self.reaction_manager = reaction_manager
         self.scraping_orchestrator = scraping_orchestrator
         self.typing_manager = typing_manager
+        self.chat_session_manager = chat_session_manager
         log.debug("Coordinator initialized with all services.")
 
     async def process(
@@ -107,7 +110,12 @@ class Coordinator:
                 return
 
             log.debug("Starting AI conversation.", extra={"message_id": message.id})
-            final_ai_response = await self.ai_conversation.run(parsed_context)
+            chat_session = await self.chat_session_manager.get_or_create_session(
+                message
+            )
+            final_ai_response = await self.ai_conversation.run(
+                parsed_context, chat_session
+            )
             log.debug(
                 "AI conversation completed.",
                 extra={"message_id": message.id, "response": final_ai_response},

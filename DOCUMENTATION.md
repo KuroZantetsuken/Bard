@@ -28,11 +28,23 @@ This optional step is for pre-configuring the browser with custom settings, exte
 
 **Command:**
 ```bash
-python setup_browser.py
+python3 setup_browser.py
 ```
 
 **Expected Output:**
 This script launches a Chromium browser, allowing you to manually configure extensions or settings. When you close the browser, a `data/browser` directory is created, preserving your custom setup. This directory should be preserved for the scraping functionalities to use your custom configuration.
+
+### Image Scraper Debugging
+
+This script is a debugging tool for testing the image scraper. It takes a search query, navigates to Google Images, and saves a screenshot and structured data about the found images to help diagnose scraping issues.
+
+**Command:**
+```bash
+python3 src/debug_scraper.py <search_query>
+```
+
+**Expected Output:**
+The script will navigate to Google Images, save a screenshot of the page to `page_screenshot.png`, and extract metadata from all `<img>` tags into `image_data.json`. This allows for inspection of the page structure to identify the correct selectors for thumbnails and full-resolution images.
 
 ### Configuration
 
@@ -190,6 +202,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | File/Directory | Purpose |
 | :--- | :--- |
 | [`.gitignore`](.gitignore) | Specifies intentionally untracked files to be ignored by Git. |
+| [`debug_scraper.py`](debug_scraper.py) | A standalone script for debugging the image scraper. |
 | [`DOCUMENTATION.md`](DOCUMENTATION.md) | The main documentation file for the project, intended to be updated with architectural and implementation details. |
 | [`example.env`](example.env) | An example environment file that provides a template for setting up environment-specific configurations. |
 | [`LICENSE`](LICENSE) | Contains the software license for the project. |
@@ -227,6 +240,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | :--- | :--- |
 | [`conversation.py`](src/ai/chat/conversation.py) | Manages the state and flow of conversations with the AI. |
 | [`files.py`](src/ai/chat/files.py) | Handles file-based interactions within a chat context. |
+| [`sessions.py`](src/ai/chat/sessions.py) | Manages stateful, multi-turn chat sessions with the Gemini API. |
 | [`titler.py`](src/ai/chat/titler.py) | Generates titles for chat conversations. |
 
 ### `src/ai/context/` Directory
@@ -246,7 +260,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`code.py`](src/ai/tools/code.py) | A tool for executing and analyzing code. |
 | [`diagnose.py`](src/ai/tools/diagnose.py) | A tool for diagnosing issues within the application. |
 | [`event.py`](src/ai/tools/event.py) | A tool for creating and managing events. |
-| [`image.py`](src/ai/tools/image.py) | A tool for processing and analyzing images. |
+| [`image.py`](src/ai/tools/image.py) | A tool for generating images. |
 | [`memory.py`](src/ai/tools/memory.py) | A tool for managing the AI's memory. |
 | [`registry.py`](src/ai/tools/registry.py) | Manages the registration and discovery of AI tools. |
 | [`search.py`](src/ai/tools/search.py) | A tool for performing web searches. |
@@ -267,9 +281,9 @@ This section provides a detailed breakdown of the project's files and directorie
 | :--- | :--- |
 | [`container.py`](src/bot/core/container.py) | Manages the dependency injection container for the bot. |
 | [`coordinator.py`](src/bot/core/coordinator.py) | Coordinates actions and workflows between different parts of the bot. |
-| [`events.py`](src/bot/core/events.py) | Defines and manages lifecycle events. |
+| [`events.py`](src/bot/core/events.py) | Defines and manages Discord events that trigger bot actions. |
 | [`handlers.py`](src/bot/core/handlers.py) | Defines event handlers for various bot events. |
-| [`request_manager.py`](src/bot/core/lifecycle.py) | Manages the lifecycle of user requests, including creation, cancellation, and state tracking. |
+| [`lifecycle.py`](src/bot/core/lifecycle.py) | Manages the lifecycle of user requests, including creation, cancellation, and state tracking. |
 | [`presence.py`](src/bot/core/presence.py) | Manages the bot's online presence and status. |
 | [`typing.py`](src/bot/core/typing.py) | Manages the bot's typing indicator, ensuring it is reliably started and stopped. |
 
@@ -289,6 +303,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | File/Directory | Purpose |
 | :--- | :--- |
 | [`cache.py`](src/scraper/cache.py) | Implements caching for scraped data to improve performance. |
+| [`image.py`](src/scraper/image.py) | A scraper for retrieving images from Google Images. |
 | [`models.py`](src/scraper/models.py) | Defines data models for the scraped information. |
 | [`orchestrator.py`](src/scraper/orchestrator.py) | Orchestrates the scraper process, managing multiple scrapers. |
 | [`page.py`](src/scraper/page.py) | Represents a web page and provides methods for interacting with it. |

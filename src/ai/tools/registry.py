@@ -16,6 +16,7 @@ from ai.tools.base import (
     ToolContext,
 )
 from settings import Settings
+from src.scraper.image import ImageScraper
 
 log = logging.getLogger("Bard")
 
@@ -32,6 +33,7 @@ class ToolRegistry:
         settings: Settings,
         gemini_core: GeminiCoreProtocol,
         attachment_processor: AttachmentProcessorProtocol,
+        image_scraper: ImageScraper,
     ):
         """
         Initializes the ToolRegistry.
@@ -40,11 +42,13 @@ class ToolRegistry:
             settings: Application configuration settings.
             gemini_core: An instance of GeminiCoreProtocol.
             attachment_processor: An instance of AttachmentProcessorProtocol.
+            image_scraper: An instance of the ImageScraper.
         """
         log.debug("Initializing ToolRegistry")
         self.settings = settings
         self.gemini_core = gemini_core
         self.attachment_processor = attachment_processor
+        self.image_scraper = image_scraper
         self.tools: Dict[str, BaseTool] = {}
         self.tool_emojis: Dict[str, str] = {}
         self.function_to_tool_map: Dict[str, str] = {}
@@ -69,6 +73,7 @@ class ToolRegistry:
             settings=self.settings,
             gemini_core=self.gemini_core,
             attachment_processor=self.attachment_processor,
+            image_scraper=self.image_scraper,
         )
 
         for filename in os.listdir(tools_abs_path):
