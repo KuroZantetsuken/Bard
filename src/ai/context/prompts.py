@@ -197,7 +197,14 @@ class PromptBuilder:
             if uploaded_file:
                 identifier = uploaded_file.uri
                 if identifier and identifier not in seen_media_identifiers:
-                    prompt_parts.append(uploaded_file)
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            file_data=gemini_types.FileData(
+                                mime_type=uploaded_file.mime_type,
+                                file_uri=uploaded_file.uri,
+                            )
+                        )
+                    )
                     seen_media_identifiers.add(identifier)
                 elif identifier:
                     log.debug(
@@ -208,7 +215,14 @@ class PromptBuilder:
             if video_file and hasattr(video_file, "uri"):
                 identifier = video_file.uri
                 if identifier not in seen_media_identifiers:
-                    prompt_parts.append(video_file)
+                    prompt_parts.append(
+                        gemini_types.Part(
+                            file_data=gemini_types.FileData(
+                                mime_type=video_file.mime_type,
+                                file_uri=video_file.uri,
+                            )
+                        )
+                    )
                     seen_media_identifiers.add(identifier)
                 else:
                     log.debug(
