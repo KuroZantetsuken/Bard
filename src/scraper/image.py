@@ -73,7 +73,6 @@ class ImageScraper:
                 return None
 
             await thumbnail_to_click.click()
-            await page.screenshot(path="debug_screenshot_after_click.png")
             await asyncio.sleep(1)
 
             preview_img_selector = "img.sFlh5c"
