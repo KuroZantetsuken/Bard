@@ -8,7 +8,7 @@ from ai.chat.files import AttachmentProcessor
 from ai.context.dynamic import DynamicContextFormatter
 from ai.context.videos import VideoFormatter
 from bot.types import DiscordContext, VideoMetadata
-from scraping.models import ScrapedData
+from scraper.models import ScrapedData
 
 log = logging.getLogger("Bard")
 

@@ -13,8 +13,8 @@ from playwright.async_api import (
     async_playwright,
 )
 
-from scraping.models import ResolvedURL, ScrapedData
-from scraping.page import PageStability
+from scraper.models import ResolvedURL, ScrapedData
+from scraper.page import PageStability
 from settings import Settings
 
 log = logging.getLogger("Bard")

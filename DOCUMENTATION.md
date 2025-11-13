@@ -195,7 +195,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`LICENSE`](LICENSE) | Contains the software license for the project. |
 | [`README.md`](README.md) | The introductory file for the project, typically containing a project overview, installation instructions, and usage examples. |
 | [`requirements.txt`](requirements.txt) | Lists the Python packages required to run the project. This file is used by `pip` to install dependencies. |
-| [`setup_browser.py`](setup_browser.py) | A script to set up the browser environment required for the project's scraping functionalities. |
+| [`setup_browser.py`](setup_browser.py) | A script to set up the browser environment required for the project's scraper functionalities. |
 | [`src/`](src/) | The main package directory for the project. |
 
 ### `src/` Directory
@@ -208,7 +208,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`settings.py`](src/settings.py) | Manages the application's settings and configurations. |
 | [`ai/`](src/ai/) | Contains all modules related to artificial intelligence, including configuration, core logic, and tools. |
 | [`bot/`](src/bot/) | Includes modules that define the bot's behavior, event handling, and message processing. |
-| [`scraping/`](src/scraping/) | Contains modules for web scraping functionalities. |
+| [`scraper/`](src/scraper/) | Contains modules for web scraper functionalities. |
 
 ### `src/ai/` Directory
 
@@ -284,16 +284,16 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`threading.py`](src/bot/message/threading.py) | Manages message threading and conversations. |
 | [`voice.py`](src/bot/message/voice.py) | Handles voice messages and voice channel interactions. |
 
-### `src/scraping/` Directory
+### `src/scraper/` Directory
 
 | File/Directory | Purpose |
 | :--- | :--- |
-| [`cache.py`](src/scraping/cache.py) | Implements caching for scraped data to improve performance. |
-| [`models.py`](src/scraping/models.py) | Defines data models for the scraped information. |
-| [`orchestrator.py`](src/scraping/orchestrator.py) | Orchestrates the scraping process, managing multiple scrapers. |
-| [`page.py`](src/scraping/page.py) | Represents a web page and provides methods for interacting with it. |
-| [`scraper.py`](src/scraping/scraper.py) | The core scraping logic for extracting data from web pages. |
-| [`video.py`](src/scraping/video.py) | Specialized scraping logic for video content. |
+| [`cache.py`](src/scraper/cache.py) | Implements caching for scraped data to improve performance. |
+| [`models.py`](src/scraper/models.py) | Defines data models for the scraped information. |
+| [`orchestrator.py`](src/scraper/orchestrator.py) | Orchestrates the scraper process, managing multiple scrapers. |
+| [`page.py`](src/scraper/page.py) | Represents a web page and provides methods for interacting with it. |
+| [`scraper.py`](src/scraper/scraper.py) | The core scraper logic for extracting data from web pages. |
+| [`video.py`](src/scraper/video.py) | Specialized scraper logic for video content. |
 
 
 ## Troubleshooting

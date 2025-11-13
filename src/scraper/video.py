@@ -5,8 +5,8 @@ from typing import Any, Optional, cast
 import yt_dlp
 from yt_dlp.utils import YoutubeDLError, match_filter_func
 
-from scraping.cache import CacheManager
-from scraping.models import ResolvedURL, VideoDetails
+from scraper.cache import CacheManager
+from scraper.models import ResolvedURL, VideoDetails
 from settings import Settings
 
 log = logging.getLogger("Bard")

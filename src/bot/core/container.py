@@ -15,10 +15,10 @@ from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
 from bot.message.sender import MessageSender
-from scraping.cache import CacheManager
-from scraping.orchestrator import ScrapingOrchestrator
-from scraping.scraper import Scraper
-from scraping.video import VideoHandler
+from scraper.cache import CacheManager
+from scraper.orchestrator import ScrapingOrchestrator
+from scraper.scraper import Scraper
+from scraper.video import VideoHandler
 from settings import Settings
 
 log = logging.getLogger("Bard")

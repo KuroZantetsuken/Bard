@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 import discord
 from google.genai import types as gemini_types
 
-from scraping.models import ScrapedData
+from scraper.models import ScrapedData
 
 
 class DiscordContext(TypedDict):

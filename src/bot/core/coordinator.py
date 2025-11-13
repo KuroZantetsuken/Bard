@@ -12,7 +12,7 @@ from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
 from bot.message.sender import MessageSender
 from bot.types import ParsedMessageContext, Request, RequestState
-from scraping.orchestrator import ScrapingOrchestrator
+from scraper.orchestrator import ScrapingOrchestrator
 
 log = logging.getLogger("Bard")
 

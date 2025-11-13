@@ -13,7 +13,7 @@ from ai.tools.memory import MemoryManager
 from ai.tools.registry import ToolRegistry
 from ai.types import FinalAIResponse
 from bot.types import ParsedMessageContext
-from scraping.orchestrator import ScrapingOrchestrator
+from scraper.orchestrator import ScrapingOrchestrator
 from settings import Settings
 
 log = logging.getLogger("Bard")

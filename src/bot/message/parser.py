@@ -11,7 +11,7 @@ from google.genai import types
 from ai.chat.files import AttachmentProcessor
 from ai.context.replies import ReplyChainConstructor
 from bot.types import DiscordContext, ParsedMessageContext, VideoMetadata
-from scraping.orchestrator import ScrapingOrchestrator
+from scraper.orchestrator import ScrapingOrchestrator
 
 log = logging.getLogger("Bard")
 

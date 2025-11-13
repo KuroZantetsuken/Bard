@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from scraping.models import (
+from scraper.models import (
     CachedObject,
     ResolvedURL,
     ScrapedData,

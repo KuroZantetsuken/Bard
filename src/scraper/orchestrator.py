@@ -3,10 +3,10 @@ import logging
 import time
 from typing import List, Optional
 
-from scraping.cache import CacheManager
-from scraping.models import ResolvedURL, ScrapedData
-from scraping.scraper import Scraper
-from scraping.video import VideoHandler
+from scraper.cache import CacheManager
+from scraper.models import ResolvedURL, ScrapedData
+from scraper.scraper import Scraper
+from scraper.video import VideoHandler
 
 log = logging.getLogger("Bard")
 
