@@ -2,6 +2,7 @@ import binascii
 import hashlib
 import json
 import logging
+import mimetypes
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -68,7 +69,7 @@ class CacheManager:
     def get_video_path(self, resolved_url: str) -> Optional[Path]:
         """
         Finds a cached video file for a given URL by searching for a file
-        starting with the URL's hash, ignoring the extension.
+        starting with the URL's hash and having a common video extension.
         """
         log.debug("Searching for cached video.", extra={"url": resolved_url})
         base_path = self.get_cache_base_path_for_url(resolved_url)
@@ -84,11 +85,13 @@ class CacheManager:
 
         for file in parent_dir.iterdir():
             if file.stem == file_hash and file.suffix != ".json":
-                log.debug(
-                    "Found cached video file.",
-                    extra={"url": resolved_url, "path": str(file)},
-                )
-                return file
+                mime_type, _ = mimetypes.guess_type(file)
+                if mime_type and mime_type.startswith("video"):
+                    log.debug(
+                        "Found cached video file.",
+                        extra={"url": resolved_url, "path": str(file)},
+                    )
+                    return file
 
         log.debug("No cached video found for URL.", extra={"url": resolved_url})
         return None

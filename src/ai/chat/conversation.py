@@ -3,6 +3,7 @@ import logging
 import mimetypes
 from typing import Any, Dict, List
 
+from google.genai import errors as genai_errors
 from google.genai import types as gemini_types
 from google.genai.chats import Chat
 
@@ -234,7 +235,37 @@ class AIConversation:
             },
         )
 
-        response = await asyncio.to_thread(chat.send_message, gemini_prompt_parts)
+        response = None
+        retries = 3
+        delay = 2
+        for attempt in range(retries):
+            try:
+                response = await asyncio.to_thread(
+                    chat.send_message, gemini_prompt_parts
+                )
+                break  # Success
+            except genai_errors.ServerError as e:
+                if "503" in str(e) and attempt < retries - 1:
+                    log.warning(
+                        f"Model overloaded (503). Retrying in {delay} seconds... (Attempt {attempt + 1}/{retries})",
+                        extra={"error": str(e)},
+                    )
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                else:
+                    log.error(
+                        f"Final attempt failed or non-retryable server error: {e}"
+                    )
+                    raise
+
+        if not response:
+            log.error("AI conversation failed after multiple retries.")
+            return FinalAIResponse(
+                text_content="The AI model is currently overloaded. Please try again later.",
+                media={},
+                tool_emojis=[],
+                message_id=parsed_context.discord_context.get("message_id"),
+            )
 
         response_text_for_log = ""
         if (

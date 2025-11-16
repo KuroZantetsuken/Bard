@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Optional, cast
 
 import yt_dlp
@@ -10,18 +11,6 @@ from scraper.models import ResolvedURL, VideoDetails
 from settings import Settings
 
 log = logging.getLogger("Bard")
-
-
-class YtdlpLogger:
-    def debug(self, msg: str):
-        if "yt-dlp" in msg or "WARNING" not in msg:
-            log.debug(msg, extra={"source": "yt-dlp"})
-
-    def warning(self, msg: str):
-        log.warning(msg, extra={"source": "yt-dlp"})
-
-    def error(self, msg: str):
-        log.error(msg, extra={"source": "yt-dlp"})
 
 
 class VideoHandler:
@@ -52,10 +41,11 @@ class VideoHandler:
                 )
 
                 metadata = await self._extract_metadata(resolved_url)
+                sanitized_metadata = self._sanitize_metadata(metadata)
                 return VideoDetails(
                     is_video=True,
                     is_youtube="youtube" in resolved_url,
-                    metadata=metadata,
+                    metadata=sanitized_metadata,
                     video_path=str(video_path),
                 )
 
@@ -70,7 +60,14 @@ class VideoHandler:
                 )
                 return VideoDetails(is_video=False)
 
-            video_path = self.cache_manager.get_video_path(resolved_url)
+            video_path = None
+            video_path_str = metadata.get("filepath")
+            if not video_path_str and metadata.get("requested_downloads"):
+                video_path_str = metadata["requested_downloads"][0].get("filepath")
+
+            if video_path_str:
+                video_path = Path(video_path_str)
+
             if video_path and video_path.exists():
                 log.info(
                     "Video downloaded successfully.",
@@ -83,10 +80,11 @@ class VideoHandler:
                     "path": str(video_path) if video_path else None,
                 },
             )
+            sanitized_metadata = self._sanitize_metadata(metadata)
             return VideoDetails(
                 is_video=True,
                 is_youtube="youtube" in resolved_url,
-                metadata=metadata,
+                metadata=sanitized_metadata,
                 video_path=str(video_path) if video_path else None,
             )
 
@@ -97,6 +95,19 @@ class VideoHandler:
                 exc_info=True,
             )
             return VideoDetails(is_video=False)
+
+    def _sanitize_metadata(self, data: Any) -> Any:
+        """
+        Recursively sanitizes metadata to remove non-serializable objects.
+        """
+        if isinstance(data, dict):
+            return {str(k): self._sanitize_metadata(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._sanitize_metadata(item) for item in data]
+        elif isinstance(data, (int, float, str, bool)) or data is None:
+            return data
+        else:
+            return str(data)
 
     async def get_video_info(
         self, url: str, ignore_youtube: bool = False
@@ -119,7 +130,6 @@ class VideoHandler:
             "no_warnings": True,
             "dump_single_json": True,
             "quiet": True,
-            "logger": YtdlpLogger(),
         }
         if ignore_youtube:
             ydl_opts["match_filter"] = match_filter_func(
@@ -144,47 +154,6 @@ class VideoHandler:
             )
             return None
 
-    async def get_stream_url(self, url: str, format_selector: str) -> Optional[str]:
-        """
-        Retrieves a streamable URL for a given video format using yt-dlp.
-
-        Args:
-            url: The URL of the video.
-            format_selector: The yt-dlp format selector string (e.g., "bestvideo+bestaudio").
-
-        Returns:
-            An optional string containing the streamable URL, or None if retrieval fails.
-        """
-        log.debug("Getting stream URL.", extra={"url": url, "format": format_selector})
-        ydl_opts: dict[str, Any] = {
-            "executable": Settings.YTDLP_PATH,
-            "format": format_selector,
-            "get_url": True,
-            "noplaylist": True,
-            "ignoreerrors": True,
-            "no_warnings": True,
-            "quiet": True,
-            "logger": YtdlpLogger(),
-        }
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
-                info: dict[str, Any] | None = await asyncio.to_thread(
-                    ydl.extract_info, url, download=False
-                )  # type: ignore
-                stream_url = info.get("url") if info else None
-                log.debug(
-                    "Stream URL retrieval result.",
-                    extra={"url": url, "has_stream_url": stream_url is not None},
-                )
-                return stream_url
-        except Exception as e:
-            log.error(
-                "Error getting stream URL.",
-                extra={"url": url, "error": str(e)},
-                exc_info=True,
-            )
-            return None
-
     async def _extract_metadata(self, url: str) -> Optional[dict[str, Any]]:
         """Extracts video metadata without downloading."""
         log.debug("Extracting metadata.", extra={"url": url})
@@ -196,7 +165,6 @@ class VideoHandler:
                 "dump_single_json": True,
                 "noplaylist": True,
                 "ignoreerrors": True,
-                "logger": YtdlpLogger(),
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
@@ -225,9 +193,8 @@ class VideoHandler:
             "no_warnings": True,
             "noplaylist": True,
             "ignoreerrors": True,
-            "logger": YtdlpLogger(),
             "outtmpl": f"{base_path}.%(ext)s",
-            "format": "best",
+            "format": "bestvideo+bestaudio/best",
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
