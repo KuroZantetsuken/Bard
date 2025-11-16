@@ -73,6 +73,7 @@ class ToolContext:
         image_scraper: ImageScraperProtocol,
         guild: Optional[discord.Guild] = None,
         user_id: Optional[str] = None,
+        channel: Optional[discord.abc.Messageable] = None,
     ):
         """
         Initializes the ToolContext.
@@ -84,10 +85,15 @@ class ToolContext:
             image_scraper: An object implementing ImageScraperProtocol.
             guild: Optional; the Discord guild object.
             user_id: Optional; the Discord user ID.
+            channel: Optional; the Discord channel object.
         """
         log.debug(
             "Initializing ToolContext",
-            extra={"guild_id": guild.id if guild else None, "user_id": user_id},
+            extra={
+                "guild_id": guild.id if guild else None,
+                "user_id": user_id,
+                "channel_id": getattr(channel, "id", None),
+            },
         )
         self.settings = settings
         self._validate_service(gemini_core, GeminiCoreProtocol)
@@ -104,6 +110,7 @@ class ToolContext:
         self.grounding_sources_md: Optional[str] = None
         self.guild = guild
         self.user_id = user_id
+        self.channel = channel
 
     def _validate_service(self, service: Any, protocol: type) -> None:
         """

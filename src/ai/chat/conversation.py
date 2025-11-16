@@ -201,6 +201,7 @@ class AIConversation:
 
         tool_context.guild = parsed_context.guild
         tool_context.user_id = str(user_id)
+        tool_context.channel = parsed_context.message.channel
 
         memories = await self.memory_manager.load_memories(str(user_id))
         formatted_memories = self.memory_manager.format_memories(str(user_id), memories)

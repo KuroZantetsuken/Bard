@@ -62,6 +62,7 @@ Application configuration is managed through a `.env` file.
     Open the `.env` file and fill in the required environment variables. At a minimum, you will need to provide:
     *   `DISCORD_BOT_TOKEN`: Your Discord bot token.
     *   `GEMINI_API_KEY`: Your Google Gemini API key.
+    *   `DISCORD_CHAT_EXPORTER_PATH`: The path to the `DiscordChatExporter.Cli` executable. Defaults to `~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli`.
 
 ### Running the Application
 
@@ -264,6 +265,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`memory.py`](src/ai/tools/memory.py) | A tool for managing the AI's memory. |
 | [`registry.py`](src/ai/tools/registry.py) | Manages the registration and discovery of AI tools. |
 | [`search.py`](src/ai/tools/search.py) | A tool for performing web searches. |
+| [`summarize.py`](src/ai/tools/summarize.py) | A tool for summarizing chat history. |
 | [`tts.py`](src/ai/tools/tts.py) | A tool for text-to-speech conversion. |
 
 ### `src/bot/` Directory

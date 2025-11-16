@@ -87,6 +87,10 @@ class Settings:
     PLAYWRIGHT_EXTENSIONS_PATH = "data/extensions/"
     # The directory containing persistent browser data
     PLAYWRIGHT_BROWSER_PATH = "data/browser/"
+    # The directory to the DiscordChatExporter.Cli executable.
+    DISCORD_CHAT_EXPORTER_PATH = os.path.expanduser(
+        "~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli"
+    )
 
     # --- Logging Configuration ---
     # Enable or disable logging to the console.
