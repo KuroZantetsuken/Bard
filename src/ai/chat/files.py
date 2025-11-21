@@ -76,7 +76,7 @@ class AttachmentProcessor:
                 )
                 if gemini_file:
                     self._gemini_file_cache[cache_key] = gemini_file
-                    if original_url and gemini_file.uri:
+                    if original_url and hasattr(gemini_file, "uri") and gemini_file.uri:
                         self._original_urls[gemini_file.uri] = original_url
                 log.debug(
                     "Finished uploading media bytes", extra={"gemini_file": gemini_file}

@@ -62,6 +62,7 @@ Application configuration is managed through a `.env` file.
     Open the `.env` file and fill in the required environment variables. At a minimum, you will need to provide:
     *   `DISCORD_BOT_TOKEN`: Your Discord bot token.
     *   `GEMINI_API_KEY`: Your Google Gemini API key.
+    *   `GEMINI_BASE_URL`: (Optional) A custom base URL for the Gemini API.
     *   `DISCORD_CHAT_EXPORTER_PATH`: The path to the `DiscordChatExporter.Cli` executable. Defaults to `~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli`.
 
 ### Running the Application

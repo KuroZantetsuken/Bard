@@ -98,7 +98,9 @@ class Container:
             log.error("GEMINI_API_KEY is not set. Service creation failed.")
             raise ValueError("GEMINI_API_KEY is not set in the configuration.")
         log.debug("GeminiCore instance created.")
-        return GeminiCore(api_key=self.settings.GEMINI_API_KEY)
+        return GeminiCore(
+            api_key=self.settings.GEMINI_API_KEY, base_url=self.settings.GEMINI_BASE_URL
+        )
 
     def _create_attachment_processor(self) -> AttachmentProcessor:
         """Creates and returns an instance of AttachmentProcessor."""

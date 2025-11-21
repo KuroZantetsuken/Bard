@@ -1,3 +1,4 @@
+import json
 import logging
 import mimetypes
 from typing import Any, Dict, List
@@ -131,7 +132,7 @@ class ImageGenerationTool(BaseTool):
                             log.debug(
                                 "Image data found in response",
                                 extra={
-                                    "filename": generated_filename,
+                                    "generated_filename": generated_filename,
                                     "mime_type": mime_type,
                                     "data_len": len(part.inline_data.data),
                                 },
@@ -169,6 +170,12 @@ class ImageGenerationTool(BaseTool):
                     )
                 )
 
+        except json.JSONDecodeError:
+            error_msg = "The AI server returned an invalid JSON response (likely empty). This may indicate the model is not supported or the server is experiencing issues."
+            log.error(f"ImageGenerationTool: {error_msg}")
+            return types.Part(
+                function_response=self.function_response_error(function_name, error_msg)
+            )
         except Exception as e:
             error_msg = str(e)
             log.error(

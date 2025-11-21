@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import date, datetime
 from typing import Any, Dict, List
 
 from google.genai import types
@@ -38,7 +39,7 @@ class SummarizeTool(BaseTool):
                 description=(
                     "Exports and summarizes chat history from the current Discord channel for a specified timeframe. "
                     "Use this tool to answer questions about past conversations, like 'what did we discuss yesterday?' or 'summarize last week'. "
-                    "The after and before date must be different."
+                    "The after and before date must be different. Do not accept requests for future dates."
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
@@ -71,12 +72,32 @@ class SummarizeTool(BaseTool):
                 )
             )
 
-        after_date = args.get("after_date")
-        before_date = args.get("before_date")
-        if not after_date or not before_date:
+        after_date_str = args.get("after_date")
+        before_date_str = args.get("before_date")
+        if not after_date_str or not before_date_str:
             return types.Part(
                 function_response=self.function_response_error(
                     function_name, "Missing after_date or before_date"
+                )
+            )
+
+        try:
+            after_date = datetime.fromisoformat(after_date_str).date()
+            before_date = datetime.fromisoformat(before_date_str).date()
+        except ValueError:
+            return types.Part(
+                function_response=self.function_response_error(
+                    function_name,
+                    "Invalid date format. Use 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'.",
+                )
+            )
+
+        today = date.today()
+        if after_date > today or before_date > today:
+            log.warning("Attempted to summarize a future date.")
+            return types.Part(
+                function_response=self.function_response_error(
+                    function_name, "Cannot summarize future dates."
                 )
             )
 
@@ -90,7 +111,7 @@ class SummarizeTool(BaseTool):
         channel_id = getattr(context.channel, "id")
         output_path = os.path.join(
             self.context.settings.CACHE_DIR,
-            f"{channel_id}_{after_date}_{before_date}.json",
+            f"{channel_id}_{after_date_str}_{before_date_str}.json",
         )
 
         try:
@@ -110,9 +131,9 @@ class SummarizeTool(BaseTool):
                     "-f",
                     "Json",
                     "--after",
-                    after_date,
+                    after_date_str,
                     "--before",
-                    before_date,
+                    before_date_str,
                     "-o",
                     output_path,
                 ]

@@ -195,6 +195,18 @@ class PromptBuilder:
                 data, f"attachment_{i}", mime_type
             )
             if uploaded_file:
+                if isinstance(uploaded_file, gemini_types.Part):
+                    if uploaded_file.inline_data:
+                        log.debug(
+                            f"Attachment {i} upload failed, using inline data fallback."
+                        )
+                    else:
+                        log.warning(
+                            f"Attachment {i} upload failed, adding error message to prompt."
+                        )
+                    prompt_parts.append(uploaded_file)
+                    continue
+
                 identifier = uploaded_file.uri
                 if identifier and identifier not in seen_media_identifiers:
                     prompt_parts.append(

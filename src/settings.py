@@ -39,14 +39,16 @@ class Settings:
     # --- Gemini AI Model Settings ---
     # The API key for the Gemini AI, retrieved from environment variables.
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    # Optional custom base URL for the Gemini API.
+    GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
     # The primary model identifier for text generation.
     MODEL_ID = "gemini-2.5-flash"
     # The secondary model identifier for simple sub-tasks.
     MODEL_ID_SECONDARY = "gemini-2.5-flash-lite"
     # The specific model identifier for text-to-speech generation.
-    MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
+    MODEL_ID_TTS = "gemini-2.5-flash-tts"
     # The specific model identifier for image generation.
-    MODEL_ID_IMAGE_GENERATION = "gemini-2.5-flash-image-preview"
+    MODEL_ID_IMAGE_GENERATION = "gemini-2.5-flash-image"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 

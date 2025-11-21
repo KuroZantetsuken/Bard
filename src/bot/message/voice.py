@@ -119,7 +119,7 @@ class VoiceMessageSender:
         except aiohttp.ClientResponseError as e:
             log.error(
                 "HTTP error sending native voice message.",
-                extra={"status": e.status, "message": e.message},
+                extra={"status": e.status, "error_message": e.message},
                 exc_info=True,
             )
             return None

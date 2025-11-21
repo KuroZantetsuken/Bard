@@ -1,7 +1,7 @@
 import asyncio
 import io
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from google.genai import client as genai_client
 from google.genai import errors as genai_errors
@@ -16,16 +16,24 @@ class GeminiCore:
     generating content (both standard and streaming), and handling file uploads.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: Optional[str] = None):
         """
         Initializes the GeminiCore with the provided API key.
 
         Args:
             api_key: The API key for authenticating with the Gemini API.
+            base_url: Optional custom base URL for the Gemini API.
         """
         log.debug("Initializing GeminiCore")
         self.api_key = api_key
-        self.client: genai_client.Client = genai_client.Client(api_key=self.api_key)
+
+        client_kwargs: dict[str, Any] = {"api_key": self.api_key}
+        if base_url:
+            log.debug("Using custom Gemini base URL", extra={"base_url": base_url})
+            # Pass base_url via http_options as direct keyword argument is not supported by the standard Client
+            client_kwargs["http_options"] = {"base_url": base_url}
+
+        self.client: genai_client.Client = genai_client.Client(**client_kwargs)
 
     @property
     def aio(self) -> Any:
@@ -153,6 +161,15 @@ class GeminiCore:
             return active_uploaded_file
         except Exception as e:
             log.error(f"Error uploading file '{display_name}': {e}", exc_info=True)
+            # Fallback to inline data if upload fails and size is within limits (20MB)
+            if len(data_bytes) < 20 * 1024 * 1024:
+                log.info(
+                    f"Falling back to inline data for '{display_name}' due to upload error."
+                )
+                return gemini_types.Part(
+                    inline_data=gemini_types.Blob(mime_type=mime_type, data=data_bytes)
+                )
+
             return gemini_types.Part(
                 text=f"[Attachment: {display_name} - Error: {str(e)[:100]}]"
             )
