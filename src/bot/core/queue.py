@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from bot.message.sender import MessageSender
 from bot.types import Request
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("Bard")
 
 
 class MessageQueue:

@@ -5,7 +5,7 @@ from typing import Any, Callable, Coroutine, Type, TypeVar
 
 from typing_extensions import ParamSpec
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Bard")
 
 DEFAULT_RETRIES = 3
 DEFAULT_DELAY = 1
