@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import discord
-from google.genai.types import FunctionDeclaration, FunctionResponse, Part, Schema, Type
+from google.genai.types import (FunctionDeclaration, FunctionResponse, Part,
+                                Schema, Type)
 
 from ai.tools.base import BaseTool, ToolContext
 

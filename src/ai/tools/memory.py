@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import aiofiles
 from google.genai import types
 
 from ai.tools.base import BaseTool, ToolContext
@@ -90,8 +91,9 @@ class JsonStorageManager:
             if not os.path.exists(filepath):
                 return []
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                async with aiofiles.open(filepath, "r", encoding="utf-8") as f:
+                    content = await f.read()
+                    data = json.loads(content)
                 if not isinstance(data, list):
                     log.error(
                         f"Invalid data format (not a list) for {filepath}. Deleting file."
@@ -126,8 +128,8 @@ class JsonStorageManager:
         temp_path = f"{filepath}.tmp"
         async with self.storage_locks[filepath]:
             try:
-                with open(temp_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
+                async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(data, indent=2))
                 os.replace(temp_path, filepath)
             except Exception as e:
                 log.error(f"Error saving data to {filepath}: {e}", exc_info=True)

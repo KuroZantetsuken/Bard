@@ -1,14 +1,17 @@
 import logging
 import os
 import tempfile
+import uuid
 from typing import List, Optional, cast
 
+import aiofiles
 import discord
 
 from ai.chat.titler import ThreadTitler
 from bot.message.manager import MessageManager
 from bot.message.threading import ThreadManager
 from bot.message.voice import VoiceMessageSender
+from retry import async_retry
 from settings import Settings
 
 log = logging.getLogger("Bard")
@@ -134,6 +137,7 @@ class MessageSender:
 
         return [chunk for chunk in chunks if chunk]
 
+    @async_retry(retry_on=(discord.HTTPException,))
     async def _send_single_message_with_fallback(
         self,
         channel: discord.abc.Messageable,
@@ -160,6 +164,10 @@ class MessageSender:
             else:
                 return await channel.send(content, files=files_to_send)
         except discord.HTTPException as e:
+            # Only retry on server-side errors (5xx)
+            if e.status >= 500:
+                raise
+
             log.error(
                 "Failed to send message reply, falling back to channel.",
                 extra={"error": e},
@@ -168,6 +176,8 @@ class MessageSender:
             try:
                 return await channel.send(content, files=files_to_send)
             except discord.HTTPException as e_chan:
+                if e_chan.status >= 500:
+                    raise
                 log.error(
                     "Failed to send message to channel directly.",
                     extra={"error": e_chan},
@@ -384,11 +394,10 @@ class MessageSender:
         try:
             if image_data:
                 log.debug("Processing image data for attachment.")
-                with tempfile.NamedTemporaryFile(
-                    suffix=".png", delete=False
-                ) as temp_file:
-                    temp_file.write(image_data)
-                    temp_image_path = temp_file.name
+                temp_dir = tempfile.gettempdir()
+                temp_image_path = os.path.join(temp_dir, f"{uuid.uuid4()}.png")
+                async with aiofiles.open(temp_image_path, "wb") as f:
+                    await f.write(image_data)
                 temp_files_to_clean.append(temp_image_path)
                 filename = image_filename or "image.png"
                 _, ext = os.path.splitext(filename)
@@ -402,11 +411,10 @@ class MessageSender:
 
             if code_data:
                 log.debug("Processing code data for attachment.")
-                with tempfile.NamedTemporaryFile(
-                    suffix=".py", delete=False
-                ) as temp_file:
-                    temp_file.write(code_data)
-                    temp_code_path = temp_file.name
+                temp_dir = tempfile.gettempdir()
+                temp_code_path = os.path.join(temp_dir, f"{uuid.uuid4()}.py")
+                async with aiofiles.open(temp_code_path, "wb") as f:
+                    await f.write(code_data)
                 temp_files_to_clean.append(temp_code_path)
                 filename = code_filename or "code.py"
                 _, ext = os.path.splitext(filename)
@@ -453,11 +461,11 @@ class MessageSender:
                 )
                 temp_audio_path = None
                 try:
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".ogg", delete=False
-                    ) as temp_file:
-                        temp_file.write(audio_data)
-                        temp_audio_path = temp_file.name
+                    temp_dir = tempfile.gettempdir()
+                    temp_audio_path = os.path.join(temp_dir, f"{uuid.uuid4()}.ogg")
+                    async with aiofiles.open(temp_audio_path, "wb") as f:
+                        await f.write(audio_data)
+
                     file = discord.File(temp_audio_path, filename="voice_response.ogg")
                     sent_msg = await self._send_single_message_with_fallback(
                         cast(discord.abc.Messageable, message_to_reply_to.channel),

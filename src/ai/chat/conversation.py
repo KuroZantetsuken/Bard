@@ -244,7 +244,7 @@ class AIConversation:
                 response = await asyncio.to_thread(
                     chat.send_message, gemini_prompt_parts
                 )
-                break  # Success
+                break
             except genai_errors.ServerError as e:
                 if "503" in str(e) and attempt < retries - 1:
                     log.warning(

@@ -12,6 +12,7 @@ from ai.tools.registry import ToolRegistry
 from bot.core.coordinator import Coordinator
 from bot.core.events import DiscordEventHandler
 from bot.core.lifecycle import RequestManager
+from bot.core.queue import MessageQueue
 from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
@@ -51,6 +52,7 @@ class Container:
             "tool_registry": self._create_tool_registry,
             "prompt_builder": self._create_prompt_builder,
             "message_sender": self._create_message_sender,
+            "message_queue": self._create_message_queue,
             "scraper": self._create_scraper,
             "cache_manager": self._create_cache_manager,
             "scraping_orchestrator": self._create_scraping_orchestrator,
@@ -139,6 +141,11 @@ class Container:
             thread_titler=self.get("thread_titler"),
         )
 
+    def _create_message_queue(self) -> MessageQueue:
+        """Creates and returns an instance of MessageQueue."""
+        log.debug("MessageQueue instance created.")
+        return MessageQueue(message_sender=self.get("message_sender"))
+
     def _create_scraper(self) -> Scraper:
         """Creates and returns an instance of Scraper."""
         log.debug("Scraper instance created.")
@@ -178,6 +185,7 @@ class Container:
         return GeminiConfigManager(
             max_output_tokens=self.settings.MAX_OUTPUT_TOKENS,
             thinking_budget=self.settings.THINKING_BUDGET,
+            thinking_level=self.settings.THINKING_LEVEL,
         )
 
     def _create_thread_titler(self) -> ThreadTitler:
@@ -228,7 +236,7 @@ class Container:
         return Coordinator(
             message_parser=self.get("message_parser"),
             ai_conversation=self.get("ai_conversation"),
-            message_sender=self.get("message_sender"),
+            message_queue=self.get("message_queue"),
             request_manager=self.get("request_manager"),
             reaction_manager=self.get("reaction_manager"),
             scraping_orchestrator=self.get("scraping_orchestrator"),

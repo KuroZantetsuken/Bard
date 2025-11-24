@@ -9,12 +9,8 @@ from typing import Any, Dict, List, Optional
 
 from google.genai import types as gemini_types
 
-from ai.tools.base import (
-    AttachmentProcessorProtocol,
-    BaseTool,
-    GeminiCoreProtocol,
-    ToolContext,
-)
+from ai.tools.base import (AttachmentProcessorProtocol, BaseTool,
+                           GeminiCoreProtocol, ToolContext)
 from settings import Settings
 from src.scraper.image import ImageScraper
 
@@ -102,9 +98,9 @@ class ToolRegistry:
                         )
                         continue
                     sys.modules[logical_module_name] = module
-                    assert spec.loader is not None, (
-                        f"ModuleSpec loader is None for {logical_module_name}"
-                    )
+                    assert (
+                        spec.loader is not None
+                    ), f"ModuleSpec loader is None for {logical_module_name}"
                     spec.loader.exec_module(module)
                     for attribute_name in dir(module):
                         attribute = getattr(module, attribute_name)

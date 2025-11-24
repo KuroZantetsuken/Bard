@@ -57,6 +57,9 @@ async def run():
                 )
             )
             log.info("Attempting to connect to Discord and start bot.")
+            message_queue = container.get("message_queue")
+            message_queue.start_workers()
+
             await bot.start(settings.DISCORD_BOT_TOKEN)
     except Exception as e:
         log.critical(f"Critical error during bot execution: {e}", exc_info=True)
@@ -65,6 +68,15 @@ async def run():
         if scraper:
             log.debug("Closing scraper.")
             await scraper.close()
+
+        # We need to access message_queue again to stop workers,
+        # handling potentially uninitialized variable if error happened before.
+        try:
+            message_queue = container.get("message_queue")
+            await message_queue.stop_workers()
+        except Exception:
+            pass
+
         log.info("Bot has been shut down.")
 
 

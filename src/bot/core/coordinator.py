@@ -8,11 +8,12 @@ from ai.chat.conversation import AIConversation
 from ai.chat.sessions import ChatSessionManager
 from ai.types import FinalAIResponse
 from bot.core.lifecycle import RequestManager
+from bot.core.queue import MessageQueue
 from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
-from bot.message.sender import MessageSender
 from bot.types import ParsedMessageContext, Request, RequestState
+from retry import async_retry
 from scraper.orchestrator import ScrapingOrchestrator
 
 log = logging.getLogger("Bard")
@@ -29,7 +30,7 @@ class Coordinator:
         self,
         message_parser: MessageParser,
         ai_conversation: AIConversation,
-        message_sender: MessageSender,
+        message_queue: MessageQueue,
         request_manager: RequestManager,
         reaction_manager: ReactionManager,
         scraping_orchestrator: ScrapingOrchestrator,
@@ -42,7 +43,7 @@ class Coordinator:
         Args:
             message_parser: Service for parsing incoming Discord messages.
             ai_conversation: Service for managing AI conversational turns.
-            message_sender: Service for sending messages back to Discord.
+            message_queue: Service for queuing messages to send to Discord.
             request_manager: Service for managing request lifecycles.
             reaction_manager: Service for managing message reactions.
             scraping_orchestrator: Service for scraping URLs.
@@ -50,7 +51,7 @@ class Coordinator:
         """
         self.message_parser = message_parser
         self.ai_conversation = ai_conversation
-        self.message_sender = message_sender
+        self.message_queue = message_queue
         self.request_manager = request_manager
         self.reaction_manager = reaction_manager
         self.scraping_orchestrator = scraping_orchestrator
@@ -88,7 +89,6 @@ class Coordinator:
         )
         self.request_manager.update_request_state(request.id, RequestState.PROCESSING)
         final_ai_response: Optional[FinalAIResponse] = None
-        bot_messages: Optional[List[Message]] = None
         try:
             self.typing_manager.start_typing(message.channel)
 
@@ -113,9 +113,12 @@ class Coordinator:
             chat_session = await self.chat_session_manager.get_or_create_session(
                 message
             )
-            final_ai_response = await self.ai_conversation.run(
-                parsed_context, chat_session
-            )
+
+            @async_retry(retry_on=(genai_errors.ServerError,))
+            async def run_ai_conversation():
+                return await self.ai_conversation.run(parsed_context, chat_session)
+
+            final_ai_response = await run_ai_conversation()
             log.debug(
                 "AI conversation completed.",
                 extra={"message_id": message.id, "response": final_ai_response},
@@ -125,26 +128,24 @@ class Coordinator:
                 log.info(f"Request {request.id} was cancelled after AI conversation.")
                 return
 
-            log.debug("Sending AI response.", extra={"message_id": message.id})
-            bot_messages = await self.message_sender.send(
-                message_to_reply_to=message,
-                text_content=final_ai_response.text_content,
-                existing_bot_messages_to_edit=bot_messages_to_edit,
-                **final_ai_response.media,
-                tool_emojis=final_ai_response.tool_emojis,
+            log.debug("Enqueuing AI response.", extra={"message_id": message.id})
+            await self.message_queue.enqueue(
+                channel_id=message.channel.id,
+                message_data={
+                    "message_to_reply_to": message,
+                    "text_content": final_ai_response.text_content,
+                    "existing_bot_messages_to_edit": bot_messages_to_edit,
+                    **final_ai_response.media,
+                    "tool_emojis": final_ai_response.tool_emojis,
+                },
+                request=request,
             )
             log.info(
-                "AI response sent.",
+                "AI response enqueued.",
                 extra={
                     "message_id": message.id,
-                    "bot_message_ids": [m.id for m in bot_messages]
-                    if bot_messages
-                    else [],
                 },
             )
-
-            if bot_messages:
-                request.data["bot_messages"] = bot_messages
 
             if final_ai_response:
                 await self.reaction_manager.handle_request_completion(
@@ -167,14 +168,16 @@ class Coordinator:
             error_message = (
                 "The model is currently overloaded. Please try again shortly."
             )
-            error_messages = await self.message_sender.send(
-                message,
-                error_message,
-                existing_bot_messages_to_edit=bot_messages_to_edit,
+            await self.message_queue.enqueue(
+                channel_id=message.channel.id,
+                message_data={
+                    "message_to_reply_to": message,
+                    "text_content": error_message,
+                    "existing_bot_messages_to_edit": bot_messages_to_edit,
+                },
+                request=request,
             )
-            if error_messages:
-                request.data["bot_messages"] = error_messages
-                await self.reaction_manager.handle_request_error(request)
+            await self.reaction_manager.handle_request_error(request)
 
         except Exception as e:
             self.request_manager.update_request_state(request.id, RequestState.ERROR)
@@ -190,14 +193,16 @@ class Coordinator:
             error_message = (
                 f"An error occurred while processing your request.\n```\n{e}\n```"
             )
-            error_messages = await self.message_sender.send(
-                message,
-                error_message,
-                existing_bot_messages_to_edit=bot_messages_to_edit,
+            await self.message_queue.enqueue(
+                channel_id=message.channel.id,
+                message_data={
+                    "message_to_reply_to": message,
+                    "text_content": error_message,
+                    "existing_bot_messages_to_edit": bot_messages_to_edit,
+                },
+                request=request,
             )
-            if error_messages:
-                request.data["bot_messages"] = error_messages
-                await self.reaction_manager.handle_request_error(request)
+            await self.reaction_manager.handle_request_error(request)
         finally:
             self.typing_manager.stop_typing(message.channel)
             log.info(

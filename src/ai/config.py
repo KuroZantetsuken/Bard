@@ -13,23 +13,31 @@ class GeminiConfigManager:
     safety settings, and integrating tool declarations and system instructions.
     """
 
-    def __init__(self, max_output_tokens: int, thinking_budget: int):
+    def __init__(
+        self,
+        max_output_tokens: int,
+        thinking_budget: int,
+        thinking_level: str = "high",
+    ):
         """
         Initializes the GeminiConfigManager.
 
         Args:
             max_output_tokens: The maximum number of tokens to generate in the response.
             thinking_budget: The token budget for Gemini's internal "thinking" process when using tools.
+            thinking_level: The thinking level for Gemini 3 models ("low" or "high").
         """
         log.debug(
             "Initializing GeminiConfigManager",
             extra={
                 "max_output_tokens": max_output_tokens,
                 "thinking_budget": thinking_budget,
+                "thinking_level": thinking_level,
             },
         )
         self.max_output_tokens = max_output_tokens
         self.thinking_budget = thinking_budget
+        self.thinking_level = thinking_level
 
     @staticmethod
     def get_base_safety_settings() -> List[gemini_types.SafetySetting]:
@@ -85,9 +93,25 @@ class GeminiConfigManager:
             config_args["system_instruction"] = system_instruction_str
         config = gemini_types.GenerateContentConfig(**config_args)
         try:
-            config.thinking_config = gemini_types.ThinkingConfig(
-                include_thoughts=False, thinking_budget=self.thinking_budget
-            )
+            from settings import Settings
+
+            if "gemini-3" in Settings.MODEL_ID:
+                level_map = {
+                    "low": gemini_types.ThinkingLevel.LOW,
+                    "high": gemini_types.ThinkingLevel.HIGH,
+                }
+                thinking_level_enum = level_map.get(
+                    self.thinking_level.lower(), gemini_types.ThinkingLevel.HIGH
+                )
+
+                config.thinking_config = gemini_types.ThinkingConfig(
+                    include_thoughts=False, thinking_level=thinking_level_enum
+                )
+            else:
+                config.thinking_config = gemini_types.ThinkingConfig(
+                    include_thoughts=False, thinking_budget=self.thinking_budget
+                )
+
         except AttributeError:
             log.warning("Gemini SDK version might not support 'thinking_config'.")
 

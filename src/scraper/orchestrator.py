@@ -48,7 +48,7 @@ class ScrapingOrchestrator:
             resolved_url, page = await self.scraper.resolve_url_and_get_page(url)
             url_obj = ResolvedURL(original=url, resolved=resolved_url)
 
-            cached_data = self.cache_manager.get_from_cache(url_obj)
+            cached_data = await self.cache_manager.get_from_cache(url_obj)
             if cached_data:
                 log.debug(
                     "Cache hit for resolved URL.",
@@ -95,7 +95,7 @@ class ScrapingOrchestrator:
             elif video_details and video_details.is_video:
                 scraped_data.video_details = video_details
 
-            self.cache_manager.set_to_cache(scraped_data)
+            await self.cache_manager.set_to_cache(scraped_data)
             log.info(
                 "Successfully processed and cached URL.",
                 extra={"url": scraped_data.url.resolved},

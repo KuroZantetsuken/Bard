@@ -42,13 +42,13 @@ class Settings:
     # Optional custom base URL for the Gemini API.
     GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
     # The primary model identifier for text generation.
-    MODEL_ID = "gemini-2.5-flash"
+    MODEL_ID = "gemini-3-pro-preview"
     # The secondary model identifier for simple sub-tasks.
-    MODEL_ID_SECONDARY = "gemini-2.5-flash-lite"
+    MODEL_ID_SECONDARY = "gemini-2.5-flash"
     # The specific model identifier for text-to-speech generation.
-    MODEL_ID_TTS = "gemini-2.5-flash-tts"
+    MODEL_ID_TTS = "gemini-2.5-pro-preview-tts"
     # The specific model identifier for image generation.
-    MODEL_ID_IMAGE_GENERATION = "gemini-2.5-flash-image"
+    MODEL_ID_IMAGE_GENERATION = "gemini-3-pro-image"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 
@@ -56,19 +56,14 @@ class Settings:
     # The maximum depth for fetching reply chains in Discord.
     MAX_REPLY_DEPTH = 10
     # The token budget for Gemini's internal "thinking" process when using tools.
-    THINKING_BUDGET = -1
+    # Note: For Gemini 3 models, this is legacy. Use THINKING_LEVEL instead.
+    THINKING_BUDGET = 128
+    # The thinking level for Gemini 3 models ("low" or "high").
+    THINKING_LEVEL = "low"
     # The maximum number of tokens for a generated response from Gemini.
     MAX_OUTPUT_TOKENS = 65536
     # A global timeout in seconds for external tool execution.
     TOOL_TIMEOUT_SECONDS = 30
-    # The maximum number of estimated tokens for video content. If a video's estimated token
-    # cost exceeds this limit, only its audio track and metadata will be sent to the model.
-    # Otherwise, the full video content (visuals and audio) will be sent.
-    MAX_VIDEO_TOKENS_FOR_FULL_PROCESSING = 10000
-    # Estimated token cost per second for video content (visual data).
-    VIDEO_TOKEN_COST_PER_SECOND = 258
-    # Estimated token cost per second for audio content (speech data).
-    AUDIO_TOKEN_COST_PER_SECOND = 32
     # The maximum number of long-term memories to store per user. 0 disables this check.
     MAX_MEMORIES = 32
 

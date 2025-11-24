@@ -3,6 +3,7 @@ import os
 import re
 from typing import Any, Dict, List
 
+import aiofiles
 from google.genai import types
 
 from ai.tools.base import BaseTool, ToolContext
@@ -139,8 +140,8 @@ class DiagnoseTool(BaseTool):
         try:
             if os.path.isfile(path_arg):
                 log.debug(f"Reading file: {path_arg}")
-                with open(path_arg, "r", encoding="utf-8") as f:
-                    content = f.read()
+                async with aiofiles.open(path_arg, "r", encoding="utf-8") as f:
+                    content = await f.read()
                 return types.Part(
                     function_response=self.function_response_success(
                         function_name, f"Contents of file: {path_arg}", content=content

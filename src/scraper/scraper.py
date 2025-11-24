@@ -13,6 +13,7 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from retry import async_retry
 from scraper.models import ResolvedURL, ScrapedData
 from scraper.page import PageStability
 from settings import Settings
@@ -118,14 +119,19 @@ class Scraper:
                 self._playwright = None
             log.info("Browser closed.")
 
+    @async_retry(retry_on=(Error,), retries=3, delay=1, backoff=2)
     async def resolve_url_and_get_page(self, url: str) -> tuple[str, "Page"]:
         if not self._browser:
             await self.launch_browser()
         assert self._browser is not None
 
         page = await self._browser.new_page()
-        await page.goto(url, wait_until="commit")
-        return page.url, page
+        try:
+            await page.goto(url, wait_until="commit")
+            return page.url, page
+        except Exception:
+            await page.close()
+            raise
 
     async def scrape(
         self,

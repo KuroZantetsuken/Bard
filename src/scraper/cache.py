@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+import aiofiles
+from async_lru import alru_cache
+
 from scraper.models import (
     CachedObject,
     ResolvedURL,
@@ -96,16 +99,18 @@ class CacheManager:
         log.debug("No cached video found for URL.", extra={"url": resolved_url})
         return None
 
-    def get_from_cache(self, url_obj: ResolvedURL) -> Optional[ScrapedData]:
+    async def get_from_cache(self, url_obj: ResolvedURL) -> Optional[ScrapedData]:
         """
         Retrieves a ScrapedData object from the cache if a valid, unexpired
         CachedObject exists for the given resolved URL.
+        Uses an L1 in-memory cache and an L2 disk cache.
+        """
+        return await self._get_from_disk_cache(url_obj)
 
-        Args:
-            resolved_url: The resolved URL to retrieve from the cache.
-
-        Returns:
-            The cached ScrapedData, or None if not found or expired.
+    @alru_cache(maxsize=128)
+    async def _get_from_disk_cache(self, url_obj: ResolvedURL) -> Optional[ScrapedData]:
+        """
+        Retrieves a ScrapedData object from the disk cache.
         """
         cache_path = self._get_cache_path(url_obj.resolved)
         if not cache_path.exists():
@@ -113,10 +118,11 @@ class CacheManager:
             return None
 
         try:
-            with open(cache_path, "r") as f:
-                cached_obj_dict = json.load(f)
+            async with aiofiles.open(cache_path, "r") as f:
+                content = await f.read()
+                cached_obj_dict = json.loads(content)
 
-            cached_obj = self._deserialize_cached_object(cached_obj_dict)
+            cached_obj = await self._deserialize_cached_object(cached_obj_dict)
 
             if cached_obj.expires > time.time():
                 log.info("Cache hit for URL.", extra={"url": url_obj.resolved})
@@ -141,7 +147,7 @@ class CacheManager:
                 screenshot_path.unlink()
             return None
 
-    def set_to_cache(self, data: ScrapedData):
+    async def set_to_cache(self, data: ScrapedData):
         """
         Serializes a ScrapedData object into a CachedObject and stores it
         in the cache, saving the screenshot as a separate file.
@@ -156,8 +162,8 @@ class CacheManager:
         if data.screenshot_data and isinstance(data.screenshot_data, bytes):
             screenshot_path = cache_path.with_suffix(".png")
             try:
-                with open(screenshot_path, "wb") as f:
-                    f.write(data.screenshot_data)
+                async with aiofiles.open(screenshot_path, "wb") as f:
+                    await f.write(data.screenshot_data)
 
                 data_for_serialization.screenshot_data = str(screenshot_path)  # type: ignore
                 log.debug(
@@ -176,16 +182,19 @@ class CacheManager:
         cached_obj = CachedObject(data=data_for_serialization, expires=expires)
 
         try:
-            with open(cache_path, "w") as f:
-                json.dump(cached_obj, f, cls=self.CacheEncoder, indent=4)
+            async with aiofiles.open(cache_path, "w") as f:
+                await f.write(json.dumps(cached_obj, cls=self.CacheEncoder, indent=4))
             log.debug("Successfully cached data for URL.", extra={"url": resolved_url})
+
+            self._get_from_disk_cache.cache_clear()
+
         except TypeError as e:
             log.error(
                 "Failed to serialize data for URL.",
                 extra={"url": resolved_url, "error": str(e)},
             )
 
-    def _deserialize_cached_object(self, obj_dict: dict) -> CachedObject:
+    async def _deserialize_cached_object(self, obj_dict: dict) -> CachedObject:
         """Helper to reconstruct a CachedObject from a dictionary."""
         log.debug("Deserializing cached object.")
         data_dict = obj_dict["data"]
@@ -196,8 +205,8 @@ class CacheManager:
             screenshot_path = Path(data_dict["screenshot_data"])
             if screenshot_path.exists():
                 try:
-                    with open(screenshot_path, "rb") as f:
-                        data_dict["screenshot_data"] = f.read()
+                    async with aiofiles.open(screenshot_path, "rb") as f:
+                        data_dict["screenshot_data"] = await f.read()
                     log.debug(
                         "Loaded screenshot from cache.",
                         extra={"path": str(screenshot_path)},

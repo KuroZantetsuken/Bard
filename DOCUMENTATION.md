@@ -288,6 +288,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`handlers.py`](src/bot/core/handlers.py) | Defines event handlers for various bot events. |
 | [`lifecycle.py`](src/bot/core/lifecycle.py) | Manages the lifecycle of user requests, including creation, cancellation, and state tracking. |
 | [`presence.py`](src/bot/core/presence.py) | Manages the bot's online presence and status. |
+| [`queue.py`](src/bot/core/queue.py) | Manages the message queue system for outbound Discord messages. |
 | [`typing.py`](src/bot/core/typing.py) | Manages the bot's typing indicator, ensuring it is reliably started and stopped. |
 
 ### `src/bot/message/` Directory
@@ -305,7 +306,7 @@ This section provides a detailed breakdown of the project's files and directorie
 
 | File/Directory | Purpose |
 | :--- | :--- |
-| [`cache.py`](src/scraper/cache.py) | Implements caching for scraped data to improve performance. |
+| [`cache.py`](src/scraper/cache.py) | Implements a two-layer caching strategy (L1 in-memory, L2 disk) for scraped data to improve performance. |
 | [`image.py`](src/scraper/image.py) | A scraper for retrieving images from Google Images. |
 | [`models.py`](src/scraper/models.py) | Defines data models for the scraped information. |
 | [`orchestrator.py`](src/scraper/orchestrator.py) | Orchestrates the scraper process, managing multiple scrapers. |
