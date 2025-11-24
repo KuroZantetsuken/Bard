@@ -105,20 +105,3 @@ class ScrapingOrchestrator:
             if page:
                 await page.close()
 
-    async def process_image_search(self, search_terms: str) -> Optional[bytes]:
-        """
-        Processes an image search query and returns the image data.
-        """
-        log.debug("Processing image search.", extra={"search_terms": search_terms})
-        image_data = await self.image_scraper.scrape_image_data(search_terms)
-        if image_data:
-            log.info(
-                "Successfully scraped image data for search terms.",
-                extra={"search_terms": search_terms},
-            )
-        else:
-            log.warning(
-                "Failed to scrape image data for search terms.",
-                extra={"search_terms": search_terms},
-            )
-        return image_data

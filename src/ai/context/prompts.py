@@ -271,24 +271,3 @@ class PromptBuilder:
         )
         return prompt_parts, is_empty
 
-    def get_prompt_text_for_summary(
-        self, response: Optional[gemini_types.GenerateContentResponse]
-    ) -> str:
-        """
-        Extracts and formats text content from a Gemini response for logging or summary purposes.
-
-        Args:
-            response: The Gemini API response object.
-
-        Returns:
-            A string containing the extracted text content, or an empty string if no text is found.
-        """
-        if not response or not response.candidates:
-            return ""
-        content = response.candidates[0].content
-        if not content or not content.parts:
-            return ""
-        extracted_text = "\n".join(
-            part.text for part in content.parts if part.text
-        ).strip()
-        return extracted_text
