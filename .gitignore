@@ -4,4 +4,4 @@ __pycache__
 .vscode
 data
 !prompts
-Gemini Docs
+docs
