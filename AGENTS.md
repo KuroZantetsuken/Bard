@@ -6,15 +6,17 @@ This file provides guidance to agents when working with code in this repository.
 - **Virtual Env**: Activate with `. .venv/bin/activate` before running Python commands.
 - **Logging**: INFO for user processes, DEBUG for AI agents using `src/log.py`.
 - **Commits**: Use Conventional Commits (`type(scope): description`) and ask before committing.
-- **Documentation**: Always read and maintain `DOCUMENTATION.md` (using present tense).
+- **Documentation**: Start each task by reading documentation.
+  - Read and maintain the project's `DOCUMENTATION.md` (using present tense).
+  - Search for relevant API documentation in `docs/` when working with APIs.
 - **Completion**: Signal completion only after the project documentation is updated and changes are committed.
 
 # Naming & Structure
 - **Filenames**: Use single-word descriptive names for files/folders in `src/` (e.g., `hotload.py`, `scraper/`). Avoid underscores/dashes/camelCase.
 - **Organization**: Stick to Single Responsibility Principle.
-    - Keep local helpers in the same file if only used there.
-    - Only create new files for major distinct modules or shared utilities.
-    - Avoid premature abstraction; keep related logic together.
+  - Keep local helpers in the same file if only used there.
+  - Only create new files for major distinct modules or shared utilities.
+  - Avoid premature abstraction; keep related logic together.
 - **Logs**: `data/logs/` contains verbose JSON logs; console shows human-readable INFO logs.
 
 # Code Style & Patterns
@@ -28,9 +30,7 @@ This file provides guidance to agents when working with code in this repository.
 - **Logging**: Use `logging.getLogger("Bard")` and structured logging (pass `extra` dict) for machine-readable logs.
 
 # Conventional Commit Guide
-
 **`type(scope): description`**
-
 - **`type`**: This describes the kind of change you're making.
   - `feat`: A new feature
   - `fix`: A bug fix
