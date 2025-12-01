@@ -77,6 +77,52 @@ python3 src/hotload.py
 **Expected Output:**
 The bot will start with hot-reloading enabled. Any changes to `.py`, `.env`, or `.prompt.md` files will trigger an automatic restart of the bot.
 
+## Testing
+
+The project includes a "black-box" testing suite located in the [`tests/`](tests/) directory. This suite uses a separate "dummy bot" to interact with the main bot in a real Discord server, verifying behavior from a user's perspective.
+
+### Prerequisites
+
+Before running tests, ensure your `.env` file includes the necessary testing configuration:
+
+*   `TEST_BOT_TOKEN`: Token for the dummy bot.
+*   `BOT_ID`: User ID of the main bot (the one being tested).
+*   `TEST_GUILD_ID`: ID of the Discord server (guild) used for testing.
+*   `TEST_CHANNEL_ID`: ID of the channel where tests will run.
+
+### Running Tests
+
+You can run tests using the [`tests/runner.py`](tests/runner.py) script.
+
+**Run All Tests:**
+```bash
+python tests/runner.py run all
+```
+
+**Run Specific Test:**
+```bash
+python tests/runner.py run <test_name>
+```
+Example: `python tests/runner.py run 1_basic.py`
+
+**Send Manual Message:**
+Sends a message as the dummy bot to the test channel.
+```bash
+python tests/runner.py send "<@{BOT_ID}> Hello world"
+```
+*Note: Include the target bot's mention if testing mention-based responses.*
+
+### Architecture
+
+The testing framework consists of three main components:
+
+1.  **Dummy Bot ([`tests/dummy.py`](tests/dummy.py)):** A minimal Discord bot client that sends messages and waits for responses in a specific channel.
+2.  **Runner ([`tests/runner.py`](tests/runner.py)):** The CLI entry point that orchestrates test execution.
+3.  **Test Cases ([`tests/cases/`](tests/cases/)):** Individual test modules. Each case exports a `run(client)` async function that performs assertions.
+
+For a detailed architectural breakdown, refer to [`tests/README.md`](tests/README.md).
+
+
 ## Logging
 
 The project uses a centralized logging system configured in [`src/log.py`](src/log.py). This system is designed to provide clear, immediate feedback during development and comprehensive, structured data for debugging and analysis.

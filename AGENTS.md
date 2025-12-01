@@ -3,7 +3,7 @@
 This file provides guidance to agents when working with code in this repository.
 
 # Core Guidelines
-- **Virtual Env**: Activate with `. .venv/bin/activate` before running Python commands.
+- **Virtual Env**: Execute Python commands using `.venv/bin/python ...`.
 - **Logging**: INFO for user processes, DEBUG for AI agents using `src/log.py`.
 - **Commits**: Use Conventional Commits (`type(scope): description`) and ask before committing.
 - **Documentation**: Start each task by reading documentation.
@@ -28,6 +28,13 @@ This file provides guidance to agents when working with code in this repository.
   - These are standalone modules for AI tool calls; nothing should depend on them and they should be entirely self-contained.
 - **Dynamic Imports**: `src/ai/tools/registry.py` uses `importlib` to load tools. Ensure new tools in `src/ai/tools/` do not start with `_`.
 - **Logging**: Use `logging.getLogger("Bard")` and structured logging (pass `extra` dict) for machine-readable logs.
+
+# Testing & Debugging
+- **Prerequesits**: All tests must explicitly mention the bot (`<@{BOT_ID}>`) to trigger a response except when directly replying to its message.
+- **Hotloading**: The project uses hotloading (`src/hotload.py`). Any code change will automatically restart the bot and create a new log file in `data/logs/`. This enables a self-reliant debugging loop where you can edit code, check the new logs, and verify fixes immediately.
+- **Manual Test**: Use `tests/runner.py send "..."` to directly send messages.
+- **Automated Test**: Use `tests/runner.py run <case>` to run comprehensive premade tests.
+- **Logs**: Always check the full logs in `data/logs/` for the main bot's internal state after the test. Do not rely on the command output alone.
 
 # Conventional Commit Guide
 **`type(scope): description`**
