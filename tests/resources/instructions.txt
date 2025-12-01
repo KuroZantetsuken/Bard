@@ -1,0 +1,7 @@
+FOLLOW THESE INSTRUCTIONS STEP BY STEP. DO NOT SKIP ANY. PRIORITIZE USING TOOLS.
+
+1. Search the internet for the car number of the winner of the 2025 Formula 1 Las Vegas Grand Prix.
+2. Generate a graph of the function y = x^[car number] for x range 0 to 10.
+3. Generate an image of a futuristic racing car with the number [car number] on it.
+4. Remember that I support [car number].
+5. Create an event for the next Formula 1 race.
