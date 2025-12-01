@@ -87,8 +87,9 @@ class AIConversation:
                 if mime_type.startswith("image/"):
                     extension = mimetypes.guess_extension(mime_type) or ".bin"
                     filename = f"plot{extension}"
-                    tool_context.tool_response_data["image_data"] = data
-                    tool_context.tool_response_data["image_filename"] = filename
+                    tool_context.images.append(
+                        {"data": data, "filename": filename, "mime_type": mime_type}
+                    )
 
         if tool_response_part.function_response and isinstance(
             tool_response_part.function_response.response, dict
@@ -121,19 +122,17 @@ class AIConversation:
             },
         )
         final_media = {}
-        if tool_context.tool_response_data:
-            if tool_context.tool_response_data.get("image_data"):
-                final_media["image_data"] = tool_context.tool_response_data[
-                    "image_data"
-                ]
-                final_media["image_filename"] = tool_context.tool_response_data.get(
-                    "image_filename"
-                )
-            if tool_context.tool_response_data.get("code_data"):
-                final_media["code_data"] = tool_context.tool_response_data["code_data"]
-                final_media["code_filename"] = tool_context.tool_response_data.get(
-                    "code_filename"
-                )
+        if (
+            tool_context.tool_response_data
+            or tool_context.images
+            or tool_context.code_files
+        ):
+            if tool_context.images:
+                final_media["images"] = tool_context.images
+
+            if tool_context.code_files:
+                final_media["code_files"] = tool_context.code_files
+
             if tool_context.tool_response_data.get("audio_bytes"):
                 final_media["audio_data"] = tool_context.tool_response_data[
                     "audio_bytes"

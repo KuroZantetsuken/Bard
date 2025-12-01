@@ -121,11 +121,12 @@ class ImageGenerationTool(BaseTool):
                             extension = mimetypes.guess_extension(mime_type) or ".bin"
                             generated_filename = f"generated_image{extension}"
 
-                            self.context.tool_response_data["image_data"] = (
-                                part.inline_data.data
-                            )
-                            self.context.tool_response_data["image_filename"] = (
-                                generated_filename
+                            self.context.images.append(
+                                {
+                                    "data": part.inline_data.data,
+                                    "filename": generated_filename,
+                                    "mime_type": mime_type,
+                                }
                             )
                             self.context.is_final_output = True
                             image_generated = True

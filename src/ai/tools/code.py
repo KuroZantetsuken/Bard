@@ -179,11 +179,12 @@ class CodeExecutionTool(BaseTool):
                             mime_type = part.inline_data.mime_type
                             extension = mimetypes.guess_extension(mime_type) or ".bin"
                             generated_filename = f"plot{extension}"
-                            self.context.tool_response_data["image_data"] = (
-                                part.inline_data.data
-                            )
-                            self.context.tool_response_data["image_filename"] = (
-                                generated_filename
+                            self.context.images.append(
+                                {
+                                    "data": part.inline_data.data,
+                                    "filename": generated_filename,
+                                    "mime_type": mime_type,
+                                }
                             )
                             image_generated = True
                             self.context.is_final_output = True
@@ -196,10 +197,12 @@ class CodeExecutionTool(BaseTool):
                                 text_output += part.code_execution_result.output + "\n"
                         if part.executable_code and part.executable_code.code:
                             code_content = part.executable_code.code
-                            self.context.tool_response_data["code_data"] = (
-                                code_content.encode("utf-8")
+                            self.context.code_files.append(
+                                {
+                                    "data": code_content.encode("utf-8"),
+                                    "filename": "code.py",
+                                }
                             )
-                            self.context.tool_response_data["code_filename"] = "code.py"
                 log.debug(
                     "Parsed code execution response",
                     extra={

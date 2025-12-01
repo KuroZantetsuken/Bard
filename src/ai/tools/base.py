@@ -103,8 +103,8 @@ class ToolContext:
         self.attachment_processor = attachment_processor
         self.image_scraper = image_scraper
 
-        self.image_data: Optional[Any] = None
-        self.image_filename: Optional[str] = None
+        self.images: List[Dict[str, Any]] = []
+        self.code_files: List[Dict[str, Any]] = []
         self.is_final_output: Optional[bool] = None
         self.tool_response_data: Dict[str, Any] = {}
         self.grounding_sources_md: Optional[str] = None

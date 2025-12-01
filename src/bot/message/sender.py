@@ -2,7 +2,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import List, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 import aiofiles
 import discord
@@ -164,7 +164,6 @@ class MessageSender:
             else:
                 return await channel.send(content, files=files_to_send)
         except discord.HTTPException as e:
-            # Only retry on server-side errors (5xx)
             if e.status >= 500:
                 raise
 
@@ -217,6 +216,15 @@ class MessageSender:
             chunks = [text_content]
         else:
             chunks = self._split_message_into_chunks(text_content)
+
+        max_chunks = 10
+        if len(chunks) > max_chunks:
+            log.warning(
+                "Response too long, truncating chunks.",
+                extra={"chunk_count": len(chunks), "limit": max_chunks},
+            )
+            chunks = chunks[:max_chunks]
+            chunks[-1] += "\n\n[...Response truncated due to length limits...]"
 
         for i, chunk in enumerate(chunks):
             files_for_this_turn = files_to_attach if i == 0 else None
@@ -302,10 +310,8 @@ class MessageSender:
         audio_data: Optional[bytes] = None,
         duration_secs: float = 0.0,
         waveform_b64: Optional[str] = None,
-        image_data: Optional[bytes] = None,
-        image_filename: Optional[str] = None,
-        code_data: Optional[bytes] = None,
-        code_filename: Optional[str] = None,
+        images: Optional[List[Dict[str, Any]]] = None,
+        code_files: Optional[List[Dict[str, Any]]] = None,
         existing_bot_messages_to_edit: Optional[List[discord.Message]] = None,
         tool_emojis: Optional[List[str]] = None,
     ) -> List[discord.Message]:
@@ -330,7 +336,7 @@ class MessageSender:
         Returns:
             A list of sent Discord Message objects.
         """
-        if not any([text_content, audio_data, image_data, code_data]):
+        if not any([text_content, audio_data, images, code_files]):
             log.warning("No content provided to send. Skipping message.")
             return []
 
@@ -341,8 +347,8 @@ class MessageSender:
                 len(existing_bot_messages_to_edit) == 1
                 and text_content
                 and not audio_data
-                and not image_data
-                and not code_data
+                and not images
+                and not code_files
                 and not existing_bot_messages_to_edit[0].attachments
                 and not existing_bot_messages_to_edit[0].flags.voice
                 and len(text_content) <= self.max_message_length
@@ -392,38 +398,39 @@ class MessageSender:
         files_to_send: List[discord.File] = []
         temp_files_to_clean = []
         try:
-            if image_data:
-                log.debug("Processing image data for attachment.")
+            if images:
+                log.debug(f"Processing {len(images)} images for attachment.")
                 temp_dir = tempfile.gettempdir()
-                temp_image_path = os.path.join(temp_dir, f"{uuid.uuid4()}.png")
-                async with aiofiles.open(temp_image_path, "wb") as f:
-                    await f.write(image_data)
-                temp_files_to_clean.append(temp_image_path)
-                filename = image_filename or "image.png"
-                _, ext = os.path.splitext(filename)
-                if not ext:
-                    filename += ".png"
-                files_to_send.append(discord.File(temp_image_path, filename=filename))
-                log.debug(
-                    "Image file prepared for sending.",
-                    extra={"image_filename": filename},
-                )
+                for img in images:
+                    img_data = img.get("data")
+                    img_filename = img.get("filename") or "image.png"
+                    if img_data:
+                        temp_path = os.path.join(
+                            temp_dir, f"{uuid.uuid4()}_{img_filename}"
+                        )
+                        async with aiofiles.open(temp_path, "wb") as f:
+                            await f.write(img_data)
+                        temp_files_to_clean.append(temp_path)
+                        files_to_send.append(
+                            discord.File(temp_path, filename=img_filename)
+                        )
 
-            if code_data:
-                log.debug("Processing code data for attachment.")
+            if code_files:
+                log.debug(f"Processing {len(code_files)} code files for attachment.")
                 temp_dir = tempfile.gettempdir()
-                temp_code_path = os.path.join(temp_dir, f"{uuid.uuid4()}.py")
-                async with aiofiles.open(temp_code_path, "wb") as f:
-                    await f.write(code_data)
-                temp_files_to_clean.append(temp_code_path)
-                filename = code_filename or "code.py"
-                _, ext = os.path.splitext(filename)
-                if not ext:
-                    filename += ".py"
-                files_to_send.append(discord.File(temp_code_path, filename=filename))
-                log.debug(
-                    "Code file prepared for sending.", extra={"code_filename": filename}
-                )
+                for code_file in code_files:
+                    code_data = code_file.get("data")
+                    code_filename = code_file.get("filename") or "code.py"
+                    if code_data:
+                        temp_code_path = os.path.join(
+                            temp_dir, f"{uuid.uuid4()}_{code_filename}"
+                        )
+                        async with aiofiles.open(temp_code_path, "wb") as f:
+                            await f.write(code_data)
+                        temp_files_to_clean.append(temp_code_path)
+                        files_to_send.append(
+                            discord.File(temp_code_path, filename=code_filename)
+                        )
 
             if text_content or files_to_send:
                 text_content_for_send = text_content or ""
@@ -482,7 +489,7 @@ class MessageSender:
                         os.unlink(temp_audio_path)
 
         if not all_sent_messages and any(
-            [text_content, audio_data, image_data, code_data]
+            [text_content, audio_data, images, code_files]
         ):
             log.error("All content sending attempts failed.")
 
