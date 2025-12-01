@@ -41,7 +41,6 @@ class MessageQueue:
             self.queues[channel_id] = asyncio.Queue()
             log.debug(f"Created new message queue for channel {channel_id}.")
 
-            # If workers are already running, start a worker for this new queue
             if self._running:
                 task = asyncio.create_task(
                     self._process_queue(channel_id, self.queues[channel_id])
@@ -116,10 +115,7 @@ class MessageQueue:
                 try:
                     sent_messages = await self.message_sender.send(**message_data)
                     if request and sent_messages:
-                        # Append to existing messages if any, though usually this is one batch per request per queue item
-                        # Use set default to be safe
                         current_messages = request.data.get("bot_messages", [])
-                        # Avoid duplicates if logic changes
                         current_ids = {m.id for m in current_messages}
                         new_messages = [
                             m for m in sent_messages if m.id not in current_ids
@@ -145,5 +141,4 @@ class MessageQueue:
                     f"Unexpected error in worker for channel {channel_id}: {e}",
                     exc_info=True,
                 )
-                # Brief pause to prevent tight loops in case of persistent errors
                 await asyncio.sleep(1)

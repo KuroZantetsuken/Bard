@@ -60,8 +60,6 @@ def async_retry(
                     await asyncio.sleep(current_delay)
                     current_delay *= backoff
 
-            # Should not be reached because of the raise in the loop,
-            # but satisfying the type checker.
             raise RuntimeError("Unreachable")
 
         return wrapper

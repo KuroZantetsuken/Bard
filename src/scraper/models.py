@@ -15,7 +15,7 @@ class VideoDetails:
     video_path: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class ResolvedURL:
     """Represents a URL that has been resolved to its final destination."""
 
