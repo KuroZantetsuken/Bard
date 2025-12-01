@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Any, Dict, List
 
@@ -57,11 +58,14 @@ class SearchTool(BaseTool):
             types.Tool(google_search=types.GoogleSearch()),
         ]
         safety_settings = GeminiConfigManager.get_base_safety_settings()
+        current_time = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
         config = types.GenerateContentConfig(
             system_instruction=types.Content(
                 parts=[
                     types.Part(
-                        text="Critical directive: search the internet and provide a verbose summary."
+                        text=f"Critical directive: search the internet and provide a verbose summary. The current time is {current_time}."
                     )
                 ],
                 role="system",
