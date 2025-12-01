@@ -42,13 +42,13 @@ class Settings:
     # Optional custom base URL for the Gemini API.
     GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
     # The primary model identifier for text generation.
-    MODEL_ID = "gemini-3-pro-preview"
+    MODEL_ID = "gemini-2.5-flash"
     # The secondary model identifier for simple sub-tasks.
-    MODEL_ID_SECONDARY = "gemini-2.5-flash"
+    MODEL_ID_SECONDARY = "gemini-2.5-flash-lite"
     # The specific model identifier for text-to-speech generation.
-    MODEL_ID_TTS = "gemini-2.5-pro-preview-tts"
+    MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # The specific model identifier for image generation.
-    MODEL_ID_IMAGE_GENERATION = "gemini-3-pro-image"
+    MODEL_ID_IMAGE_GENERATION = "gemini-2.5-flash-image"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 
@@ -104,6 +104,14 @@ class Settings:
     LOG_FILE_MAX_COUNT = 10
     # Enable or disable automatic log pruning on application startup.
     LOG_PRUNE_ON_STARTUP = True
+
+    # --- Debugging & Testing ---
+    # A list of bot user IDs that are allowed to trigger the bot (e.g., for testing).
+    ALLOWED_BOT_IDS = [
+        int(id.strip())
+        for id in os.getenv("ALLOWED_BOT_IDS", "").split(",")
+        if id.strip()
+    ]
 
     @classmethod
     def validate_settings(cls):
