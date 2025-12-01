@@ -212,7 +212,7 @@ class Container:
     def _create_typing_manager(self) -> TypingManager:
         """Creates and returns an instance of TypingManager."""
         log.debug("TypingManager instance created.")
-        return TypingManager()
+        return TypingManager(settings=self.settings)
 
     def _create_request_manager(self) -> RequestManager:
         """Creates and returns an instance of RequestManager."""

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 import discord
 from discord.ext import commands
@@ -21,6 +22,14 @@ async def run():
     settings = Settings()
     settings.validate_settings()
     log.debug("Settings loaded and validated.")
+
+    signal_path = os.path.join(settings.CACHE_DIR, "bot_ready")
+    if os.path.exists(signal_path):
+        try:
+            os.remove(signal_path)
+            log.debug(f"Removed stale readiness signal file: {signal_path}")
+        except Exception as e:
+            log.warning(f"Failed to remove stale readiness signal file: {e}")
 
     if not settings.DISCORD_BOT_TOKEN:
         log.error("DISCORD_BOT_TOKEN is not set. Halting execution.")
@@ -69,13 +78,18 @@ async def run():
             log.debug("Closing scraper.")
             await scraper.close()
 
-        # We need to access message_queue again to stop workers,
-        # handling potentially uninitialized variable if error happened before.
         try:
             message_queue = container.get("message_queue")
             await message_queue.stop_workers()
         except Exception:
             pass
+
+        try:
+            if os.path.exists(signal_path):
+                os.remove(signal_path)
+                log.debug(f"Removed readiness signal file: {signal_path}")
+        except Exception as e:
+            log.warning(f"Failed to remove readiness signal file: {e}")
 
         log.info("Bot has been shut down.")
 

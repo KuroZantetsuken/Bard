@@ -78,6 +78,17 @@ class BotHandlers(commands.Cog):
             log.debug(f"Bot user ID set to {self.bot.user.id}.")
 
             await self.presence_manager.set_presence()
+
+            try:
+                import os
+
+                signal_path = os.path.join(self.settings.CACHE_DIR, "bot_ready")
+                os.makedirs(os.path.dirname(signal_path), exist_ok=True)
+                with open(signal_path, "w") as f:
+                    f.write(str(self.bot.user.id))
+                log.debug(f"Readiness signal file ({signal_path}) created.")
+            except Exception as e:
+                log.error(f"Failed to create readiness signal file: {e}")
         else:
             log.warning("Bot user is not available on on_ready event.")
 
@@ -92,7 +103,16 @@ class BotHandlers(commands.Cog):
             message: The Discord message object.
         """
         assert self.bot.user is not None, "Bot user not initialized."
-        if message.author == self.bot.user or message.author.bot:
+        if message.author == self.bot.user:
+            return
+
+        if (
+            message.author.bot
+            and message.author.id not in self.settings.ALLOWED_BOT_IDS
+        ):
+            log.debug(
+                f"Ignoring message from bot: {message.author.name} ({message.author.id})"
+            )
             return
 
         is_dm = isinstance(message.channel, discord.DMChannel)

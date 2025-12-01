@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import os
 from contextlib import AbstractAsyncContextManager
 from typing import Dict, Protocol
+
+from settings import Settings
 
 
 class TypeableChannel(Protocol):
@@ -18,11 +21,20 @@ class TypingManager:
     Manages the typing indicator for different channels.
     """
 
-    def __init__(self):
+    def __init__(self, settings: Settings):
         self._typing_tasks: Dict[int, asyncio.Task] = {}
+        self.settings = settings
+
+    def _get_signal_path(self, channel_id: int) -> str:
+        return os.path.join(self.settings.CACHE_DIR, f"bot_typing_{channel_id}")
 
     async def _typing_loop(self, channel: TypeableChannel):
+        signal_path = self._get_signal_path(channel.id)
         try:
+            os.makedirs(os.path.dirname(signal_path), exist_ok=True)
+            with open(signal_path, "w") as f:
+                f.write("typing")
+
             async with channel.typing():
                 await asyncio.Future()
         except asyncio.CancelledError:
@@ -31,6 +43,12 @@ class TypingManager:
             log.warning(
                 f"Error in typing loop for channel {channel.id}: {e}", exc_info=True
             )
+        finally:
+            try:
+                if os.path.exists(signal_path):
+                    os.remove(signal_path)
+            except Exception as e:
+                log.warning(f"Failed to remove typing signal for {channel.id}: {e}")
 
     def start_typing(self, channel: TypeableChannel):
         """
