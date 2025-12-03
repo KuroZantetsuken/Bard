@@ -98,10 +98,14 @@ class ImageGenerationTool(BaseTool):
                 f"Calling Gemini API for image generation with model: {image_model_id}"
             )
             log.debug("Image generation details", extra={"prompt": prompt})
+            config = types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+            )
 
             response = await gemini_core.aio.models.generate_content(
                 model=image_model_id,
                 contents=[prompt],
+                config=config,
             )
             log.debug(
                 "Received response from Gemini API for image generation",
@@ -138,9 +142,6 @@ class ImageGenerationTool(BaseTool):
                                     "data_len": len(part.inline_data.data),
                                 },
                             )
-                            break
-                    if image_generated:
-                        break
             else:
                 feedback = response.prompt_feedback
                 feedback_str = str(feedback) if feedback else "No candidates returned."
@@ -185,6 +186,7 @@ class ImageGenerationTool(BaseTool):
             )
             return types.Part(
                 function_response=self.function_response_error(
-                    function_name, f"An exception occurred: {error_msg}"
+                    function_name,
+                    f"An error occurred while generating the image. Please try again later or with a different prompt. Error details: {error_msg}",
                 )
             )
