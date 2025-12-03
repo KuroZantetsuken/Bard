@@ -37,6 +37,7 @@ This file provides guidance to agents when working with code in this repository.
 - **Logs**: Always check the full logs in `data/logs/` for the main bot's internal state after the test. Do not rely on the command output alone.
 
 # Conventional Commit Guide
+- **Commits**: Always break down commits into individual changes that can be described in a single message.
 **`type(scope): description`**
 - **`type`**: This describes the kind of change you're making.
   - `feat`: A new feature
