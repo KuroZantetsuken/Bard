@@ -63,7 +63,7 @@ class Settings:
     # The maximum number of tokens for a generated response from Gemini.
     MAX_OUTPUT_TOKENS = 65536
     # A global timeout in seconds for external tool execution.
-    TOOL_TIMEOUT_SECONDS = 30
+    TOOL_TIMEOUT_SECONDS = 60
     # The maximum number of long-term memories to store per user. 0 disables this check.
     MAX_MEMORIES = 32
 
