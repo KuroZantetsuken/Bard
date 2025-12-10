@@ -12,19 +12,19 @@ class ContextBranchingTest(BardTestCase):
         print(f"Response: {root.content}")
 
         branch_a_set = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> The code is 'ALPHA'. Remember this. Do NOT use tools.",
+            f"<@{self.bot.settings.BOT_ID}> The code is 'ALPHA'. Do NOT use tools. We're testing your normal conversation history.",
             reference=root,
         )
         print(f"Response: {branch_a_set.content}")
 
         branch_b_set = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> The code is 'BETA'. Remember this. Do NOT use tools.",
+            f"<@{self.bot.settings.BOT_ID}> The code is 'BETA'. Do NOT use tools. We're testing your normal conversation history.",
             reference=root,
         )
         print(f"Response: {branch_b_set.content}")
 
         branch_a_check = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> What is the code?",
+            f"<@{self.bot.settings.BOT_ID}> What is the code? List all codes that you know.",
             reference=branch_a_set,
         )
         self.assertIn("ALPHA", branch_a_check.content)
@@ -32,7 +32,7 @@ class ContextBranchingTest(BardTestCase):
         print(f"Response: {branch_a_check.content}")
 
         branch_b_check = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> What is the code?",
+            f"<@{self.bot.settings.BOT_ID}> What is the code? List all codes that you know.",
             reference=branch_b_set,
         )
         self.assertIn("BETA", branch_b_check.content)

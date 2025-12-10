@@ -149,13 +149,24 @@ class Coordinator:
             )
 
             if final_ai_response:
+                bot_messages = None
                 for i in range(50):
                     if request.data.get("bot_messages"):
-                        log.debug(f"Bot messages found after {i} checks: {request.data.get('bot_messages')}")
+                        bot_messages = request.data.get("bot_messages")
+                        log.debug(
+                            f"Bot messages found after {i} checks: {bot_messages}"
+                        )
                         break
                     await asyncio.sleep(0.1)
                 else:
-                    log.warning("Timed out waiting for bot messages to be populated in request data.")
+                    log.warning(
+                        "Timed out waiting for bot messages to be populated in request data."
+                    )
+
+                if bot_messages and bot_messages[0]:
+                    await self.chat_session_manager.update_leaf_for_message(
+                        user_message_id=message.id, bot_message_id=bot_messages[0].id
+                    )
 
                 await self.reaction_manager.handle_request_completion(
                     request, final_ai_response.tool_emojis
