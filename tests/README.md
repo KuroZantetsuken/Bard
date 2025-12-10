@@ -13,8 +13,6 @@ tests/
 ├── base.py             # Base TestCase class and shared utilities
 ├── resources/          # Test resources (images, videos, etc.)
 └── cases/              # Test case definitions
-    ├── 1_basic.py      # Basic sanity checks
-    ├── ...
 ```
 
 ## 2. Component Specifications
@@ -78,7 +76,7 @@ tests/
 - Use `self.bot` to interact with `DummyClient`.
 - Use `self.assertTrue`, `self.assertEqual`, etc. (standard `unittest` assertions).
 
-**Example (`tests/cases/1_basic.py`):**
+**Example:**
 ```python
 from tests.base import BardTestCase
 
