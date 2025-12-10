@@ -192,3 +192,22 @@ class BardTestCase(unittest.TestCase):
         assert self.bot.user is not None
         memory_dir = Path(AppSettings.MEMORY_DIR)
         return memory_dir / f"{self.bot.user.id}.memory.json"
+
+    async def wait_for_reaction(
+        self, message: discord.Message, emoji: str | None = None, timeout: int = 10
+    ) -> bool:
+        """
+        Polls for a specific reaction on a message. If emoji is None, waits for any reaction.
+        """
+        for _ in range(timeout):
+            try:
+                refreshed_msg = await message.channel.fetch_message(message.id)
+                if emoji:
+                    if any(str(r.emoji) == emoji for r in refreshed_msg.reactions):
+                        return True
+                elif refreshed_msg.reactions:
+                    return True
+            except discord.HTTPException:
+                pass
+            await asyncio.sleep(1)
+        return False

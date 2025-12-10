@@ -1,4 +1,3 @@
-import discord
 from tests.base import BardTestCase
 
 
@@ -11,16 +10,8 @@ class BugReproTest(BardTestCase):
             f"<@{self.bot.settings.BOT_ID}> This is a test message to check for reactions."
         )
         print(f"Response: {msg.content}")
-        # Refresh the message to be sure
-        channel = self.bot.get_channel(msg.channel.id)
-        if isinstance(channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel, discord.DMChannel, discord.GroupChannel)):
-            refreshed_msg = await channel.fetch_message(msg.id)
-        else:
-            self.fail(f"Channel {channel} does not support fetch_message")
-        
-        print(f"Reactions on bot message: {refreshed_msg.reactions}")
-        
+
         retry_emoji = getattr(self.bot.settings, "RETRY_EMOJI", "🔄")
 
-        has_retry = any(str(r.emoji) == retry_emoji for r in refreshed_msg.reactions)
+        has_retry = await self.wait_for_reaction(msg, retry_emoji)
         self.assertTrue(has_retry, "Bot message should have a retry reaction")
