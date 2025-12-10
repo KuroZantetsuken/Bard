@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Optional, Tuple
 
@@ -148,6 +149,14 @@ class Coordinator:
             )
 
             if final_ai_response:
+                for i in range(50):
+                    if request.data.get("bot_messages"):
+                        log.debug(f"Bot messages found after {i} checks: {request.data.get('bot_messages')}")
+                        break
+                    await asyncio.sleep(0.1)
+                else:
+                    log.warning("Timed out waiting for bot messages to be populated in request data.")
+
                 await self.reaction_manager.handle_request_completion(
                     request, final_ai_response.tool_emojis
                 )
