@@ -187,6 +187,9 @@ class ToolRegistry:
         log.debug("Resetting tool context data")
         if self.shared_tool_context:
             self.shared_tool_context.tool_response_data = {}
+            self.shared_tool_context.images = []
+            self.shared_tool_context.code_files = []
+            self.shared_tool_context.is_final_output = None
             if hasattr(self.shared_tool_context, "grounding_sources_md"):
                 del self.shared_tool_context.grounding_sources_md
         else:
