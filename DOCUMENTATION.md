@@ -46,6 +46,12 @@ python3 src/debug_scraper.py <search_query>
 **Expected Output:**
 The script will navigate to Google Images, save a screenshot of the page to `page_screenshot.png`, and extract metadata from all `<img>` tags into `image_data.json`. This allows for inspection of the page structure to identify the correct selectors for thumbnails and full-resolution images.
 
+**Advanced Debugging:**
+The `ImageScraper` in `src/scraper/image.py` uses a multi-strategy heuristic approach to find the best image:
+1.  **Fallback Selectors:** Tries a list of known and semantic selectors (e.g., `img[jsname='JuXqh']`, `img.sFlh5c`).
+2.  **Size-Based Heuristics:** Falls back to finding the largest visible image on the page that meets minimum size requirements.
+3.  **Strict Typing & Error Handling:** Ensures robust data extraction and graceful failure with logging.
+
 ### Configuration
 
 Application configuration is managed through a `.env` file.
@@ -196,11 +202,11 @@ The project features a robust, decoupled architecture for managing user requests
 ### Core Components
 
 *   **`RequestManager` ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** The central component that creates, tracks, and manages the state of all user requests. It is the single source of truth for request status and is responsible for initiating the cancellation process.
-*   **`Request` Data Class ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** A simple data class holding all information about a single user request, including its unique ID, state (`RequestState`), and associated data.
-*   **`RequestState` Enum ([`src/bot/core/lifecycle.py`](src/bot/core/lifecycle.py)):** An enum defining the possible states of a request: `PENDING`, `PROCESSING`, `DONE`, `CANCELLED`, and `ERROR`.
+*   **`Request` Data Class ([`src/bot/types.py`](src/bot/types.py)):** A strongly-typed data class holding all information about a single user request, including its unique ID, state (`RequestState`), original Discord message, and an `asyncio.Event` for coordination.
+*   **`RequestState` Enum ([`src/bot/types.py`](src/bot/types.py)):** An enum defining the possible states of a request: `PENDING`, `PROCESSING`, `DONE`, `CANCELLED`, and `ERROR`.
 *   **`ReactionManager` ([`src/bot/message/reactions.py`](src/bot/message/reactions.py)):** A dedicated service that handles all UI feedback related to the request lifecycle. It is responsible for adding, removing, and clearing reactions on user and bot messages to reflect the current state of a request (e.g., adding a "cancel" emoji on creation, or a "retry" emoji on cancellation).
 *   **`TypingManager` ([`src/bot/core/typing.py`](src/bot/core/typing.py)):** A component that manages the bot's typing indicator. It ensures the indicator is reliably started and stopped, even when requests are cancelled.
-*   **`Coordinator` ([`src/bot/core/coordinator.py`](src/bot/core/coordinator.py)):** The main processing logic that orchestrates the AI response generation. It accepts a `Request` object and periodically checks its `state` to gracefully halt processing if it becomes `CANCELLED`.
+*   **`Coordinator` ([`src/bot/core/coordinator.py`](src/bot/core/coordinator.py)):** The main processing logic that orchestrates the AI response generation. It accepts a `Request` object and uses its `messages_ready` event to wait for outbound message delivery instead of polling.
 *   **`DiscordEventHandler` ([`src/bot/core/events.py`](src/bot/core/events.py)):** The event handler for Discord events (message edits, reactions) that interacts with the `RequestManager` to initiate, cancel, or retry requests.
 
 ### Request Processing Flow
@@ -353,7 +359,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | File/Directory | Purpose |
 | :--- | :--- |
 | [`cache.py`](src/scraper/cache.py) | Implements a two-layer caching strategy (L1 in-memory, L2 disk) for scraped data to improve performance. |
-| [`image.py`](src/scraper/image.py) | A scraper for retrieving images from Google Images. |
+| [`image.py`](src/scraper/image.py) | A robust scraper for retrieving images from Google Images using heuristic extraction. |
 | [`models.py`](src/scraper/models.py) | Defines data models for the scraped information. |
 | [`orchestrator.py`](src/scraper/orchestrator.py) | Orchestrates the scraper process, managing multiple scrapers. |
 | [`page.py`](src/scraper/page.py) | Represents a web page and provides methods for interacting with it. |
