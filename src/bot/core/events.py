@@ -57,7 +57,7 @@ class DiscordEventHandler:
         reaction_to_remove: Optional[Tuple[Reaction, User]] = None,
     ):
         request = self.request_manager.create_request(
-            data={"message": message, "original_message_id": message.id}
+            message=message, original_message_id=message.id
         )
         await self.reaction_manager.handle_request_creation(request)
         task = asyncio.create_task(
@@ -86,7 +86,7 @@ class DiscordEventHandler:
             return
 
         for request in self.request_manager._requests.values():
-            if request.data.get("original_message_id") == after.id:
+            if request.original_message_id == after.id:
                 await self.request_manager.cancel_request(request.id, is_edit=True)
 
         is_dm = isinstance(after.channel, discord.DMChannel)
@@ -102,9 +102,9 @@ class DiscordEventHandler:
 
         existing_bot_responses = None
         for request in self.request_manager._requests.values():
-            if request.data.get("original_message_id") == after.id:
-                if "bot_messages" in request.data:
-                    existing_bot_responses = request.data["bot_messages"]
+            if request.original_message_id == after.id:
+                if request.bot_messages:
+                    existing_bot_responses = request.bot_messages
                     break
 
         if not should_process_after and existing_bot_responses:
@@ -161,10 +161,10 @@ class DiscordEventHandler:
         requests_to_cancel = []
         bot_responses_to_delete = []
         for request in self.request_manager._requests.values():
-            if request.data.get("original_message_id") == message.id:
+            if request.original_message_id == message.id:
                 requests_to_cancel.append(request.id)
-                if "bot_messages" in request.data:
-                    bot_responses_to_delete.extend(request.data["bot_messages"])
+                if request.bot_messages:
+                    bot_responses_to_delete.extend(request.bot_messages)
 
         for request_id in requests_to_cancel:
             await self.request_manager.cancel_request(request_id)
@@ -221,15 +221,15 @@ class DiscordEventHandler:
 
         if reaction.message.author.id == self.bot_user_id:
             for request in self.request_manager._requests.values():
-                if "bot_messages" in request.data and any(
-                    m.id == reaction.message.id for m in request.data["bot_messages"]
+                if request.bot_messages and any(
+                    m.id == reaction.message.id for m in request.bot_messages
                 ):
                     request_to_retry = request
                     break
 
         else:
             for request in self.request_manager._requests.values():
-                if request.data.get("original_message_id") == reaction.message.id:
+                if request.original_message_id == reaction.message.id:
                     request_to_retry = request
                     break
 
@@ -242,13 +242,13 @@ class DiscordEventHandler:
 
         try:
             original_message = await reaction.message.channel.fetch_message(
-                request_to_retry.data["original_message_id"]
+                request_to_retry.original_message_id
             )
         except discord.HTTPException as e:
             log.error(
                 "Failed to fetch original message for retry.",
                 extra={
-                    "message_id": request_to_retry.data["original_message_id"],
+                    "message_id": request_to_retry.original_message_id,
                     "error": e,
                 },
             )
@@ -261,7 +261,7 @@ class DiscordEventHandler:
             )
             return
 
-        bot_messages_to_edit = request_to_retry.data.get("bot_messages")
+        bot_messages_to_edit = request_to_retry.bot_messages
         if bot_messages_to_edit:
             for msg in bot_messages_to_edit:
                 try:
@@ -302,9 +302,7 @@ class DiscordEventHandler:
         if str(reaction.emoji) == self.settings.CANCEL_EMOJI:
             request_to_cancel = None
             for request in self.request_manager._requests.values():
-                if request.data.get(
-                    "original_message_id"
-                ) == reaction.message.id and request.state in (
+                if request.original_message_id == reaction.message.id and request.state in (
                     RequestState.PENDING,
                     RequestState.PROCESSING,
                 ):

@@ -36,14 +36,6 @@ class RequestState(Enum):
 
 
 @dataclass
-class Request:
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    state: RequestState = RequestState.PENDING
-    task: Optional[asyncio.Task] = None
-    data: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class VideoMetadata:
     """Represents extracted metadata from a video."""
 
@@ -78,3 +70,16 @@ class ParsedMessageContext:
     video_urls: List[gemini_types.File] = field(default_factory=list)
     video_metadata_list: List[VideoMetadata] = field(default_factory=list)
     scraped_url_data: List[ScrapedData] = field(default_factory=list)
+
+
+@dataclass
+class Request:
+    message: discord.Message
+    original_message_id: int
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    state: RequestState = RequestState.PENDING
+    task: Optional[asyncio.Task] = None
+    bot_messages: List[discord.Message] = field(default_factory=list)
+    messages_ready: asyncio.Event = field(default_factory=asyncio.Event)
+    context: Optional[ParsedMessageContext] = None
+    cancel_emoji_added: bool = False

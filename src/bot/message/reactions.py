@@ -29,13 +29,13 @@ class ReactionManager:
 
     async def handle_request_creation(self, request: Request):
         """Adds the cancel emoji to the user's message when a request is created."""
-        message: Optional[Message] = request.data.get("message")
+        message: Optional[Message] = request.message
         if not message:
             return
 
         try:
             await message.add_reaction(self.cancel_emoji)
-            request.data["cancel_emoji_added"] = True
+            request.cancel_emoji_added = True
             log.debug(
                 "Added cancel reaction to message.", extra={"message_id": message.id}
             )
@@ -49,10 +49,10 @@ class ReactionManager:
         self, request: Request, tool_emojis: Optional[list[str]] = None
     ):
         """Handles reactions for a completed request."""
-        user_message: Optional[Message] = request.data.get("message")
-        bot_messages: Optional[list[Message]] = request.data.get("bot_messages")
+        user_message: Optional[Message] = request.message
+        bot_messages: Optional[list[Message]] = request.bot_messages
 
-        if user_message and request.data.get("cancel_emoji_added"):
+        if user_message and request.cancel_emoji_added:
             try:
                 bot_user = None
                 if user_message.guild:
@@ -78,8 +78,8 @@ class ReactionManager:
         self, request: Request, is_edit: bool = False
     ):
         """Handles reactions for a cancelled request."""
-        user_message: Optional[Message] = request.data.get("message")
-        bot_messages: Optional[list[Message]] = request.data.get("bot_messages")
+        user_message: Optional[Message] = request.message
+        bot_messages: Optional[list[Message]] = request.bot_messages
 
         if user_message:
             try:
@@ -110,7 +110,7 @@ class ReactionManager:
 
     async def handle_request_error(self, request: Request):
         """Handles reactions for a request that resulted in an error."""
-        bot_messages: Optional[list[Message]] = request.data.get("bot_messages")
+        bot_messages: Optional[list[Message]] = request.bot_messages
         if bot_messages:
             await self.add_reactions(bot_messages[0])
 

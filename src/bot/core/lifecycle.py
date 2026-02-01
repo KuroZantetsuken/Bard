@@ -18,10 +18,14 @@ class RequestManager:
         self._typing_manager = typing_manager
         log.info("RequestManager initialized.")
 
-    def create_request(self, data: Dict[str, Any]) -> Request:
-        request = Request(data=data)
+    def create_request(
+        self, message: Any, original_message_id: int
+    ) -> Request:
+        request = Request(message=message, original_message_id=original_message_id)
         self._requests[request.id] = request
-        log.debug(f"Request {request.id} data: {data}")
+        log.debug(
+            f"Request {request.id} created for message {original_message_id}."
+        )
         return request
 
     def get_request(self, request_id: str) -> Optional[Request]:
@@ -41,8 +45,8 @@ class RequestManager:
 
         request.state = RequestState.CANCELLED
 
-        if "message" in request.data:
-            self._typing_manager.stop_typing(request.data["message"].channel)
+        if request.message:
+            self._typing_manager.stop_typing(request.message.channel)
 
         if request.task and not request.task.done():
             request.task.cancel()

@@ -79,7 +79,7 @@ class Coordinator:
         if reaction_to_remove:
             await self.reaction_manager.remove_reaction(reaction_to_remove)
 
-        message: Message = request.data["message"]
+        message: Message = request.message
         log.info(
             "Starting message processing.",
             extra={
@@ -101,6 +101,7 @@ class Coordinator:
             parsed_context: ParsedMessageContext = await self.message_parser.parse(
                 message
             )
+            request.context = parsed_context
             log.debug(
                 "Message parsed successfully.",
                 extra={"message_id": message.id, "context": parsed_context},
@@ -150,17 +151,13 @@ class Coordinator:
 
             if final_ai_response:
                 bot_messages = None
-                for i in range(50):
-                    if request.data.get("bot_messages"):
-                        bot_messages = request.data.get("bot_messages")
-                        log.debug(
-                            f"Bot messages found after {i} checks: {bot_messages}"
-                        )
-                        break
-                    await asyncio.sleep(0.1)
-                else:
+                try:
+                    await asyncio.wait_for(request.messages_ready.wait(), timeout=5.0)
+                    bot_messages = request.bot_messages
+                    log.debug(f"Bot messages received via event: {bot_messages}")
+                except asyncio.TimeoutError:
                     log.warning(
-                        "Timed out waiting for bot messages to be populated in request data."
+                        "Timed out waiting for bot messages to be populated in request."
                     )
 
                 if bot_messages and bot_messages[0]:

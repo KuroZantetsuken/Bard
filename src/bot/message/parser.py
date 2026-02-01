@@ -231,7 +231,7 @@ class MessageParser:
 
         discord_context = await self._extract_discord_context(message)
 
-        return ParsedMessageContext(
+        parsed_context = ParsedMessageContext(
             message=message,
             guild=message.guild,
             reply_chain_content=reply_chain_text,
@@ -242,3 +242,11 @@ class MessageParser:
             video_metadata_list=video_metadata_list,
             scraped_url_data=scraped_data_list,
         )
+        log.debug("Parsed message context.", extra={
+            "has_reply_chain": bool(reply_chain_text),
+            "attachment_count": len(attachments_data),
+            "video_url_count": len(processed_video_parts),
+            "video_metadata_count": len(video_metadata_list),
+            "scraped_data_count": len(scraped_data_list)
+        })
+        return parsed_context

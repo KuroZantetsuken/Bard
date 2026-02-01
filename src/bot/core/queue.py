@@ -115,15 +115,16 @@ class MessageQueue:
                 try:
                     sent_messages = await self.message_sender.send(**message_data)
                     if request and sent_messages:
-                        current_messages = request.data.get("bot_messages", [])
+                        current_messages = request.bot_messages
                         current_ids = {m.id for m in current_messages}
                         new_messages = [
                             m for m in sent_messages if m.id not in current_ids
                         ]
                         if new_messages:
-                            request.data["bot_messages"] = (
+                            request.bot_messages = (
                                 current_messages + new_messages
                             )
+                            request.messages_ready.set()
 
                 except Exception as e:
                     log.error(
