@@ -139,6 +139,18 @@ class DiagnoseTool(BaseTool):
 
         try:
             if os.path.isfile(path_arg):
+                file_size = os.path.getsize(path_arg)
+                max_size = 500 * 1024  # 500KB limit
+                
+                if file_size > max_size:
+                    log.warning(f"File too large to read: {path_arg} ({file_size} bytes)")
+                    return types.Part(
+                        function_response=self.function_response_error(
+                            function_name,
+                            f"File '{path_arg}' is too large to read verbatim ({file_size} bytes). Max allowed is {max_size} bytes. Please use summarize or read specific lines if available."
+                        )
+                    )
+
                 log.debug(f"Reading file: {path_arg}")
                 async with aiofiles.open(path_arg, "r", encoding="utf-8") as f:
                     content = await f.read()

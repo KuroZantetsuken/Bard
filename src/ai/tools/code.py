@@ -1,5 +1,6 @@
 import logging
 import mimetypes
+import re
 from typing import Any, Dict, List
 
 from google.genai import types
@@ -71,8 +72,30 @@ class CodeExecutionTool(BaseTool):
             top_p=0.95,
             max_output_tokens=self.context.settings.MAX_OUTPUT_TOKENS,
             safety_settings=safety_settings,
-            tools=[types.Tool(code_execution=types.ToolCodeExecution())],
+            tools=[{"code_execution": {}}],
         )
+        try:
+            if "gemini-3" in self.context.settings.MODEL_ID:
+                level_map = {
+                    "low": types.ThinkingLevel.LOW,
+                    "high": types.ThinkingLevel.HIGH,
+                }
+                thinking_level_enum = level_map.get(
+                    self.context.settings.THINKING_LEVEL.lower(), types.ThinkingLevel.HIGH
+                )
+
+                config.thinking_config = types.ThinkingConfig(
+                    include_thoughts=False, thinking_level=thinking_level_enum
+                )
+            else:
+                config.thinking_config = types.ThinkingConfig(
+                    include_thoughts=False,
+                    thinking_budget=self.context.settings.THINKING_BUDGET,
+                )
+        except AttributeError:
+            log.warning(
+                "Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it."
+            )
         return config
 
     def _create_code_execution_internal_prompt(
@@ -153,13 +176,13 @@ class CodeExecutionTool(BaseTool):
             log.debug(
                 "Sending code execution request to Gemini",
                 extra={
-                    "model": self.context.settings.MODEL_ID,
+                    "model": self.context.settings.MODEL_ID_SECONDARY,
                     "contents": [c.model_dump() for c in contents_for_code_exec],
                     "config": code_exec_config.model_dump(),
                 },
             )
             response = await gemini_core.aio.models.generate_content(
-                model=self.context.settings.MODEL_ID,
+                model=self.context.settings.MODEL_ID_SECONDARY,
                 contents=contents_for_code_exec,
                 config=code_exec_config,
             )
@@ -203,6 +226,16 @@ class CodeExecutionTool(BaseTool):
                                     "filename": "code.py",
                                 }
                             )
+                        elif part.text:
+                            # Try to extract code from triple backticks if no formal part was found
+                            code_matches = re.findall(r"```python\n(.*?)```", part.text, re.DOTALL)
+                            for code_match in code_matches:
+                                self.context.code_files.append(
+                                    {
+                                        "data": code_match.strip().encode("utf-8"),
+                                        "filename": "code.py",
+                                    }
+                                )
                 log.debug(
                     "Parsed code execution response",
                     extra={

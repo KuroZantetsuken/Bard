@@ -290,6 +290,17 @@ class MemoryManager(JsonStorageManager):
         log.warning(f"Memory {memory_id} not found for user {user_id}")
         return False
 
+    async def clear_memories(self, user_id: str) -> bool:
+        """
+        Removes all memories for a user.
+        Args:
+            user_id: The ID of the user.
+        Returns:
+            True if memories were cleared, False otherwise.
+        """
+        log.debug(f"Clearing all memories for user {user_id}")
+        return await self._delete_data(guild_id=None, user_id=user_id)
+
     def format_memories(
         self, user_id: Optional[str], memories: List[Dict[str, Any]]
     ) -> str:
@@ -368,6 +379,16 @@ class MemoryTool(BaseTool):
                         ),
                     },
                     required=["memory_id"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="clear_all_user_memories",
+                description=(
+                    "Purpose: This tool allows the AI to completely erase all stored long-term memories for the current user. Results: Returns a success status indicating whether memories were cleared. Restrictions/Guidelines: Use this tool ONLY when the user explicitly requests to \"forget everything\", \"clear all memories\", \"reset your memory of me\", or otherwise indicates they want a total reset of their stored long-term information. This action is irreversible. It should be used instead of calling remove_user_memory multiple times when a total reset is requested."
+                ),
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={},
                 ),
             ),
         ]
@@ -463,6 +484,17 @@ class MemoryTool(BaseTool):
                         },
                     )
                 )
+        elif function_name == "clear_all_user_memories":
+            success = await memory_service.clear_memories(user_id)
+            return types.Part(
+                function_response=types.FunctionResponse(
+                    name=function_name,
+                    response={
+                        "success": success,
+                        "action": "cleared_all",
+                    },
+                )
+            )
         else:
             log.error(f"Unknown function '{function_name}' called in MemoryTool.")
             return types.Part(

@@ -55,7 +55,7 @@ class SearchTool(BaseTool):
         enabling built-in tools like Google Search.
         """
         available_tools = [
-            types.Tool(google_search=types.GoogleSearch()),
+            {"google_search": {}},
         ]
         safety_settings = GeminiConfigManager.get_base_safety_settings()
         current_time = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -77,10 +77,23 @@ class SearchTool(BaseTool):
             tools=available_tools,
         )
         try:
-            config.thinking_config = types.ThinkingConfig(
-                include_thoughts=False,
-                thinking_budget=self.context.settings.THINKING_BUDGET,
-            )
+            if "gemini-3" in self.context.settings.MODEL_ID:
+                level_map = {
+                    "low": types.ThinkingLevel.LOW,
+                    "high": types.ThinkingLevel.HIGH,
+                }
+                thinking_level_enum = level_map.get(
+                    self.context.settings.THINKING_LEVEL.lower(), types.ThinkingLevel.HIGH
+                )
+
+                config.thinking_config = types.ThinkingConfig(
+                    include_thoughts=False, thinking_level=thinking_level_enum
+                )
+            else:
+                config.thinking_config = types.ThinkingConfig(
+                    include_thoughts=False,
+                    thinking_budget=self.context.settings.THINKING_BUDGET,
+                )
         except AttributeError:
             log.warning(
                 "Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it."
@@ -202,7 +215,7 @@ class SearchTool(BaseTool):
             log.debug(
                 "Sending search request to Gemini",
                 extra={
-                    "model": self.context.settings.MODEL_ID,
+                    "model": self.context.settings.MODEL_ID_SECONDARY,
                     "contents": [c.model_dump() for c in contents_for_tooling_call],
                     "config": tooling_gen_config.model_dump(),
                 },
@@ -210,7 +223,7 @@ class SearchTool(BaseTool):
 
             log.info("Calling Gemini API for search tool.")
             tooling_response = await gemini_core.generate_content(
-                model=self.context.settings.MODEL_ID,
+                model=self.context.settings.MODEL_ID_SECONDARY,
                 contents=contents_for_tooling_call,
                 config=tooling_gen_config,
             )

@@ -112,6 +112,8 @@ class ImageGenerationTool(BaseTool):
                 extra={"response": response.model_dump()},
             )
 
+            log.debug("Full response dump", extra={"response_dump": response.model_dump()})
+
             generated_filename = None
             image_generated = False
 
