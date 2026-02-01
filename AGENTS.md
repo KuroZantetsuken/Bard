@@ -37,6 +37,9 @@ This file provides guidance to agents when working with code in this repository.
 - **Logs**: Always check the full logs in `data/logs/` for the main bot's internal state after the test. Do not rely on the command output alone.
 
 # Conventional Commit Guide
+
+Perform a systematic, iterative decomposition of all pending git changes into a series of atomic commits. Begin by analyzing all staged and unstaged modifications to discern the distinct logical intents behind each change. Deconstruct the modifications into the smallest possible independent units of work. For each unit, stage the specific lines or files—applying temporary file modifications or partial staging if necessary to isolate specific logic—and commit them using concise, descriptive commit messages. Repeat this process until every modification has been committed. Ensure that the final state of the repository is bit-for-bit identical to the state of the pending changes prior to this process, maintaining full integrity of the original work while achieving a clean, granular commit history.
+
 - **Commits**: Always break down commits into individual changes that can be described in a single message.
 **`type(scope): description`**
 - **`type`**: This describes the kind of change you're making.

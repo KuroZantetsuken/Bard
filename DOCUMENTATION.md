@@ -315,7 +315,7 @@ This section provides a detailed breakdown of the project's files and directorie
 | [`diagnose.py`](src/ai/tools/diagnose.py) | A tool for diagnosing issues within the application. |
 | [`event.py`](src/ai/tools/event.py) | A tool for creating and managing events. |
 | [`image.py`](src/ai/tools/image.py) | A tool for generating images. |
-| [`memory.py`](src/ai/tools/memory.py) | A tool for managing the AI's memory. |
+| [`memory.py`](src/ai/tools/memory.py) | A tool for managing the AI's memory, including adding, removing, and clearing all memories for a user. |
 | [`registry.py`](src/ai/tools/registry.py) | Manages the registration and discovery of AI tools. |
 | [`search.py`](src/ai/tools/search.py) | A tool for performing web searches. |
 | [`summarize.py`](src/ai/tools/summarize.py) | A tool for summarizing chat history. |
@@ -334,6 +334,7 @@ This section provides a detailed breakdown of the project's files and directorie
 
 | File/Directory | Purpose |
 | :--- | :--- |
+| [`cache.py`](src/bot/core/cache.py) | Implements an in-memory LRU cache for Discord messages to reduce API calls. |
 | [`container.py`](src/bot/core/container.py) | Manages the dependency injection container for the bot. |
 | [`coordinator.py`](src/bot/core/coordinator.py) | Coordinates actions and workflows between different parts of the bot. |
 | [`events.py`](src/bot/core/events.py) | Defines and manages Discord events that trigger bot actions. |
