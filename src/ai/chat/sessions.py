@@ -12,6 +12,7 @@ from ai.config import GeminiConfigManager
 from ai.context.prompts import PromptBuilder
 from ai.core import GeminiCore
 from ai.tools.registry import ToolRegistry
+from bot.core.cache import MessageCache
 from settings import Settings
 
 log = logging.getLogger("Bard")
@@ -44,6 +45,7 @@ class ChatSessionManager:
         prompt_builder: PromptBuilder,
         config_manager: GeminiConfigManager,
         tool_registry: ToolRegistry,
+        message_cache: MessageCache,
     ):
         self._sessions: Dict[int, ChatSession] = {}
         self._session_locks: Dict[int, asyncio.Lock] = {}
@@ -52,6 +54,7 @@ class ChatSessionManager:
         self._prompt_builder = prompt_builder
         self._config_manager = config_manager
         self._tool_registry = tool_registry
+        self._message_cache = message_cache
         log.debug("ChatSessionManager initialized.")
 
     async def _get_session_key(self, message: discord.Message) -> int:
@@ -67,8 +70,8 @@ class ChatSessionManager:
             if not current.reference or not current.reference.message_id:
                 break
             try:
-                current = await current.channel.fetch_message(
-                    current.reference.message_id
+                current = await self._message_cache.get_message(
+                    current.channel, current.reference.message_id
                 )
             except (discord.NotFound, discord.HTTPException):
                 break
@@ -81,7 +84,7 @@ class ChatSessionManager:
         Reconstructs the chat history by walking up the Discord reply chain.
         Returns a list of gemini_types.Content.
         """
-        history_messages = []
+        history_messages: List[discord.Message] = []
         current = message
 
         for _ in range(self._settings.MAX_REPLY_DEPTH):
@@ -89,8 +92,8 @@ class ChatSessionManager:
                 break
 
             try:
-                parent = await current.channel.fetch_message(
-                    current.reference.message_id
+                parent = await self._message_cache.get_message(
+                    current.channel, current.reference.message_id
                 )
                 history_messages.append(parent)
                 current = parent
@@ -99,13 +102,13 @@ class ChatSessionManager:
 
         history_messages.reverse()
 
-        gemini_history: List[gemini_types.Content] = []
-        for msg in history_messages:
-            role = "model" if msg.author.bot else "user"
-            parts = [gemini_types.Part(text=msg.content)]
-            gemini_history.append(gemini_types.Content(role=role, parts=parts))
-
-        return gemini_history
+        return [
+            gemini_types.Content(
+                role="model" if msg.author.bot else "user",
+                parts=[gemini_types.Part(text=msg.content)],
+            )
+            for msg in history_messages
+        ]
 
     async def get_or_create_session(self, message: discord.Message) -> Chat:
         """
@@ -113,38 +116,31 @@ class ChatSessionManager:
         A lock is used to prevent race conditions during session creation.
         """
         session_key = await self._get_session_key(message)
-
-        session_to_use: Optional[ChatSession] = None
+        session_to_use: Optional[ChatSession] = self._sessions.get(session_key)
         is_branch = False
 
-        if session_key in self._sessions:
-            existing_session = self._sessions[session_key]
-
+        if session_to_use:
             ref_id = message.reference.message_id if message.reference else None
 
-            if ref_id and ref_id == existing_session.leaf_message_id:
-                session_to_use = existing_session
-                log.info(
-                    "Reusing existing chat session (linear).",
-                    extra={"session_key": session_key, "message_id": message.id},
-                )
-            elif ref_id:
+            # If it's not a direct continuation of the leaf, it's a branch
+            if ref_id and ref_id != session_to_use.leaf_message_id:
                 log.info(
                     "Branch detected. Starting new session.",
                     extra={
                         "session_key": session_key,
                         "message_id": message.id,
                         "ref_id": ref_id,
-                        "leaf_id": existing_session.leaf_message_id,
+                        "leaf_id": session_to_use.leaf_message_id,
                     },
                 )
                 is_branch = True
                 session_key = message.id
+                session_to_use = None
             else:
-                if session_key == message.id:
-                    pass
-                else:
-                    session_to_use = existing_session
+                log.info(
+                    "Reusing existing chat session.",
+                    extra={"session_key": session_key, "message_id": message.id},
+                )
 
         if session_to_use:
             session_to_use.last_interaction = datetime.utcnow()
@@ -198,11 +194,10 @@ class ChatSessionManager:
         """
         Updates the leaf ID for the session associated with the given user message.
         """
-        target_session = None
-        for _, session in self._sessions.items():
-            if session.leaf_message_id == user_message_id:
-                target_session = session
-                break
+        target_session = next(
+            (s for s in self._sessions.values() if s.leaf_message_id == user_message_id),
+            None,
+        )
 
         if target_session:
             target_session.leaf_message_id = bot_message_id

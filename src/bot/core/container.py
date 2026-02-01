@@ -13,6 +13,7 @@ from bot.core.coordinator import Coordinator
 from bot.core.events import DiscordEventHandler
 from bot.core.lifecycle import RequestManager
 from bot.core.queue import MessageQueue
+from bot.core.cache import MessageCache
 from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
@@ -54,6 +55,7 @@ class Container:
             "message_sender": self._create_message_sender,
             "message_queue": self._create_message_queue,
             "scraper": self._create_scraper,
+            "message_cache": self._create_message_cache,
             "cache_manager": self._create_cache_manager,
             "scraping_orchestrator": self._create_scraping_orchestrator,
             "message_parser": self._create_message_parser,
@@ -150,6 +152,11 @@ class Container:
         """Creates and returns an instance of Scraper."""
         log.debug("Scraper instance created.")
         return Scraper()
+
+    def _create_message_cache(self) -> MessageCache:
+        """Creates and returns an instance of MessageCache."""
+        log.debug("MessageCache instance created.")
+        return MessageCache()
 
     def _create_cache_manager(self) -> CacheManager:
         """Creates and returns an instance of CacheManager."""
@@ -270,4 +277,5 @@ class Container:
             prompt_builder=self.get("prompt_builder"),
             config_manager=self.get("gemini_config_manager"),
             tool_registry=self.get("tool_registry"),
+            message_cache=self.get("message_cache"),
         )
