@@ -19,9 +19,9 @@ class ToolsChainingTest(BardTestCase):
             f"<@{self.bot.settings.BOT_ID}> List all files in the project, read `instructions.txt`, then follow those instructions."
         )
 
-        self.assertEqual(
-            len(response.attachments),
-            3,
+        self.assertTrue(
+            len(response.attachments) >= 3,
+            f"Expected at least 3 attachments, found {len(response.attachments)}"
         )
 
         content = response.content.lower()

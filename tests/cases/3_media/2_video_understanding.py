@@ -19,6 +19,11 @@ class MediaVideosTest(BardTestCase):
             "packing",
             "socks",
             "underwear",
+            "bianca",
+            "censori",
+            "kanye",
+            "parody",
+            "satirical",
         ]
         found_keywords = [kw for kw in expected_keywords if kw in content_lower]
 

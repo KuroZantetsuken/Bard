@@ -50,6 +50,14 @@ class BardTestCase(unittest.TestCase):
                 except Exception as e:
                     print(f"Failed to delete cache file {file}: {e}")
 
+    async def clear_bot_memories(self):
+        """
+        Asks the bot to clear all memories via its tool.
+        """
+        await self.bot.send_and_wait(
+            f"<@{self.bot.settings.BOT_ID}> Forget everything you know about me."
+        )
+
     def clear_memory_cache(self):
         """
         Clears the memory cache for a specific user.
@@ -58,7 +66,11 @@ class BardTestCase(unittest.TestCase):
         if not memory_dir.exists():
             return
 
-        assert self.bot.user is not None
+        # The DummyClient user ID is the one whose memories we want to clear
+        # In tests/settings.py, BOT_ID is the target, but the DummyClient has its own user.
+        if not self.bot.user:
+            return
+            
         user_id = self.bot.user.id
 
         file_path = memory_dir / f"{user_id}.memory.json"

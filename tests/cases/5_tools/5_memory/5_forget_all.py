@@ -24,7 +24,7 @@ class MemoryForgetAllTest(BardTestCase):
         )
 
         check2 = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> Use your memory tool to tell me what A is."
+            f"<@{self.bot.settings.BOT_ID}> What is my favorite color?"
         )
 
         content_lower = check2.content.lower()
