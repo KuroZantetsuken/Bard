@@ -68,6 +68,11 @@ class ScrapingOrchestrator:
             video_task = asyncio.create_task(self.video_handler.process_url(url_obj))
 
             scraped_data, video_details = await asyncio.gather(scrape_task, video_task)
+            log.debug("Scrape/Video tasks finished.", extra={
+                "has_scraped_data": scraped_data is not None,
+                "has_video_details": video_details is not None,
+                "is_video": video_details.is_video if video_details else False
+            })
 
             if not scraped_data:
                 log.warning(
@@ -75,14 +80,14 @@ class ScrapingOrchestrator:
                     extra={"url": url_obj.resolved},
                 )
                 if video_details and video_details.is_video:
+                    title = "Untitled Video"
+                    if video_details.metadata:
+                        title = video_details.metadata.get("title") or video_details.metadata.get("description") or "Untitled Video"
+                    
                     scraped_data = ScrapedData(
                         url=url_obj,
-                        title=(
-                            video_details.metadata.get("title", "Untitled Video")
-                            if video_details.metadata
-                            else "Untitled Video"
-                        ),
-                        text_content="",
+                        title=str(title)[:200],
+                        text_content=video_details.metadata.get("description", "") if video_details.metadata else "",
                         screenshot_data=None,
                         timestamp=time.time(),
                         video_details=video_details,
@@ -92,8 +97,12 @@ class ScrapingOrchestrator:
                         "Failed to process URL after all attempts.", extra={"url": url}
                     )
                     return None
-            elif video_details and video_details.is_video:
-                scraped_data.video_details = video_details
+            else:
+                if video_details and video_details.is_video:
+                    scraped_data.video_details = video_details
+                    # If we have both, ensure text_content is not empty if metadata has description
+                    if not scraped_data.text_content and video_details.metadata:
+                        scraped_data.text_content = video_details.metadata.get("description", "")
 
             await self.cache_manager.set_to_cache(scraped_data)
             log.info(

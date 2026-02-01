@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import logging
 from typing import List, Optional
@@ -28,11 +27,11 @@ class ImageScraper:
     # We avoid obfuscated classes here unless they are common or necessary fallbacks
     PREVIEW_SELECTORS: List[str] = [
         "img[jsname='JuXqh']",  # Common Google Images preview jsname
-        "img.sFlh5c",           # Current known obfuscated class
-        "a[role='link'] img",   # Images inside result links
+        "img.sFlh5c",  # Current known obfuscated class
+        "a[role='link'] img",  # Images inside result links
         "div[role='region'] img",
         "div[role='dialog'] img",
-        "div.hh1Ztf img",       # Known container class
+        "div.hh1Ztf img",  # Known container class
     ]
 
     def __init__(self, scraper: Scraper) -> None:
@@ -67,7 +66,7 @@ class ImageScraper:
             )
             encoded_search_terms = quote_plus(search_terms)
             url = f"https://www.google.com/search?q={encoded_search_terms}&tbm=isch"
-            
+
             await page.goto(
                 url,
                 wait_until="networkidle",
@@ -83,7 +82,7 @@ class ImageScraper:
                 return None
 
             await thumbnail.click()
-            
+
             # Wait for the preview pane to open and load the image
             best_image_url = await self._extract_preview_url(page)
 
@@ -122,7 +121,7 @@ class ImageScraper:
         Heuristically finds a suitable thumbnail to click.
         """
         log.debug("Searching for thumbnail to click.")
-        
+
         # Try finding images that look like search results
         images = await page.query_selector_all("img")
         for img in images:
@@ -130,21 +129,23 @@ class ImageScraper:
                 src = await img.get_attribute("src")
                 if not src:
                     continue
-                
+
                 # Thumbnails are usually data URIs or have specific patterns
                 if src.startswith("data:image") or "encrypted-tbn" in src:
                     box = await img.bounding_box()
                     if (
-                        box 
-                        and box["width"] >= self.MIN_THUMBNAIL_SIZE 
+                        box
+                        and box["width"] >= self.MIN_THUMBNAIL_SIZE
                         and box["height"] >= self.MIN_THUMBNAIL_SIZE
                     ):
                         # Avoid clicking UI icons/logos which might be small but captured
-                        if box["width"] < 300: # Thumbnails aren't usually huge initially
+                        if (
+                            box["width"] < 300
+                        ):  # Thumbnails aren't usually huge initially
                             return img
             except Error:
                 continue
-        
+
         return None
 
     async def _extract_preview_url(self, page: Page) -> Optional[str]:
@@ -164,7 +165,9 @@ class ImageScraper:
                         # Verify it's actually the preview (should be visible and large)
                         box = await element.bounding_box()
                         if box and box["width"] >= self.MIN_PREVIEW_SIZE:
-                            log.debug(f"Found valid preview image with selector: {selector}")
+                            log.debug(
+                                f"Found valid preview image with selector: {selector}"
+                            )
                             return src
             except Error:
                 continue
@@ -205,9 +208,9 @@ class ImageScraper:
     def _is_valid_image_url(self, url: str) -> bool:
         """Checks if a URL looks like a valid image source."""
         return bool(
-            url and 
-            not url.startswith("data:image/gif") and 
-            (url.startswith("http") or url.startswith("data:image"))
+            url
+            and not url.startswith("data:image/gif")
+            and (url.startswith("http") or url.startswith("data:image"))
         )
 
     async def _fetch_image_data(self, url: str, search_terms: str) -> Optional[bytes]:
@@ -235,7 +238,9 @@ class ImageScraper:
             }
             try:
                 timeout = aiohttp.ClientTimeout(total=10)
-                async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+                async with aiohttp.ClientSession(
+                    headers=headers, timeout=timeout
+                ) as session:
                     async with session.get(url) as resp:
                         if resp.status == 200:
                             image_data = await resp.read()
