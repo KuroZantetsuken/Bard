@@ -1,34 +1,30 @@
 import asyncio
+import json
 import logging
 import os
 import sys
-import json
 from urllib.parse import quote_plus
 
-# Add src to sys.path to allow imports
 sys.path.append(os.path.join(os.getcwd(), "src"))
-
 from scraper.scraper import Scraper
 
+
 async def debug_image_preview(query: str) -> None:
-    # Setup logging
+
     logging.basicConfig(level=logging.DEBUG)
-    
+
     scraper = Scraper()
     if not scraper._browser:
         await scraper.launch_browser()
-
     if not scraper._browser:
         print("Failed to launch browser")
         return
-
     page = await scraper._browser.new_page()
-    
+
     try:
         encoded_search_terms = quote_plus(query)
         url = f"https://www.google.com/search?q={encoded_search_terms}&tbm=isch"
         await page.goto(url, wait_until="networkidle")
-
         images = await page.query_selector_all("img")
         thumbnail_to_click = None
         for img in images:
@@ -38,11 +34,10 @@ async def debug_image_preview(query: str) -> None:
                 if box and box["width"] > 50 and box["height"] > 50:
                     thumbnail_to_click = img
                     break
-
         if thumbnail_to_click:
             await thumbnail_to_click.click()
-            await asyncio.sleep(2) # Wait for preview to open
-            
+            await asyncio.sleep(2)
+
             preview_images = await page.evaluate("""() => {
                 const imgs = Array.from(document.querySelectorAll('img'));
                 return imgs.map(img => {
@@ -60,7 +55,6 @@ async def debug_image_preview(query: str) -> None:
                         });
                         p = p.parentElement;
                     }
-
                     return {
                         src: img.src ? img.src.substring(0, 100) : null,
                         width: rect.width,
@@ -74,14 +68,15 @@ async def debug_image_preview(query: str) -> None:
                     };
                 }).filter(img => img.isVisible && img.width > 200);
             }""")
-            
+
             print(json.dumps(preview_images, indent=2))
-            
+
     finally:
         if scraper._browser:
             await scraper._browser.close()
         if scraper._playwright:
             await scraper._playwright.stop()
+
 
 if __name__ == "__main__":
     query = "apple"

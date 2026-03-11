@@ -34,15 +34,12 @@ class TypingManager:
             os.makedirs(os.path.dirname(signal_path), exist_ok=True)
             with open(signal_path, "w") as f:
                 f.write("typing")
-
             async with channel.typing():
                 await asyncio.Future()
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            log.warning(
-                f"Error in typing loop for channel {channel.id}: {e}", exc_info=True
-            )
+            log.warning(f"Error in typing loop for channel {channel.id}: {e}", exc_info=True)
         finally:
             try:
                 if os.path.exists(signal_path):
@@ -56,7 +53,6 @@ class TypingManager:
         """
         if channel.id in self._typing_tasks:
             return
-
         task = asyncio.create_task(self._typing_loop(channel))
         self._typing_tasks[channel.id] = task
         log.debug(f"Started typing in channel {channel.id}.")
@@ -67,7 +63,6 @@ class TypingManager:
         """
         if channel.id not in self._typing_tasks:
             return
-
         task = self._typing_tasks.pop(channel.id)
         task.cancel()
         log.debug(f"Stopped typing in channel {channel.id}.")

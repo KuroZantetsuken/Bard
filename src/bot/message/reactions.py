@@ -18,7 +18,6 @@ class ReactionManager:
     def __init__(self, retry_emoji: str, cancel_emoji: str):
         """
         Initializes the ReactionManager.
-
         Args:
             retry_emoji: The emoji used for retrying interactions.
             cancel_emoji: The emoji used to cancel a response generation.
@@ -32,36 +31,27 @@ class ReactionManager:
         message: Optional[Message] = request.message
         if not message:
             return
-
         try:
             await message.add_reaction(self.cancel_emoji)
             request.cancel_emoji_added = True
-            log.debug(
-                "Added cancel reaction to message.", extra={"message_id": message.id}
-            )
+            log.debug("Added cancel reaction to message.", extra={"message_id": message.id})
         except discord.HTTPException as e:
             log.warning(
                 "Failed to add cancel reaction.",
                 extra={"message_id": message.id, "error": e},
             )
 
-    async def handle_request_completion(
-        self, request: Request, tool_emojis: Optional[list[str]] = None
-    ):
+    async def handle_request_completion(self, request: Request, tool_emojis: Optional[list[str]] = None):
         """Handles reactions for a completed request."""
         user_message: Optional[Message] = request.message
         bot_messages: Optional[list[Message]] = request.bot_messages
-
         if user_message and request.cancel_emoji_added:
             try:
                 bot_user = None
                 if user_message.guild:
                     bot_user = user_message.guild.me
-                elif isinstance(
-                    user_message.channel, (discord.DMChannel, discord.GroupChannel)
-                ):
+                elif isinstance(user_message.channel, (discord.DMChannel, discord.GroupChannel)):
                     bot_user = user_message.channel.me
-
                 if bot_user:
                     await user_message.remove_reaction(self.cancel_emoji, bot_user)
             except discord.HTTPException as e:
@@ -69,18 +59,14 @@ class ReactionManager:
                     "Failed to remove cancel reaction from user message.",
                     extra={"message_id": user_message.id, "error": e},
                 )
-
         if bot_messages:
             first_bot_message = bot_messages[0]
             await self.add_reactions(first_bot_message, tool_emojis)
 
-    async def handle_request_cancellation(
-        self, request: Request, is_edit: bool = False
-    ):
+    async def handle_request_cancellation(self, request: Request, is_edit: bool = False):
         """Handles reactions for a cancelled request."""
         user_message: Optional[Message] = request.message
         bot_messages: Optional[list[Message]] = request.bot_messages
-
         if user_message:
             try:
                 await user_message.clear_reactions()
@@ -97,7 +83,6 @@ class ReactionManager:
                         "Failed to add retry reaction to user message.",
                         extra={"message_id": user_message.id, "error": e},
                     )
-
         if bot_messages:
             for bot_message in bot_messages:
                 try:
@@ -121,7 +106,6 @@ class ReactionManager:
     ) -> None:
         """
         Adds reactions to a given Discord message.
-
         Args:
             message: The Discord message object to add reactions to.
             tool_emojis: Optional list of tool emojis to add as reactions.
@@ -137,7 +121,6 @@ class ReactionManager:
                 "Could not add retry reaction.",
                 extra={"message_id": message.id, "error": e},
             )
-
         if tool_emojis:
             log.debug(
                 "Adding tool emojis.",
@@ -155,7 +138,6 @@ class ReactionManager:
     async def remove_reaction(self, reaction_to_remove: Tuple[Reaction, User]) -> None:
         """
         Removes a specific reaction from a message.
-
         Args:
             reaction_to_remove: A tuple containing the Reaction and User
                                 who added the reaction to be removed.

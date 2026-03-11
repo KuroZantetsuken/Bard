@@ -32,7 +32,6 @@ class MessageSender:
     ):
         """
         Initializes the MessageSender service.
-
         Args:
             bot_token: Discord bot token for API authentication.
             retry_emoji: The emoji used to trigger a retry reaction.
@@ -55,48 +54,31 @@ class MessageSender:
         """
         chunks = []
         remaining_text = paragraph
-
         while len(remaining_text) > self.max_message_length:
             split_pos = self.max_message_length
-
             best_split_pos = remaining_text.rfind(" ", 0, split_pos)
             if best_split_pos != -1:
                 split_pos = best_split_pos
-
             last_open_bracket = remaining_text.rfind("[", 0, split_pos)
             if last_open_bracket != -1:
                 next_close_bracket = remaining_text.find("]", last_open_bracket)
                 if next_close_bracket != -1 and next_close_bracket < split_pos:
-                    if (
-                        remaining_text[next_close_bracket + 1 : next_close_bracket + 2]
-                        == "("
-                    ):
+                    if remaining_text[next_close_bracket + 1 : next_close_bracket + 2] == "(":
                         link_end = remaining_text.find(")", next_close_bracket)
-                        if (
-                            link_end != -1
-                            and split_pos > last_open_bracket
-                            and split_pos < link_end
-                        ):
+                        if link_end != -1 and split_pos > last_open_bracket and split_pos < link_end:
                             if last_open_bracket > 0:
                                 split_pos = last_open_bracket
-
             if last_open_bracket != -1:
-                last_close_bracket_before_split = remaining_text.rfind(
-                    "]", 0, split_pos
-                )
+                last_close_bracket_before_split = remaining_text.rfind("]", 0, split_pos)
                 if last_open_bracket > last_close_bracket_before_split:
                     if last_open_bracket > 0:
                         split_pos = last_open_bracket
-
             if split_pos == 0:
                 split_pos = self.max_message_length
-
             chunks.append(remaining_text[:split_pos])
             remaining_text = remaining_text[split_pos:].lstrip()
-
         if remaining_text:
             chunks.append(remaining_text)
-
         return chunks
 
     def _split_message_into_chunks(self, text_content: str) -> List[str]:
@@ -107,11 +89,9 @@ class MessageSender:
         """
         if len(text_content) <= self.max_message_length:
             return [text_content]
-
         chunks = []
         current_chunk = ""
         paragraphs = text_content.split("\n\n")
-
         for i, paragraph in enumerate(paragraphs):
             paragraph_to_add = paragraph + ("\n\n" if i < len(paragraphs) - 1 else "")
             if len(current_chunk) + len(paragraph_to_add) <= self.max_message_length:
@@ -120,7 +100,6 @@ class MessageSender:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
                     current_chunk = ""
-
                 if len(paragraph_to_add) > self.max_message_length:
                     sub_chunks = self._split_long_paragraph(paragraph_to_add)
                     if sub_chunks:
@@ -128,13 +107,10 @@ class MessageSender:
                         current_chunk = sub_chunks[-1]
                 else:
                     current_chunk = paragraph_to_add
-
         if current_chunk.strip():
             chunks.append(current_chunk.strip())
-
         if not chunks and text_content:
             chunks.extend(self._split_long_paragraph(text_content))
-
         return [chunk for chunk in chunks if chunk]
 
     @async_retry(retry_on=(discord.HTTPException,))
@@ -147,13 +123,11 @@ class MessageSender:
     ) -> Optional[discord.Message]:
         """
         Sends a single message, with a fallback to sending to the channel directly if replying fails.
-
         Args:
             channel: The Discord channel to send the message to.
             content: The text content of the message.
             files: Optional list of Discord File objects to attach.
             reply_to: Optional Discord Message object to reply to.
-
         Returns:
             The sent Discord Message object, or None if sending failed.
         """
@@ -166,12 +140,10 @@ class MessageSender:
         except discord.HTTPException as e:
             if e.status >= 500:
                 raise
-
             log.error(
                 "Failed to send message reply, falling back to channel.",
                 extra={"error": e},
             )
-
             try:
                 return await channel.send(content, files=files_to_send)
             except discord.HTTPException as e_chan:
@@ -193,30 +165,26 @@ class MessageSender:
         Sends a text reply, splitting into multiple messages if necessary to adhere to Discord's limits.
         Attaches files only to the first message chunk. This is the fallback for messages that
         are not sent in a thread.
-
         Args:
             message_to_reply_to: The original message to reply to.
             text_content: The text content of the reply.
             files_to_attach: Optional list of Discord File objects to attach.
-
         Returns:
             A list of sent Discord Message objects.
         """
         sent_messages: List[discord.Message] = []
-
         if files_to_attach and len(text_content) > self.max_message_length:
             log.warning(
                 "Text content truncated due to attachment and length limits.",
                 extra={"original_length": len(text_content)},
             )
-            warning_msg = "\n\n[Warning: Response truncated. The full response was too long to display with attachments.]"
-            text_content = (
-                text_content[: self.max_message_length - len(warning_msg)] + warning_msg
+            warning_msg = (
+                "\n\n[Warning: Response truncated. The full response was too long to display with attachments.]"
             )
+            text_content = text_content[: self.max_message_length - len(warning_msg)] + warning_msg
             chunks = [text_content]
         else:
             chunks = self._split_message_into_chunks(text_content)
-
         max_chunks = 10
         if len(chunks) > max_chunks:
             log.warning(
@@ -225,7 +193,6 @@ class MessageSender:
             )
             chunks = chunks[:max_chunks]
             chunks[-1] += "\n\n[...Response truncated due to length limits...]"
-
         for i, chunk in enumerate(chunks):
             files_for_this_turn = files_to_attach if i == 0 else None
             sent_msg = await self._send_single_message_with_fallback(
@@ -236,7 +203,6 @@ class MessageSender:
             )
             if sent_msg:
                 sent_messages.append(sent_msg)
-
         return sent_messages
 
     async def _send_text_reply(
@@ -248,29 +214,19 @@ class MessageSender:
         """
         Sends a text reply. If the reply is long and has no attachments, it delegates to the ThreadManager
         to create a thread. Otherwise, it sends the reply as chunked messages.
-
         Args:
             message_to_reply_to: The original message to reply to.
             text_content: The text content of the reply.
             files_to_attach: Optional list of Discord File objects to attach.
-
         Returns:
             A list of sent Discord Message objects.
         """
         if not text_content or not text_content.strip():
             log.debug("No text content provided, using default message.")
-            text_content = (
-                "I processed your request but have no further text to add."
-                if not files_to_attach
-                else ""
-            )
-
+            text_content = "I processed your request but have no further text to add." if not files_to_attach else ""
         if files_to_attach:
             log.debug("Sending reply with attachments as chunks.")
-            return await self._send_reply_as_chunks(
-                message_to_reply_to, text_content, files_to_attach
-            )
-
+            return await self._send_reply_as_chunks(message_to_reply_to, text_content, files_to_attach)
         log.debug("Attempting to create a thread for a long message.")
         thread_messages = await self.thread_manager.create_thread_if_needed(
             message_to_reply_to,
@@ -278,7 +234,6 @@ class MessageSender:
             self._send_single_message_with_fallback,
             self._split_message_into_chunks,
         )
-
         if thread_messages is not None:
             log.debug(
                 "Thread created for response.",
@@ -292,16 +247,11 @@ class MessageSender:
                         "Sending remaining content as fallback chunks.",
                         extra={"remaining_length": len(rest_of_content)},
                     )
-                    fallback_messages = await self._send_reply_as_chunks(
-                        message_to_reply_to, rest_of_content
-                    )
+                    fallback_messages = await self._send_reply_as_chunks(message_to_reply_to, rest_of_content)
                     thread_messages.extend(fallback_messages)
             return thread_messages
-
         log.debug("Sending reply as chunks without creating a thread.")
-        return await self._send_reply_as_chunks(
-            message_to_reply_to, text_content, files_to_attach
-        )
+        return await self._send_reply_as_chunks(message_to_reply_to, text_content, files_to_attach)
 
     async def send(
         self,
@@ -319,7 +269,6 @@ class MessageSender:
         Sends a reply to a Discord message with optional text, audio, and image content.
         This method handles message editing, text splitting, file attachments,
         and native voice messages with fallback to audio file attachments.
-
         Args:
             message_to_reply_to: The original message to reply to.
             text_content: The text content to send (optional).
@@ -332,16 +281,13 @@ class MessageSender:
             code_filename: Filename for code attachment (optional).
             existing_bot_messages_to_edit: Existing bot messages to edit (optional).
             tool_emojis: List of emojis representing tools used (optional).
-
         Returns:
             A list of sent Discord Message objects.
         """
         if not any([text_content, audio_data, images, code_files]):
             log.warning("No content provided to send. Skipping message.")
             return []
-
         all_sent_messages: List[discord.Message] = []
-
         if existing_bot_messages_to_edit:
             can_safely_edit = (
                 len(existing_bot_messages_to_edit) == 1
@@ -359,18 +305,14 @@ class MessageSender:
                         "Safely editing existing message.",
                         extra={"message_id": existing_bot_messages_to_edit[0].id},
                     )
-                    edited_message = await existing_bot_messages_to_edit[0].edit(
-                        content=text_content
-                    )
+                    edited_message = await existing_bot_messages_to_edit[0].edit(content=text_content)
                     all_sent_messages.append(edited_message)
-
                     return all_sent_messages
                 except discord.HTTPException as e:
                     log.warning(
                         "Failed to edit message, will delete and resend.",
                         extra={"error": e},
                     )
-
             first_message_to_edit = existing_bot_messages_to_edit[0]
             if first_message_to_edit.thread:
                 try:
@@ -394,7 +336,6 @@ class MessageSender:
                         await self.message_manager.delete_message(msg_to_delete)
                     except discord.HTTPException as e:
                         log.warning("Could not delete old message.", extra={"error": e})
-
         files_to_send: List[discord.File] = []
         temp_files_to_clean = []
         try:
@@ -405,16 +346,11 @@ class MessageSender:
                     img_data = img.get("data")
                     img_filename = img.get("filename") or "image.png"
                     if img_data:
-                        temp_path = os.path.join(
-                            temp_dir, f"{uuid.uuid4()}_{img_filename}"
-                        )
+                        temp_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{img_filename}")
                         async with aiofiles.open(temp_path, "wb") as f:
                             await f.write(img_data)
                         temp_files_to_clean.append(temp_path)
-                        files_to_send.append(
-                            discord.File(temp_path, filename=img_filename)
-                        )
-
+                        files_to_send.append(discord.File(temp_path, filename=img_filename))
             if code_files:
                 log.debug(f"Processing {len(code_files)} code files for attachment.")
                 temp_dir = tempfile.gettempdir()
@@ -422,25 +358,18 @@ class MessageSender:
                     code_data = code_file.get("data")
                     code_filename = code_file.get("filename") or "code.py"
                     if code_data:
-                        temp_code_path = os.path.join(
-                            temp_dir, f"{uuid.uuid4()}_{code_filename}"
-                        )
+                        temp_code_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{code_filename}")
                         async with aiofiles.open(temp_code_path, "wb") as f:
                             await f.write(code_data)
                         temp_files_to_clean.append(temp_code_path)
-                        files_to_send.append(
-                            discord.File(temp_code_path, filename=code_filename)
-                        )
-
+                        files_to_send.append(discord.File(temp_code_path, filename=code_filename))
             if text_content or files_to_send:
                 text_content_for_send = text_content or ""
                 log.debug(
                     "Sending text reply with attachments.",
                     extra={"file_count": len(files_to_send)},
                 )
-                messages = await self._send_text_reply(
-                    message_to_reply_to, text_content_for_send, files_to_send
-                )
+                messages = await self._send_text_reply(message_to_reply_to, text_content_for_send, files_to_send)
                 all_sent_messages.extend(messages)
         finally:
             log.debug(
@@ -450,7 +379,6 @@ class MessageSender:
             for path in temp_files_to_clean:
                 if os.path.exists(path):
                     os.unlink(path)
-
         if audio_data:
             log.debug("Processing audio data for sending.")
             sent_audio_message = await self.voice_sender._send_native_voice_message(
@@ -463,16 +391,13 @@ class MessageSender:
                 log.info("Successfully sent native voice message.")
                 all_sent_messages.append(sent_audio_message)
             else:
-                log.warning(
-                    "Failed to send native voice message, falling back to file."
-                )
+                log.warning("Failed to send native voice message, falling back to file.")
                 temp_audio_path = None
                 try:
                     temp_dir = tempfile.gettempdir()
                     temp_audio_path = os.path.join(temp_dir, f"{uuid.uuid4()}.ogg")
                     async with aiofiles.open(temp_audio_path, "wb") as f:
                         await f.write(audio_data)
-
                     file = discord.File(temp_audio_path, filename="voice_response.ogg")
                     sent_msg = await self._send_single_message_with_fallback(
                         cast(discord.abc.Messageable, message_to_reply_to.channel),
@@ -487,12 +412,8 @@ class MessageSender:
                 finally:
                     if temp_audio_path and os.path.exists(temp_audio_path):
                         os.unlink(temp_audio_path)
-
-        if not all_sent_messages and any(
-            [text_content, audio_data, images, code_files]
-        ):
+        if not all_sent_messages and any([text_content, audio_data, images, code_files]):
             log.error("All content sending attempts failed.")
-
         log.debug(
             "Message sending process complete.",
             extra={"sent_message_count": len(all_sent_messages)},

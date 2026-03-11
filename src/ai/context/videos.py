@@ -9,10 +9,8 @@ class VideoFormatter:
     def format_video_metadata(self, metadata: VideoMetadata) -> str:
         """
         Formats video metadata into a readable string for the prompt.
-
         Args:
             metadata: A VideoMetadata object containing details about a video.
-
         Returns:
             A formatted string representing the video metadata.
         """

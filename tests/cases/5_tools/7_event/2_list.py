@@ -6,8 +6,6 @@ class EventListTest(BardTestCase):
         """
         Retrieve scheduled meetings. Assumes memory populated by 1_create.py.
         """
-        response = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> List the upcoming events."
-        )
+        response = await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> List the upcoming events.")
         self.assertIn("Game Night", response.content)
         print(f"Response: {response.content}")

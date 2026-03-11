@@ -15,7 +15,6 @@ class PresenceManager:
     def __init__(self, bot: discord.Client, settings: Settings):
         """
         Initializes the PresenceManager.
-
         Args:
             bot: The Discord bot instance.
             settings: The application configuration settings.
@@ -33,7 +32,6 @@ class PresenceManager:
             activity = None
             activity_type = self.settings.PRESENCE_TYPE.lower()
             log.debug(f"Presence type from settings: {activity_type}")
-
             if activity_type == "playing":
                 activity = discord.Game(name=self.settings.PRESENCE_TEXT)
             elif activity_type == "listening":
@@ -50,9 +48,7 @@ class PresenceManager:
                 presence_emoji = None
                 if self.settings.PRESENCE_EMOJI:
                     try:
-                        presence_emoji = discord.PartialEmoji.from_str(
-                            self.settings.PRESENCE_EMOJI
-                        )
+                        presence_emoji = discord.PartialEmoji.from_str(self.settings.PRESENCE_EMOJI)
                     except Exception as e:
                         log.warning(
                             "Could not parse PRESENCE_EMOJI into PartialEmoji.",
@@ -62,11 +58,7 @@ class PresenceManager:
                             },
                         )
                         presence_emoji = None
-
-                activity = discord.CustomActivity(
-                    name=self.settings.PRESENCE_TEXT, emoji=presence_emoji
-                )
-
+                activity = discord.CustomActivity(name=self.settings.PRESENCE_TEXT, emoji=presence_emoji)
             if activity:
                 await self.bot.change_presence(activity=activity)
                 log.info(
@@ -81,6 +73,5 @@ class PresenceManager:
                     "Invalid presence type configured.",
                     extra={"presence_type": self.settings.PRESENCE_TYPE},
                 )
-
         except Exception as e:
             log.warning("Could not set bot presence.", extra={"error": e})

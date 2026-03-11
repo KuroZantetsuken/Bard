@@ -20,7 +20,6 @@ class SearchTool(BaseTool):
     def __init__(self, context: ToolContext):
         """
         Initializes the SearchTool.
-
         Args:
             context: The ToolContext object providing shared resources.
         """
@@ -58,9 +57,7 @@ class SearchTool(BaseTool):
             {"google_search": {}},
         ]
         safety_settings = GeminiConfigManager.get_base_safety_settings()
-        current_time = datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
+        current_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         config = types.GenerateContentConfig(
             system_instruction=types.Content(
                 parts=[
@@ -85,7 +82,6 @@ class SearchTool(BaseTool):
                 thinking_level_enum = level_map.get(
                     self.context.settings.THINKING_LEVEL.lower(), types.ThinkingLevel.HIGH
                 )
-
                 config.thinking_config = types.ThinkingConfig(
                     include_thoughts=False, thinking_level=thinking_level_enum
                 )
@@ -95,25 +91,18 @@ class SearchTool(BaseTool):
                     thinking_budget=self.context.settings.THINKING_BUDGET,
                 )
         except AttributeError:
-            log.warning(
-                "Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it."
-            )
+            log.warning("Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it.")
         return config
 
-    def _create_internet_tool_internal_prompt(
-        self, search_query: str
-    ) -> List[types.Content]:
+    def _create_internet_tool_internal_prompt(self, search_query: str) -> List[types.Content]:
         """
         Creates the internal prompt for the secondary Gemini call that uses internet tools.
-
         Args:
             search_query: The query for the web search.
-
         Returns:
             A list of Gemini Content objects forming the prompt.
         """
         prompt_parts = []
-
         prompt_parts.append(
             types.Part(
                 text=f"Please use the internet tools to accomplish the following task: {search_query}. Provide a verbose summary."
@@ -127,27 +116,17 @@ class SearchTool(BaseTool):
         Attempts to extract textual content from a Gemini API response or Content object.
         It handles different types of response objects by checking for 'text' attributes
         or 'parts' within a 'Content' object.
-
         Args:
             response: The Gemini API response object or a Gemini types.Content object.
-
         Returns:
             A string containing the extracted text content. Returns an empty string
             if no text content can be extracted.
         """
         if hasattr(response, "text"):
             extracted_text = response.text
-        elif (
-            isinstance(response, types.Content)
-            and hasattr(response, "parts")
-            and response.parts is not None
-        ):
+        elif isinstance(response, types.Content) and hasattr(response, "parts") and response.parts is not None:
             extracted_text = "".join(
-                [
-                    part.text
-                    for part in response.parts
-                    if hasattr(part, "text") and part.text is not None
-                ]
+                [part.text for part in response.parts if hasattr(part, "text") and part.text is not None]
             )
         elif isinstance(response, str):
             extracted_text = response
@@ -155,17 +134,13 @@ class SearchTool(BaseTool):
             extracted_text = ""
         return extracted_text
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the `search_internet` function.
-
         Args:
             function_name: The name of the function to execute (expected to be "search_internet").
             args: A dictionary containing the `search_query` argument.
             context: The ToolContext object providing shared resources.
-
         Returns:
             A Gemini types.Part object containing the function response.
         """
@@ -181,22 +156,18 @@ class SearchTool(BaseTool):
                     },
                 )
             )
-
         gemini_core = context.gemini_core
         if not gemini_core:
             missing_services = []
             if not gemini_core:
                 missing_services.append("gemini_core")
-            error_msg = (
-                f"Missing required context variables: {', '.join(missing_services)}."
-            )
+            error_msg = f"Missing required context variables: {', '.join(missing_services)}."
             log.error(f"SearchTool: {error_msg}")
             return types.Part(
                 function_response=types.FunctionResponse(
                     name=function_name, response={"success": False, "error": error_msg}
                 )
             )
-
         search_query = args.get("search_query")
         if not search_query:
             error_msg = "Missing 'search_query' argument."
@@ -206,12 +177,9 @@ class SearchTool(BaseTool):
                     name=function_name, response={"success": False, "error": error_msg}
                 )
             )
-
         tooling_gen_config = self._create_tooling_config()
         try:
-            contents_for_tooling_call = self._create_internet_tool_internal_prompt(
-                search_query
-            )
+            contents_for_tooling_call = self._create_internet_tool_internal_prompt(search_query)
             log.debug(
                 "Sending search request to Gemini",
                 extra={
@@ -220,7 +188,6 @@ class SearchTool(BaseTool):
                     "config": tooling_gen_config.model_dump(),
                 },
             )
-
             log.info("Calling Gemini API for search tool.")
             tooling_response = await gemini_core.generate_content(
                 model=self.context.settings.MODEL_ID_SECONDARY,
@@ -238,9 +205,7 @@ class SearchTool(BaseTool):
                     if tooling_response.prompt_feedback
                     else "No details provided."
                 )
-                log.error(
-                    f"Built-in tools call was blocked or failed. Details: {details}."
-                )
+                log.error(f"Built-in tools call was blocked or failed. Details: {details}.")
                 error_msg = f"Built-in tools call was blocked or failed. {details}"
                 log.error(f"Built-in tools call failed: {error_msg}")
                 return types.Part(
@@ -252,26 +217,17 @@ class SearchTool(BaseTool):
             candidate = tooling_response.candidates[0]
             if not candidate.finish_reason:
                 error_msg = "Built-in tools call returned an incomplete response (missing finish reason)."
-                log.error(
-                    f"Built-in tools call incomplete: {error_msg} Candidate: {candidate}"
-                )
+                log.error(f"Built-in tools call incomplete: {error_msg} Candidate: {candidate}")
                 return types.Part(
                     function_response=types.FunctionResponse(
                         name=function_name,
                         response={"success": False, "error": error_msg},
                     )
                 )
-
             tooling_text_result = self._extract_response(tooling_response)
-
             response_data = {
-                "tool_output": (
-                    tooling_text_result
-                    if tooling_text_result
-                    else "No textual output from tools."
-                )
+                "tool_output": (tooling_text_result if tooling_text_result else "No textual output from tools.")
             }
-
             if (
                 candidate.grounding_metadata
                 and candidate.grounding_metadata.grounding_supports
@@ -280,11 +236,7 @@ class SearchTool(BaseTool):
                 text = tooling_text_result
                 supports = candidate.grounding_metadata.grounding_supports
                 chunks = candidate.grounding_metadata.grounding_chunks
-
-                sorted_supports = sorted(
-                    supports, key=lambda s: s.segment.end_index, reverse=True
-                )
-
+                sorted_supports = sorted(supports, key=lambda s: s.segment.end_index, reverse=True)
                 for support in sorted_supports:
                     end_index = support.segment.end_index
                     if support.grounding_chunk_indices:
@@ -293,19 +245,12 @@ class SearchTool(BaseTool):
                             if i < len(chunks):
                                 uri = chunks[i].web.uri
                                 citation_links.append(f"[[{i + 1}]](<{uri}>)")
-
                         if citation_links:
                             citation_string = "".join(citation_links)
                             text = text[:end_index] + citation_string + text[end_index:]
-
                 tooling_text_result = text
-
             response_data["tool_output"] = tooling_text_result
-            return types.Part(
-                function_response=types.FunctionResponse(
-                    name=function_name, response=response_data
-                )
-            )
+            return types.Part(function_response=types.FunctionResponse(name=function_name, response=response_data))
         except Exception as e_tool:
             log.error(
                 f"Error during 'search_internet' secondary API call: {e_tool}.",

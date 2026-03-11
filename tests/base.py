@@ -36,11 +36,8 @@ class BardTestCase(unittest.TestCase):
         cache_dir = Path(AppSettings.CACHE_DIR)
         if not cache_dir.exists():
             return
-
         domain = urlparse(url).netloc
-
         url_hash = hashlib.md5(url.encode()).hexdigest()
-
         domain_dir = cache_dir / domain
         if domain_dir.exists():
             for file in domain_dir.glob(f"{url_hash}.*"):
@@ -54,9 +51,7 @@ class BardTestCase(unittest.TestCase):
         """
         Asks the bot to clear all memories via its tool.
         """
-        await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> Forget everything you know about me."
-        )
+        await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> Forget everything you know about me.")
 
     def clear_memory_cache(self):
         """
@@ -66,13 +61,10 @@ class BardTestCase(unittest.TestCase):
         if not memory_dir.exists():
             return
 
-        # The DummyClient user ID is the one whose memories we want to clear
-        # In tests/settings.py, BOT_ID is the target, but the DummyClient has its own user.
         if not self.bot.user:
             return
-            
-        user_id = self.bot.user.id
 
+        user_id = self.bot.user.id
         file_path = memory_dir / f"{user_id}.memory.json"
         if file_path.exists():
             try:
@@ -88,10 +80,8 @@ class BardTestCase(unittest.TestCase):
         cache_dir = Path(AppSettings.CACHE_DIR)
         if not cache_dir.exists():
             return
-
         filename = f"{channel_id}_{after_date}_{before_date}.json"
         file_path = cache_dir / filename
-
         if file_path.exists():
             try:
                 file_path.unlink()
@@ -108,7 +98,6 @@ class BardTestCase(unittest.TestCase):
             dropped = self.client.clear_queue()
             if dropped > 0:
                 print(f"[TestTearDown] Cleared {dropped} leftover messages from queue.")
-
         pass
 
     @property
@@ -127,9 +116,7 @@ class BardTestCase(unittest.TestCase):
         base_path = os.path.join(os.getcwd(), "tests", "resources")
         return os.path.join(base_path, filename)
 
-    async def send_image(
-        self, filename: str = "image.jpg", content: str = ""
-    ) -> discord.Message:
+    async def send_image(self, filename: str = "image.jpg", content: str = "") -> discord.Message:
         """
         Helper to send an image from resources.
         """
@@ -137,17 +124,13 @@ class BardTestCase(unittest.TestCase):
         if not os.path.exists(path):
             if filename == "test_image.png":
                 path = self.get_resource_path("image.jpg")
-
         if not os.path.exists(path):
             raise FileNotFoundError(f"Resource {filename} not found at {path}")
-
         with open(path, "rb") as f:
             file = discord.File(f, filename=filename)
             return await self.bot.send_and_wait(content, files=[file])
 
-    async def send_video(
-        self, filename: str = "video.mp4", content: str = ""
-    ) -> discord.Message:
+    async def send_video(self, filename: str = "video.mp4", content: str = "") -> discord.Message:
         """
         Helper to send a video from resources.
         """
@@ -155,10 +138,8 @@ class BardTestCase(unittest.TestCase):
         if not os.path.exists(path):
             if filename == "test_video.mp4":
                 path = self.get_resource_path("video.mp4")
-
         if not os.path.exists(path):
             raise FileNotFoundError(f"Resource {filename} not found at {path}")
-
         with open(path, "rb") as f:
             file = discord.File(f, filename=filename)
             return await self.bot.send_and_wait(content, files=[file])
@@ -170,17 +151,10 @@ class BardTestCase(unittest.TestCase):
         has_audio = False
         if response.attachments:
             for att in response.attachments:
-                if (
-                    att.filename.endswith(".mp3")
-                    or att.filename.endswith(".ogg")
-                    or att.filename.endswith(".wav")
-                ):
+                if att.filename.endswith(".mp3") or att.filename.endswith(".ogg") or att.filename.endswith(".wav"):
                     has_audio = True
                     break
-
-        self.assertTrue(
-            has_audio, "Expected audio attachment (.mp3, .ogg, .wav), but none found."
-        )
+        self.assertTrue(has_audio, "Expected audio attachment (.mp3, .ogg, .wav), but none found.")
 
     async def get_test_guild_channel(self):
         """
@@ -189,12 +163,8 @@ class BardTestCase(unittest.TestCase):
         channel = self.bot.get_channel(self.bot.channel_id)
         if not channel:
             channel = await self.bot.fetch_channel(self.bot.channel_id)
-
-        if not isinstance(
-            channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel)
-        ):
+        if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel)):
             raise TypeError("Test channel must be a guild channel")
-
         return channel
 
     def get_memory_file(self) -> Path:
@@ -205,9 +175,7 @@ class BardTestCase(unittest.TestCase):
         memory_dir = Path(AppSettings.MEMORY_DIR)
         return memory_dir / f"{self.bot.user.id}.memory.json"
 
-    async def wait_for_reaction(
-        self, message: discord.Message, emoji: str | None = None, timeout: int = 10
-    ) -> bool:
+    async def wait_for_reaction(self, message: discord.Message, emoji: str | None = None, timeout: int = 10) -> bool:
         """
         Polls for a specific reaction on a message. If emoji is None, waits for any reaction.
         """

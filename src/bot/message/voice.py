@@ -19,7 +19,6 @@ class VoiceMessageSender:
     def __init__(self, bot_token: str):
         """
         Initializes the VoiceMessageSender.
-
         Args:
             bot_token: The Discord bot token for API authentication.
         """
@@ -36,13 +35,11 @@ class VoiceMessageSender:
     ) -> Optional[discord.Message]:
         """
         Attempts to send a native Discord voice message using Discord's API.
-
         Args:
             message_to_reply_to: The original message to reply to.
             audio_data: The raw audio data in bytes (OGG format).
             duration_secs: The duration of the audio in seconds.
             waveform_b64: The base64 encoded waveform of the audio.
-
         Returns:
             The sent Discord Message object if successful, None otherwise.
         """
@@ -52,12 +49,9 @@ class VoiceMessageSender:
             with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as temp_file:
                 temp_file.write(audio_data)
                 temp_audio_path = temp_file.name
-
             async with aiohttp.ClientSession() as session:
                 channel_id = str(message_to_reply_to.channel.id)
-                upload_url = (
-                    f"https://discord.com/api/v10/channels/{channel_id}/attachments"
-                )
+                upload_url = f"https://discord.com/api/v10/channels/{channel_id}/attachments"
                 headers = {
                     "Authorization": f"Bot {self.bot_token}",
                     "Content-Type": "application/json",
@@ -73,9 +67,7 @@ class VoiceMessageSender:
                     ]
                 }
                 log.debug("Requesting voice message upload URL.")
-                async with session.post(
-                    upload_url, json=payload, headers=headers
-                ) as resp:
+                async with session.post(upload_url, json=payload, headers=headers) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
                     attachment = data["attachments"][0]
@@ -103,14 +95,10 @@ class VoiceMessageSender:
                     "message_reference": {"message_id": str(message_to_reply_to.id)},
                     "allowed_mentions": {"parse": [], "replied_user": False},
                 }
-                async with session.post(
-                    send_url, json=send_payload, headers=headers
-                ) as resp:
+                async with session.post(send_url, json=send_payload, headers=headers) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                    sent_audio_message = (
-                        await message_to_reply_to.channel.fetch_message(data["id"])
-                    )
+                    sent_audio_message = await message_to_reply_to.channel.fetch_message(data["id"])
                     log.info(
                         "Successfully sent native voice message.",
                         extra={"message_id": sent_audio_message.id},

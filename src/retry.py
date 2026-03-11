@@ -6,12 +6,9 @@ from typing import Any, Callable, Coroutine, Type, TypeVar
 from typing_extensions import ParamSpec
 
 logger = logging.getLogger("Bard")
-
 DEFAULT_RETRIES = 3
 DEFAULT_DELAY = 1
 DEFAULT_BACKOFF = 2
-
-
 T = TypeVar("T")
 P = ParamSpec("P")
 
@@ -21,12 +18,9 @@ def async_retry(
     delay: int = DEFAULT_DELAY,
     backoff: int = DEFAULT_BACKOFF,
     retry_on: tuple[Type[Exception], ...] = (Exception,),
-) -> Callable[
-    [Callable[P, Coroutine[Any, Any, T]]], Callable[P, Coroutine[Any, Any, T]]
-]:
+) -> Callable[[Callable[P, Coroutine[Any, Any, T]]], Callable[P, Coroutine[Any, Any, T]]]:
     """
     A decorator to automatically retry an async function.
-
     Args:
         retries: The maximum number of retries.
         delay: The initial delay between retries in seconds.
@@ -59,7 +53,6 @@ def async_retry(
                     )
                     await asyncio.sleep(current_delay)
                     current_delay *= backoff
-
             raise RuntimeError("Unreachable")
 
         return wrapper

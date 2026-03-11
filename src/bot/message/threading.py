@@ -18,7 +18,6 @@ class ThreadManager:
     def __init__(self, thread_titler: ThreadTitler):
         """
         Initializes the ThreadManager.
-
         Args:
             thread_titler: The service for generating thread titles.
         """
@@ -36,23 +35,18 @@ class ThreadManager:
         """
         Creates a thread for a long message, sends the initial part of the message,
         and then sends the rest of the content in the new thread.
-
         Args:
             message_to_reply_to: The original message to reply to.
             text_content: The full text content of the reply.
             send_func: A function to send a single message.
             split_func: A function to split a message into chunks.
-
         Returns:
             A list of sent messages, or None if a thread was not created.
         """
-
         should_create_thread = len(text_content) > self.max_message_length
-
         if not should_create_thread:
             log.debug("Message is not long enough to require a thread.")
             return None
-
         if not isinstance(
             message_to_reply_to.channel,
             (
@@ -67,36 +61,28 @@ class ThreadManager:
                 extra={"channel_type": type(message_to_reply_to.channel).__name__},
             )
             return None
-
         first_sentence_end = text_content.find(". ")
         if first_sentence_end == -1 or first_sentence_end > self.max_message_length:
             log.debug("No suitable split point found for thread creation.")
             return None
-
         first_part = text_content[: first_sentence_end + 1]
         rest_of_content = text_content[first_sentence_end + 2 :].strip()
         sent_messages = []
-
         first_message = await send_func(
             message_to_reply_to.channel,
             first_part,
             reply_to=message_to_reply_to,
         )
-
         if not first_message:
             log.error("Failed to send the initial message to start a thread.")
             return []
-
         sent_messages.append(first_message)
         log.debug(
             "Initial message sent, preparing to create thread.",
             extra={"message_id": first_message.id},
         )
-
         try:
-            thread = await first_message.create_thread(
-                name="Continuation of your request..."
-            )
+            thread = await first_message.create_thread(name="Continuation of your request...")
             log.debug(
                 "Created thread with a placeholder name.",
                 extra={"thread_id": thread.id, "placeholder_name": thread.name},
@@ -126,12 +112,9 @@ class ThreadManager:
                         extra={"thread_id": thread.id, "error": e},
                         exc_info=True,
                     )
-                log.debug(
-                    "Finished thread title update task.", extra={"thread_id": thread.id}
-                )
+                log.debug("Finished thread title update task.", extra={"thread_id": thread.id})
 
             asyncio.create_task(update_thread_title())
-
             if rest_of_content:
                 thread_chunks = split_func(rest_of_content)
                 for chunk in thread_chunks:
@@ -145,5 +128,4 @@ class ThreadManager:
                 exc_info=True,
             )
             return sent_messages
-
         return sent_messages

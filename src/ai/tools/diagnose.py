@@ -23,7 +23,6 @@ class DiagnoseTool(BaseTool):
     def __init__(self, context: ToolContext):
         """
         Initializes the DiagnoseTool.
-
         Args:
             context: The ToolContext object providing shared resources.
         """
@@ -41,21 +40,15 @@ class DiagnoseTool(BaseTool):
                     line = line.strip()
                     if not line or line.startswith("#"):
                         continue
-
                     if line.startswith("!"):
                         pattern = line[1:]
                         if pattern.endswith("/"):
                             pattern = pattern.rstrip("/")
-                        self._allowed_exceptions.append(
-                            re.compile(self._convert_gitignore_to_regex(pattern))
-                        )
+                        self._allowed_exceptions.append(re.compile(self._convert_gitignore_to_regex(pattern)))
                     else:
                         if line.endswith("/"):
                             line = line.rstrip("/")
-                        self._ignored_patterns.append(
-                            re.compile(self._convert_gitignore_to_regex(line))
-                        )
-
+                        self._ignored_patterns.append(re.compile(self._convert_gitignore_to_regex(line)))
         if not any(p.pattern == r"^logs(/.*)?$" for p in self._allowed_exceptions):
             self._allowed_exceptions.append(re.compile(r"^logs(/.*)?$"))
 
@@ -67,17 +60,14 @@ class DiagnoseTool(BaseTool):
         regex = re.escape(pattern)
         regex = regex.replace(r"\*\*", r".*")
         regex = regex.replace(r"\*", r"[^/]*")
-
         if pattern.startswith("/"):
             regex = "^" + regex
         else:
             regex = "(^|/)" + regex
-
         if pattern.endswith("/"):
             regex = regex + "(/.*)?$"
         else:
             regex = regex + "$"
-
         return regex
 
     def _is_ignored_file(self, file_path: str) -> bool:
@@ -85,15 +75,12 @@ class DiagnoseTool(BaseTool):
         Checks if a file path should be ignored based on .gitignore patterns.
         """
         normalized_path = os.path.normpath(file_path)
-
         for pattern in self._allowed_exceptions:
             if pattern.match(normalized_path):
                 return False
-
         for pattern in self._ignored_patterns:
             if pattern.match(normalized_path):
                 return True
-
         return False
 
     def get_function_declarations(self) -> List[types.FunctionDeclaration]:
@@ -117,16 +104,13 @@ class DiagnoseTool(BaseTool):
             )
         ]
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the `inspect_project` function.
         """
         log.info(f"Executing tool '{function_name}'")
         log.debug("Tool arguments", extra={"tool_args": args})
         path_arg = args.get("path", ".")
-
         if os.path.isfile(path_arg):
             if self._is_ignored_file(path_arg):
                 log.warning(f"Refused to read ignored file: {path_arg}")
@@ -136,21 +120,19 @@ class DiagnoseTool(BaseTool):
                         f"Refused to read file '{path_arg}' as it matches a .gitignore pattern and is not explicitly allowed.",
                     )
                 )
-
         try:
             if os.path.isfile(path_arg):
                 file_size = os.path.getsize(path_arg)
-                max_size = 500 * 1024  # 500KB limit
-                
+                max_size = 500 * 1024
+
                 if file_size > max_size:
                     log.warning(f"File too large to read: {path_arg} ({file_size} bytes)")
                     return types.Part(
                         function_response=self.function_response_error(
                             function_name,
-                            f"File '{path_arg}' is too large to read verbatim ({file_size} bytes). Max allowed is {max_size} bytes. Please use summarize or read specific lines if available."
+                            f"File '{path_arg}' is too large to read verbatim ({file_size} bytes). Max allowed is {max_size} bytes. Please use summarize or read specific lines if available.",
                         )
                     )
-
                 log.debug(f"Reading file: {path_arg}")
                 async with aiofiles.open(path_arg, "r", encoding="utf-8") as f:
                     content = await f.read()
@@ -172,32 +154,25 @@ class DiagnoseTool(BaseTool):
             else:
                 log.warning(f"Path not found: {path_arg}")
                 return types.Part(
-                    function_response=self.function_response_error(
-                        function_name, f"Path not found: {path_arg}"
-                    )
+                    function_response=self.function_response_error(function_name, f"Path not found: {path_arg}")
                 )
         except Exception as e:
             log.error(f"Error inspecting path '{path_arg}': {e}", exc_info=True)
             return types.Part(
-                function_response=self.function_response_error(
-                    function_name, f"An unexpected error occurred: {e}"
-                )
+                function_response=self.function_response_error(function_name, f"An unexpected error occurred: {e}")
             )
 
     def _get_directory_json(self, path: str) -> Dict[str, Any]:
         """
         Generates a dictionary representing the directory hierarchy.
         """
-
         abs_path = os.path.abspath(path)
-
         dir_structure = {
             "name": os.path.basename(abs_path),
             "path": path,
             "type": "directory",
             "children": [],
         }
-
         for root, dirs, files in os.walk(path, topdown=True):
             dirs[:] = [
                 d
@@ -206,7 +181,6 @@ class DiagnoseTool(BaseTool):
                 and not d.startswith(".")
                 and not (d.startswith("__") and d.endswith("__"))
             ]
-
             parts = os.path.relpath(root, path).split(os.sep)
             if parts[0] == ".":
                 current_level = dir_structure["children"]
@@ -214,18 +188,12 @@ class DiagnoseTool(BaseTool):
                 node = dir_structure
                 for part in parts:
                     child_node = next(
-                        (
-                            child
-                            for child in node.get("children", [])
-                            if child["name"] == part
-                        ),
+                        (child for child in node.get("children", []) if child["name"] == part),
                         None,
                     )
                     if child_node:
                         node = child_node
-
                 current_level = node.get("children", [])
-
             for d in sorted(dirs):
                 full_path = os.path.join(root, d)
                 if not self._is_ignored_file(full_path):
@@ -237,7 +205,6 @@ class DiagnoseTool(BaseTool):
                             "children": [],
                         }
                     )
-
             for f in sorted(files):
                 full_path = os.path.join(root, f)
                 if not f.startswith(".") and not self._is_ignored_file(full_path):
@@ -248,5 +215,4 @@ class DiagnoseTool(BaseTool):
                             "type": "file",
                         }
                     )
-
         return dir_structure

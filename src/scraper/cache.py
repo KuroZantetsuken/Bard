@@ -53,15 +53,11 @@ class CacheManager:
                 domain = "misc"
         except Exception:
             domain = "misc"
-
         domain_dir = self.cache_dir / domain
         domain_dir.mkdir(parents=True, exist_ok=True)
-
         url_hash = hashlib.md5(resolved_url.encode()).hexdigest()
         path = domain_dir / f"{url_hash}.json"
-        log.debug(
-            "Generated cache path.", extra={"url": resolved_url, "path": str(path)}
-        )
+        log.debug("Generated cache path.", extra={"url": resolved_url, "path": str(path)})
         return path
 
     def get_cache_base_path_for_url(self, resolved_url: str) -> Path:
@@ -80,14 +76,12 @@ class CacheManager:
         base_path = self.get_cache_base_path_for_url(resolved_url)
         parent_dir = base_path.parent
         file_hash = base_path.name
-
         if not parent_dir.exists():
             log.debug(
                 "Cache directory does not exist for video search.",
                 extra={"url": resolved_url, "dir": str(parent_dir)},
             )
             return None
-
         for file in parent_dir.iterdir():
             if file.stem == file_hash and file.suffix != ".json":
                 mime_type, _ = mimetypes.guess_type(file)
@@ -97,7 +91,6 @@ class CacheManager:
                         extra={"url": resolved_url, "path": str(file)},
                     )
                     return file
-
         log.debug("No cached video found for URL.", extra={"url": resolved_url})
         return None
 
@@ -108,8 +101,7 @@ class CacheManager:
         Uses an L1 in-memory cache and an L2 disk cache.
         """
         resolved_url = url_obj.resolved
-        
-        # Check L1 in-memory cache
+
         if resolved_url in self._l1_cache:
             cached_obj = self._l1_cache[resolved_url]
             if cached_obj.expires > time.time():
@@ -120,11 +112,9 @@ class CacheManager:
                 log.debug("L1 Cache expired for URL.", extra={"url": resolved_url})
                 del self._l1_cache[resolved_url]
 
-        # Check L2 disk cache
         data = await self._get_from_disk_cache(url_obj)
         if data:
-            # Populate L1 cache
-            expires = time.time() + self.cache_duration # Re-estimate or store actual expiry
+            expires = time.time() + self.cache_duration
             self._l1_cache[resolved_url] = CachedObject(data=data, expires=expires)
             if len(self._l1_cache) > self._l1_cache_maxsize:
                 self._l1_cache.popitem(last=False)
@@ -138,21 +128,16 @@ class CacheManager:
         if not cache_path.exists():
             log.debug("Cache miss for URL.", extra={"url": url_obj.resolved})
             return None
-
         try:
             async with aiofiles.open(cache_path, "r") as f:
                 content = await f.read()
                 cached_obj_dict = json.loads(content)
-
             cached_obj = await self._deserialize_cached_object(cached_obj_dict)
-
             if cached_obj.expires > time.time():
                 log.info("Cache hit for URL.", extra={"url": url_obj.resolved})
                 return cached_obj.data
             else:
-                log.info(
-                    "Cache expired for URL. Deleting.", extra={"url": url_obj.resolved}
-                )
+                log.info("Cache expired for URL. Deleting.", extra={"url": url_obj.resolved})
                 cache_path.unlink()
                 screenshot_path = cache_path.with_suffix(".png")
                 if screenshot_path.exists():
@@ -178,15 +163,12 @@ class CacheManager:
         log.debug("Setting data to cache.", extra={"url": resolved_url})
         cache_path = self._get_cache_path(resolved_url)
         expires = time.time() + self.cache_duration
-
         data_for_serialization = deepcopy(data)
-
         if data.screenshot_data and isinstance(data.screenshot_data, bytes):
             screenshot_path = cache_path.with_suffix(".png")
             try:
                 async with aiofiles.open(screenshot_path, "wb") as f:
                     await f.write(data.screenshot_data)
-
                 data_for_serialization.screenshot_data = str(screenshot_path)  # type: ignore
                 log.debug(
                     "Saved screenshot to cache.",
@@ -200,19 +182,15 @@ class CacheManager:
                 data_for_serialization.screenshot_data = None
         else:
             data_for_serialization.screenshot_data = None
-
         cached_obj_for_disk = CachedObject(data=data_for_serialization, expires=expires)
         cached_obj_for_memory = CachedObject(data=data, expires=expires)
-
         try:
             async with aiofiles.open(cache_path, "w") as f:
                 await f.write(json.dumps(cached_obj_for_disk, cls=self.CacheEncoder, indent=4))
             log.debug("Successfully cached data for URL.", extra={"url": resolved_url})
-
             self._l1_cache[resolved_url] = cached_obj_for_memory
             if len(self._l1_cache) > self._l1_cache_maxsize:
                 self._l1_cache.popitem(last=False)
-
         except TypeError as e:
             log.error(
                 "Failed to serialize data for URL.",
@@ -223,10 +201,7 @@ class CacheManager:
         """Helper to reconstruct a CachedObject from a dictionary."""
         log.debug("Deserializing cached object.")
         data_dict = obj_dict["data"]
-
-        if data_dict.get("screenshot_data") and isinstance(
-            data_dict["screenshot_data"], str
-        ):
+        if data_dict.get("screenshot_data") and isinstance(data_dict["screenshot_data"], str):
             screenshot_path = Path(data_dict["screenshot_data"])
             if screenshot_path.exists():
                 try:
@@ -243,15 +218,11 @@ class CacheManager:
                     )
                     data_dict["screenshot_data"] = None
             else:
-                log.warning(
-                    "Screenshot file not found.", extra={"path": str(screenshot_path)}
-                )
+                log.warning("Screenshot file not found.", extra={"path": str(screenshot_path)})
                 data_dict["screenshot_data"] = None
-
         data_dict["media"] = [ScrapedMedia(**m) for m in data_dict.get("media", [])]
         if data_dict.get("video_details"):
             data_dict["video_details"] = VideoDetails(**data_dict["video_details"])
-
         data_dict["url"] = ResolvedURL(**data_dict["url"])
         scraped_data = ScrapedData(**data_dict)
         return CachedObject(data=scraped_data, expires=obj_dict["expires"])
@@ -263,9 +234,7 @@ class CacheManager:
         """
 
         def default(self, o: Any) -> Any:
-            if isinstance(
-                o, (ScrapedData, CachedObject, VideoDetails, ScrapedMedia, ResolvedURL)
-            ):
+            if isinstance(o, (ScrapedData, CachedObject, VideoDetails, ScrapedMedia, ResolvedURL)):
                 return o.__dict__
             if isinstance(o, bytes):
                 log.warning("CacheEncoder encountered unexpected bytes data.")

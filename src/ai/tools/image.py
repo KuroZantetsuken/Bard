@@ -21,7 +21,6 @@ class ImageGenerationTool(BaseTool):
     def __init__(self, context: ToolContext):
         """
         Initializes the ImageGenerationTool.
-
         Args:
             context: The ToolContext object providing shared resources.
         """
@@ -51,18 +50,14 @@ class ImageGenerationTool(BaseTool):
             )
         ]
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the `generate_image` function.
         This involves calling the Gemini API to generate an image and processing its output.
-
         Args:
             function_name: The name of the function to execute (expected to be "generate_image").
             args: A dictionary containing the `prompt` argument.
             context: The ToolContext object providing shared resources.
-
         Returns:
             A Gemini types.Part object containing the function response, including
             success status and generated image details.
@@ -72,36 +67,24 @@ class ImageGenerationTool(BaseTool):
         if function_name != "generate_image":
             error_msg = f"Unknown function: {function_name}"
             log.error(f"ImageGenerationTool: {error_msg}")
-            return types.Part(
-                function_response=self.function_response_error(function_name, error_msg)
-            )
-
+            return types.Part(function_response=self.function_response_error(function_name, error_msg))
         gemini_core = context.get("gemini_core")
         if not gemini_core:
             error_msg = "Missing 'gemini_core' from context."
             log.error(f"ImageGenerationTool: {error_msg}")
-            return types.Part(
-                function_response=self.function_response_error(function_name, error_msg)
-            )
-
+            return types.Part(function_response=self.function_response_error(function_name, error_msg))
         prompt = args.get("prompt")
         if not prompt:
             error_msg = "Missing 'prompt' argument."
             log.error(f"ImageGenerationTool: {error_msg}")
-            return types.Part(
-                function_response=self.function_response_error(function_name, error_msg)
-            )
-
+            return types.Part(function_response=self.function_response_error(function_name, error_msg))
         try:
             image_model_id = context.settings.MODEL_ID_IMAGE_GENERATION
-            log.info(
-                f"Calling Gemini API for image generation with model: {image_model_id}"
-            )
+            log.info(f"Calling Gemini API for image generation with model: {image_model_id}")
             log.debug("Image generation details", extra={"prompt": prompt})
             config = types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
             )
-
             response = await gemini_core.aio.models.generate_content(
                 model=image_model_id,
                 contents=[prompt],
@@ -111,22 +94,16 @@ class ImageGenerationTool(BaseTool):
                 "Received response from Gemini API for image generation",
                 extra={"response": response.model_dump()},
             )
-
             log.debug("Full response dump", extra={"response_dump": response.model_dump()})
-
             generated_filename = None
             image_generated = False
-
             if response.candidates:
                 for candidate in response.candidates:
                     for part in candidate.content.parts:
-                        if part.inline_data and part.inline_data.mime_type.startswith(
-                            "image/"
-                        ):
+                        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
                             mime_type = part.inline_data.mime_type
                             extension = mimetypes.guess_extension(mime_type) or ".bin"
                             generated_filename = f"generated_image{extension}"
-
                             self.context.images.append(
                                 {
                                     "data": part.inline_data.data,
@@ -148,12 +125,7 @@ class ImageGenerationTool(BaseTool):
                 feedback = response.prompt_feedback
                 feedback_str = str(feedback) if feedback else "No candidates returned."
                 log.error(f"Image generation failed. Feedback: {feedback}.")
-                return types.Part(
-                    function_response=self.function_response_error(
-                        function_name, feedback_str
-                    )
-                )
-
+                return types.Part(function_response=self.function_response_error(function_name, feedback_str))
             if image_generated:
                 log.info(f"Successfully generated image: {generated_filename}")
                 return types.Part(
@@ -165,21 +137,16 @@ class ImageGenerationTool(BaseTool):
                     )
                 )
             else:
-                log.warning(
-                    "No image data found in Gemini response despite successful API call."
-                )
+                log.warning("No image data found in Gemini response despite successful API call.")
                 return types.Part(
                     function_response=self.function_response_error(
                         function_name, "No image data found in the response."
                     )
                 )
-
         except json.JSONDecodeError:
             error_msg = "The AI server returned an invalid JSON response (likely empty). This may indicate the model is not supported or the server is experiencing issues."
             log.error(f"ImageGenerationTool: {error_msg}")
-            return types.Part(
-                function_response=self.function_response_error(function_name, error_msg)
-            )
+            return types.Part(function_response=self.function_response_error(function_name, error_msg))
         except Exception as e:
             error_msg = str(e)
             log.error(

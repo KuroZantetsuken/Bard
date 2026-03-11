@@ -44,7 +44,6 @@ class Scraper:
 
     async def _launch_persistent_browser(self, p: Playwright) -> BrowserContext:
         persistent_context_path = Settings.PLAYWRIGHT_BROWSER_PATH
-
         singleton_lock_path = os.path.join(persistent_context_path, "SingletonLock")
         if os.path.exists(singleton_lock_path):
             log.debug(
@@ -58,10 +57,8 @@ class Scraper:
                     "Failed to remove SingletonLock file, attempting to proceed.",
                     extra={"error": str(e)},
                 )
-
         extensions_path = Settings.PLAYWRIGHT_EXTENSIONS_PATH
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-
         browser_args = []
         if os.path.exists(extensions_path):
             extension_dirs = [
@@ -81,10 +78,8 @@ class Scraper:
                     "Found extensions, launching with args.",
                     extra={"playwright_args": browser_args},
                 )
-
         if "--headless=new" not in browser_args:
             browser_args.append("--headless=new")
-
         log.debug(
             "Launching browser with persistent context.",
             extra={"path": persistent_context_path},
@@ -124,7 +119,6 @@ class Scraper:
         if not self._browser:
             await self.launch_browser()
         assert self._browser is not None
-
         page = await self._browser.new_page()
         try:
             await page.goto(url, wait_until="commit")
@@ -152,17 +146,13 @@ class Scraper:
                         wait_until="load",
                         timeout=Settings.TOOL_TIMEOUT_SECONDS * 1000,
                     )
-
                     page_stability = PageStability(
                         page,
                         stability_threshold=0.95,
                         check_interval=1,
                         required_stable_duration=2,
                     )
-                    await page_stability.wait_for_stable_page(
-                        timeout=Settings.TOOL_TIMEOUT_SECONDS
-                    )
-
+                    await page_stability.wait_for_stable_page(timeout=Settings.TOOL_TIMEOUT_SECONDS)
                     content = await page.content()
                     screenshot_bytes = None
                     if screenshot:
@@ -184,13 +174,11 @@ class Scraper:
                         await page.set_viewport_size(page_size)
                         screenshot_bytes = await page.screenshot()
                         log.debug("Screenshot taken.", extra={"url": url_obj.resolved})
-
                     soup = BeautifulSoup(content, "html.parser")
                     title = soup.title.string if soup.title else "No title found"
                     for script_or_style in soup(["script", "style"]):
                         script_or_style.decompose()
                     text_content = " ".join(soup.stripped_strings)
-
                     log.debug(
                         "Successfully scraped URL.",
                         extra={"url": url_obj.resolved, "attempt": attempt + 1},
@@ -226,5 +214,4 @@ class Scraper:
                 extra={"url": url_obj.resolved, "error": str(e)},
                 exc_info=True,
             )
-
         return None

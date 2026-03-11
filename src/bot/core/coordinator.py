@@ -40,7 +40,6 @@ class Coordinator:
     ):
         """
         Initializes the Coordinator with instances of its collaborating services.
-
         Args:
             message_parser: Service for parsing incoming Discord messages.
             ai_conversation: Service for managing AI conversational turns.
@@ -70,7 +69,6 @@ class Coordinator:
         Main orchestration method for processing a Discord message.
         This method encompasses the full flow from AI response generation
         and message sending, including error handling and reaction management.
-
         Args:
             request: The request object to process.
             bot_messages_to_edit: Optional list of bot messages that can be edited.
@@ -78,7 +76,6 @@ class Coordinator:
         """
         if reaction_to_remove:
             await self.reaction_manager.remove_reaction(reaction_to_remove)
-
         message: Message = request.message
         log.info(
             "Starting message processing.",
@@ -92,29 +89,21 @@ class Coordinator:
         final_ai_response: Optional[FinalAIResponse] = None
         try:
             self.typing_manager.start_typing(message.channel)
-
             if request.state == RequestState.CANCELLED:
                 log.info(f"Request {request.id} was cancelled before processing.")
                 return
-
             log.debug("Parsing message content.", extra={"message_id": message.id})
-            parsed_context: ParsedMessageContext = await self.message_parser.parse(
-                message
-            )
+            parsed_context: ParsedMessageContext = await self.message_parser.parse(message)
             request.context = parsed_context
             log.debug(
                 "Message parsed successfully.",
                 extra={"message_id": message.id, "context": parsed_context},
             )
-
             if request.state == RequestState.CANCELLED:
                 log.info(f"Request {request.id} was cancelled after parsing.")
                 return
-
             log.debug("Starting AI conversation.", extra={"message_id": message.id})
-            chat_session = await self.chat_session_manager.get_or_create_session(
-                message
-            )
+            chat_session = await self.chat_session_manager.get_or_create_session(message)
 
             @async_retry(retry_on=(genai_errors.ServerError,))
             async def run_ai_conversation():
@@ -125,11 +114,9 @@ class Coordinator:
                 "AI conversation completed.",
                 extra={"message_id": message.id, "response": final_ai_response},
             )
-
             if request.state == RequestState.CANCELLED:
                 log.info(f"Request {request.id} was cancelled after AI conversation.")
                 return
-
             log.debug("Enqueuing AI response.", extra={"message_id": message.id})
             await self.message_queue.enqueue(
                 channel_id=message.channel.id,
@@ -148,7 +135,6 @@ class Coordinator:
                     "message_id": message.id,
                 },
             )
-
             if final_ai_response:
                 bot_messages = None
                 try:
@@ -156,21 +142,13 @@ class Coordinator:
                     bot_messages = request.bot_messages
                     log.debug(f"Bot messages received via event: {bot_messages}")
                 except asyncio.TimeoutError:
-                    log.warning(
-                        "Timed out waiting for bot messages to be populated in request."
-                    )
-
+                    log.warning("Timed out waiting for bot messages to be populated in request.")
                 if bot_messages and bot_messages[0]:
                     await self.chat_session_manager.update_leaf_for_message(
                         user_message_id=message.id, bot_message_id=bot_messages[0].id
                     )
-
-                await self.reaction_manager.handle_request_completion(
-                    request, final_ai_response.tool_emojis
-                )
-
+                await self.reaction_manager.handle_request_completion(request, final_ai_response.tool_emojis)
             self.request_manager.update_request_state(request.id, RequestState.DONE)
-
         except genai_errors.ServerError as e:
             self.request_manager.update_request_state(request.id, RequestState.ERROR)
             log.error(
@@ -182,9 +160,7 @@ class Coordinator:
                 },
                 exc_info=True,
             )
-            error_message = (
-                "The model is currently overloaded. Please try again shortly."
-            )
+            error_message = "The model is currently overloaded. Please try again shortly."
             await self.message_queue.enqueue(
                 channel_id=message.channel.id,
                 message_data={
@@ -195,7 +171,6 @@ class Coordinator:
                 request=request,
             )
             await self.reaction_manager.handle_request_error(request)
-
         except Exception as e:
             self.request_manager.update_request_state(request.id, RequestState.ERROR)
             log.error(
@@ -207,9 +182,7 @@ class Coordinator:
                 },
                 exc_info=True,
             )
-            error_message = (
-                f"An error occurred while processing your request.\n```\n{e}\n```"
-            )
+            error_message = f"An error occurred while processing your request.\n```\n{e}\n```"
             await self.message_queue.enqueue(
                 channel_id=message.channel.id,
                 message_data={

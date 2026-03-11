@@ -6,8 +6,6 @@ class DiagnoseListFilesTest(BardTestCase):
         """
         List directory contents.
         """
-        response = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> List files in the current directory."
-        )
+        response = await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> List files in the current directory.")
         self.assertIn("requirements.txt", response.content)
         print(f"Response: {response.content}")

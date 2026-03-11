@@ -10,8 +10,6 @@ class BugReproTest(BardTestCase):
             f"<@{self.bot.settings.BOT_ID}> This is a test message to check for reactions."
         )
         print(f"Response: {msg.content}")
-
         retry_emoji = getattr(self.bot.settings, "RETRY_EMOJI", "🔄")
-
         has_retry = await self.wait_for_reaction(msg, retry_emoji)
         self.assertTrue(has_retry, "Bot message should have a retry reaction")

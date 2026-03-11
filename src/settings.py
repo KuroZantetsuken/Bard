@@ -91,9 +91,7 @@ class Settings:
     # The directory containing persistent browser data
     PLAYWRIGHT_BROWSER_PATH = "data/browser/"
     # The directory to the DiscordChatExporter.Cli executable.
-    DISCORD_CHAT_EXPORTER_PATH = os.path.expanduser(
-        "~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli"
-    )
+    DISCORD_CHAT_EXPORTER_PATH = os.path.expanduser("~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli")
 
     # --- Logging Configuration ---
     # Enable or disable logging to the console.
@@ -113,11 +111,7 @@ class Settings:
 
     # --- Debugging & Testing ---
     # A list of bot user IDs that are allowed to trigger the bot (e.g., for testing).
-    ALLOWED_BOT_IDS = [
-        int(id.strip())
-        for id in os.getenv("ALLOWED_BOT_IDS", "").split(",")
-        if id.strip()
-    ]
+    ALLOWED_BOT_IDS = [int(id.strip()) for id in os.getenv("ALLOWED_BOT_IDS", "").split(",") if id.strip()]
 
     @classmethod
     def validate_settings(cls):

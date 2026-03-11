@@ -10,7 +10,6 @@ class MediaVideosTest(BardTestCase):
             filename="video.mp4",
             content=f"<@{self.bot.settings.BOT_ID}> Summarize this video.",
         )
-
         content_lower = response.content.lower()
         expected_keywords = [
             "hair",
@@ -26,7 +25,6 @@ class MediaVideosTest(BardTestCase):
             "satirical",
         ]
         found_keywords = [kw for kw in expected_keywords if kw in content_lower]
-
         self.assertTrue(
             len(found_keywords) >= 2,
             f"Expected video keywords, found {found_keywords}. Content: {response.content}",

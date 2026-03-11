@@ -18,26 +18,22 @@ class ImageScraper:
     Uses multiple heuristic strategies to avoid breakage from CSS selector changes.
     """
 
-    # Heuristic constants
     MIN_THUMBNAIL_SIZE = 50
     MIN_PREVIEW_SIZE = 200
     PREVIEW_WAIT_TIMEOUT_MS = 10000
 
-    # Fallback selectors that have historically worked or follow semantic patterns
-    # We avoid obfuscated classes here unless they are common or necessary fallbacks
     PREVIEW_SELECTORS: List[str] = [
-        "img[jsname='JuXqh']",  # Common Google Images preview jsname
-        "img.sFlh5c",  # Current known obfuscated class
-        "a[role='link'] img",  # Images inside result links
+        "img[jsname='JuXqh']",
+        "img.sFlh5c",
+        "a[role='link'] img",
         "div[role='region'] img",
         "div[role='dialog'] img",
-        "div.hh1Ztf img",  # Known container class
+        "div.hh1Ztf img",
     ]
 
     def __init__(self, scraper: Scraper) -> None:
         """
         Initializes the ImageScraper.
-
         Args:
             scraper: An instance of the main Scraper class to reuse its browser context.
         """
@@ -46,19 +42,15 @@ class ImageScraper:
     async def scrape_image_data(self, search_terms: str) -> Optional[bytes]:
         """
         Scrapes a single image from a Google Images search and returns its data.
-
         Args:
             search_terms: The terms to search for on Google Images.
-
         Returns:
             The image data as bytes, or None if an image could not be found or fetched.
         """
         if not self.scraper._browser:
             await self.scraper.launch_browser()
-
         assert self.scraper._browser is not None
         page: Page = await self.scraper._browser.new_page()
-
         try:
             log.info(
                 "Scraping image for search terms.",
@@ -66,13 +58,11 @@ class ImageScraper:
             )
             encoded_search_terms = quote_plus(search_terms)
             url = f"https://www.google.com/search?q={encoded_search_terms}&tbm=isch"
-
             await page.goto(
                 url,
                 wait_until="networkidle",
                 timeout=Settings.TOOL_TIMEOUT_SECONDS * 1000,
             )
-
             thumbnail = await self._find_thumbnail(page)
             if not thumbnail:
                 log.warning(
@@ -80,26 +70,20 @@ class ImageScraper:
                     extra={"search_terms": search_terms},
                 )
                 return None
-
             await thumbnail.click()
 
-            # Wait for the preview pane to open and load the image
             best_image_url = await self._extract_preview_url(page)
-
             if not best_image_url:
                 log.warning(
                     "Could not extract preview image URL.",
                     extra={"search_terms": search_terms},
                 )
                 return None
-
             log.debug(
                 "Found image URL, attempting to fetch data.",
                 extra={"url": best_image_url[:100] + "..."},
             )
-
             return await self._fetch_image_data(best_image_url, search_terms)
-
         except Error as e:
             log.error(
                 "Playwright error while scraping image.",
@@ -122,7 +106,6 @@ class ImageScraper:
         """
         log.debug("Searching for thumbnail to click.")
 
-        # Try finding images that look like search results
         images = await page.query_selector_all("img")
         for img in images:
             try:
@@ -130,22 +113,13 @@ class ImageScraper:
                 if not src:
                     continue
 
-                # Thumbnails are usually data URIs or have specific patterns
                 if src.startswith("data:image") or "encrypted-tbn" in src:
                     box = await img.bounding_box()
-                    if (
-                        box
-                        and box["width"] >= self.MIN_THUMBNAIL_SIZE
-                        and box["height"] >= self.MIN_THUMBNAIL_SIZE
-                    ):
-                        # Avoid clicking UI icons/logos which might be small but captured
-                        if (
-                            box["width"] < 300
-                        ):  # Thumbnails aren't usually huge initially
+                    if box and box["width"] >= self.MIN_THUMBNAIL_SIZE and box["height"] >= self.MIN_THUMBNAIL_SIZE:
+                        if box["width"] < 300:
                             return img
             except Error:
                 continue
-
         return None
 
     async def _extract_preview_url(self, page: Page) -> Optional[str]:
@@ -153,29 +127,24 @@ class ImageScraper:
         Heuristically extracts the high-quality image URL from the preview pane.
         Tries multiple strategies including fallback selectors and size-based heuristics.
         """
-        # Strategy 1: Fallback selectors
+
         for selector in self.PREVIEW_SELECTORS:
             try:
                 log.debug(f"Trying preview selector: {selector}")
-                # Wait briefly for each selector
+
                 element = await page.wait_for_selector(selector, timeout=2000)
                 if element:
                     src = await element.get_attribute("src")
                     if src and self._is_valid_image_url(src):
-                        # Verify it's actually the preview (should be visible and large)
                         box = await element.bounding_box()
                         if box and box["width"] >= self.MIN_PREVIEW_SIZE:
-                            log.debug(
-                                f"Found valid preview image with selector: {selector}"
-                            )
+                            log.debug(f"Found valid preview image with selector: {selector}")
                             return src
             except Error:
                 continue
 
-        # Strategy 2: Largest visible image that isn't a known small thumbnail
         log.debug("Falling back to largest visible image heuristic.")
         try:
-            # We use a slightly more complex script to find the best candidate
             best_src = await page.evaluate(f"""() => {{
                 const imgs = Array.from(document.querySelectorAll('img'));
                 const candidates = imgs.map(img => {{
@@ -208,9 +177,7 @@ class ImageScraper:
     def _is_valid_image_url(self, url: str) -> bool:
         """Checks if a URL looks like a valid image source."""
         return bool(
-            url
-            and not url.startswith("data:image/gif")
-            and (url.startswith("http") or url.startswith("data:image"))
+            url and not url.startswith("data:image/gif") and (url.startswith("http") or url.startswith("data:image"))
         )
 
     async def _fetch_image_data(self, url: str, search_terms: str) -> Optional[bytes]:
@@ -238,9 +205,7 @@ class ImageScraper:
             }
             try:
                 timeout = aiohttp.ClientTimeout(total=10)
-                async with aiohttp.ClientSession(
-                    headers=headers, timeout=timeout
-                ) as session:
+                async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
                     async with session.get(url) as resp:
                         if resp.status == 200:
                             image_data = await resp.read()

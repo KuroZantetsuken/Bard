@@ -20,7 +20,6 @@ class MessageManager:
     async def delete_message(self, message: discord.Message):
         """
         Deletes a Discord message.
-
         Args:
             message: The discord.Message object to delete.
         """
@@ -29,9 +28,7 @@ class MessageManager:
             await message.delete()
             log.info("Message deleted successfully.", extra={"message_id": message.id})
         except discord.NotFound:
-            log.warning(
-                "Message not found, could not delete.", extra={"message_id": message.id}
-            )
+            log.warning("Message not found, could not delete.", extra={"message_id": message.id})
         except discord.Forbidden:
             log.error(
                 "Bot lacks permissions to delete message.",
@@ -48,12 +45,9 @@ class MessageManager:
                 extra={"message_id": message.id, "error": e},
             )
 
-    async def remove_reaction(
-        self, message: discord.Message, emoji: str, user: Optional[discord.User] = None
-    ):
+    async def remove_reaction(self, message: discord.Message, emoji: str, user: Optional[discord.User] = None):
         """
         Removes a reaction from a Discord message.
-
         Args:
             message: The discord.Message object from which to remove the reaction.
             emoji: The emoji (str) to remove.

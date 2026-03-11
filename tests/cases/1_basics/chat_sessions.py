@@ -10,15 +10,9 @@ class ContextMultiTurnTest(BardTestCase):
             f"<@{self.bot.settings.BOT_ID}> Hello, my name is TestUser. Do NOT use any tools to remember this."
         )
         print(f"Response: {msg1.content}")
-
-        msg2 = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> What is my name?"
-        )
+        msg2 = await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> What is my name?")
         self.assertNotIn("TestUser", msg2.content)
         print(f"Response: {msg2.content}")
-
-        msg3 = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> What is my name?", reference=msg1
-        )
+        msg3 = await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> What is my name?", reference=msg1)
         self.assertIn("TestUser", msg3.content)
         print(f"Bot recalled name: {msg3.content}")

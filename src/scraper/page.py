@@ -37,17 +37,14 @@ class PageStability:
                 "Image sizes do not match, cropping to the smaller size.",
                 extra={"size1": img1.size, "size2": img2.size},
             )
-
             if img1.width * img1.height > img2.width * img2.height:
                 img1 = img1.crop((0, 0, img2.width, img2.height))
             else:
                 img2 = img2.crop((0, 0, img1.width, img1.height))
-
         diff = ImageChops.difference(img1, img2)
         diff = diff.convert("L")
         total_pixels = img1.width * img1.height
         changed_pixels = sum(1 for pixel in diff.getdata() if pixel != 0)
-
         return 1.0 - (changed_pixels / total_pixels)
 
     async def wait_for_stable_page(self, timeout: int = 30):
@@ -58,11 +55,9 @@ class PageStability:
         start_time = asyncio.get_event_loop().time()
         last_screenshot = await self._take_screenshot()
         stable_since = None
-
         while (asyncio.get_event_loop().time() - start_time) < timeout:
             await asyncio.sleep(self._check_interval)
             current_screenshot = await self._take_screenshot()
-
             similarity = self._compare_images(last_screenshot, current_screenshot)
             log.debug(
                 "Page stability check.",
@@ -71,21 +66,13 @@ class PageStability:
                     "threshold": self._stability_threshold,
                 },
             )
-
             if similarity >= self._stability_threshold:
                 if stable_since is None:
                     stable_since = asyncio.get_event_loop().time()
-                elif (
-                    asyncio.get_event_loop().time() - stable_since
-                    >= self._required_stable_duration
-                ):
+                elif asyncio.get_event_loop().time() - stable_since >= self._required_stable_duration:
                     log.info("Page is visually stable.")
                     return
             else:
                 stable_since = None
-
             last_screenshot = current_screenshot
-
-        log.warning(
-            "Page did not stabilize within timeout.", extra={"timeout": timeout}
-        )
+        log.warning("Page did not stabilize within timeout.", extra={"timeout": timeout})

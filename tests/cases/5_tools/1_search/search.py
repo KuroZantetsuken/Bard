@@ -6,8 +6,6 @@ class SearchSimpleTest(BardTestCase):
         """
         General knowledge search.
         """
-        response = await self.bot.send_and_wait(
-            f"<@{self.bot.settings.BOT_ID}> Who won the 2025 Las Vegas Grand Prix?"
-        )
+        response = await self.bot.send_and_wait(f"<@{self.bot.settings.BOT_ID}> Who won the 2025 Las Vegas Grand Prix?")
         self.assertIn("Max Verstappen", response.content)
         print(f"Search Simple: {response.content}")

@@ -45,10 +45,8 @@ class MessageParser:
     async def _extract_discord_context(self, message: Message) -> DiscordContext:
         """
         Extracts relevant Discord environment information from the message.
-
         Args:
             message: The Discord message object.
-
         Returns:
             A DiscordContext TypedDict containing extracted context.
         """
@@ -56,7 +54,6 @@ class MessageParser:
         channel_id = channel.id
         channel_name = getattr(channel, "name", "Direct Message")
         channel_topic = getattr(channel, "topic", None)
-
         users_in_channel = []
         if isinstance(channel, discord.TextChannel):
             for member in channel.members:
@@ -66,15 +63,12 @@ class MessageParser:
             users_in_channel.append(message.author.id)
             if self.bot_user_id:
                 users_in_channel.append(self.bot_user_id)
-
         replied_user_id = None
         if message.reference and message.reference.resolved:
             if isinstance(message.reference.resolved, discord.Message):
                 replied_user_id = message.reference.resolved.author.id
-
         current_time_utc = datetime.now(timezone.utc).isoformat()
         sender_user_id = message.author.id
-
         discord_context = DiscordContext(
             channel_id=channel_id,
             channel_name=channel_name,
@@ -89,16 +83,12 @@ class MessageParser:
         log.debug("Extracted Discord context.", extra={"context": {**discord_context}})
         return discord_context
 
-    def _create_video_metadata(
-        self, url: str, info_dict: dict[str, Any]
-    ) -> VideoMetadata:
+    def _create_video_metadata(self, url: str, info_dict: dict[str, Any]) -> VideoMetadata:
         """
         Creates a VideoMetadata object from a yt-dlp info dictionary.
-
         Args:
             url: The original URL of the video.
             info_dict: The dictionary returned by yt-dlp's `extract_info`.
-
         Returns:
             A VideoMetadata object populated with extracted information.
         """
@@ -119,10 +109,8 @@ class MessageParser:
     async def parse(self, message: Message) -> ParsedMessageContext:
         """
         Parses a raw discord.Message into a structured ParsedMessageContext.
-
         Args:
             message: The raw Discord message object.
-
         Returns:
             A ParsedMessageContext object containing all extracted and processed information.
         """
@@ -139,52 +127,40 @@ class MessageParser:
                 "attachment_count": len(replied_attachments),
             },
         )
-
         url_pattern = r"(?:https?://|www\.)[a-zA-Z0-9\-\._~:/?#\[\]@!$&'()*+,;=%]+"
         combined_content_for_url_extraction = f"{message.content} {reply_chain_text}"
-        urls_in_message = set(
-            re.findall(url_pattern, combined_content_for_url_extraction)
-        )
-
+        urls_in_message = set(re.findall(url_pattern, combined_content_for_url_extraction))
         scraped_data_list = []
         if urls_in_message:
             log.info(
                 "Found URLs to scrape.",
                 extra={"count": len(urls_in_message), "urls": list(urls_in_message)},
             )
-            scraped_data_list = await self.scraping_orchestrator.process_urls(
-                list(urls_in_message)
-            )
+            scraped_data_list = await self.scraping_orchestrator.process_urls(list(urls_in_message))
             log.debug(
                 "Scraping complete.",
                 extra={"results_count": len(scraped_data_list)},
             )
-
         processed_video_parts: List[types.File] = []
         video_metadata_list: List[VideoMetadata] = []
         for scraped_data in scraped_data_list:
             if not scraped_data:
                 continue
-
             if scraped_data.video_details and scraped_data.video_details.is_video:
                 log.debug(
                     "Processing scraped video data.",
                     extra={"url": scraped_data.url.resolved},
                 )
                 if scraped_data.video_details.video_path:
-                    mime_type, _ = mimetypes.guess_type(
-                        scraped_data.video_details.video_path
-                    )
+                    mime_type, _ = mimetypes.guess_type(scraped_data.video_details.video_path)
                     if mime_type:
                         try:
                             with open(scraped_data.video_details.video_path, "rb") as f:
                                 video_bytes = f.read()
-                            video_file = (
-                                await self.attachment_processor.upload_media_bytes(
-                                    video_bytes,
-                                    display_name=scraped_data.video_details.video_path,
-                                    mime_type=mime_type,
-                                )
+                            video_file = await self.attachment_processor.upload_media_bytes(
+                                video_bytes,
+                                display_name=scraped_data.video_details.video_path,
+                                mime_type=mime_type,
                             )
                             if video_file:
                                 processed_video_parts.append(video_file)
@@ -197,7 +173,6 @@ class MessageParser:
                                 f"Failed to read and upload video file: {scraped_data.video_details.video_path}",
                                 exc_info=True,
                             )
-
                 if scraped_data.video_details.metadata:
                     video_metadata = self._create_video_metadata(
                         scraped_data.url.resolved,
@@ -208,7 +183,6 @@ class MessageParser:
                         "Created video metadata from scraped data.",
                         extra={"url": scraped_data.url.resolved},
                     )
-
         attachments_data = []
         attachments_mime_types = []
         all_attachments = message.attachments + replied_attachments
@@ -217,20 +191,14 @@ class MessageParser:
             extra={"attachment_count": len(all_attachments)},
         )
         for attachment in all_attachments:
-            mime_type = (
-                attachment.content_type
-                if attachment.content_type
-                else "application/octet-stream"
-            )
+            mime_type = attachment.content_type if attachment.content_type else "application/octet-stream"
             attachments_data.append(await attachment.read())
             attachments_mime_types.append(mime_type)
         log.debug(
             "Finished processing attachments.",
             extra={"processed_count": len(attachments_data)},
         )
-
         discord_context = await self._extract_discord_context(message)
-
         parsed_context = ParsedMessageContext(
             message=message,
             guild=message.guild,
@@ -242,11 +210,14 @@ class MessageParser:
             video_metadata_list=video_metadata_list,
             scraped_url_data=scraped_data_list,
         )
-        log.debug("Parsed message context.", extra={
-            "has_reply_chain": bool(reply_chain_text),
-            "attachment_count": len(attachments_data),
-            "video_url_count": len(processed_video_parts),
-            "video_metadata_count": len(video_metadata_list),
-            "scraped_data_count": len(scraped_data_list)
-        })
+        log.debug(
+            "Parsed message context.",
+            extra={
+                "has_reply_chain": bool(reply_chain_text),
+                "attachment_count": len(attachments_data),
+                "video_url_count": len(processed_video_parts),
+                "video_metadata_count": len(video_metadata_list),
+                "scraped_data_count": len(scraped_data_list),
+            },
+        )
         return parsed_context

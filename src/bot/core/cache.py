@@ -14,19 +14,15 @@ class MessageCache:
 
     def __init__(self, maxsize: int = 1000):
         self.maxsize = maxsize
-        # We wrap the fetcher in alru_cache
+
         self._get_message = alru_cache(maxsize=maxsize)(self._fetch_message)
 
-    async def _fetch_message(
-        self, channel: discord.abc.Messageable, message_id: int
-    ) -> discord.Message:
+    async def _fetch_message(self, channel: discord.abc.Messageable, message_id: int) -> discord.Message:
         """The actual API call, wrapped by alru_cache."""
         log.debug(f"Fetching message {message_id} from API (cache miss).")
         return await channel.fetch_message(message_id)
 
-    async def get_message(
-        self, channel: discord.abc.Messageable, message_id: int
-    ) -> discord.Message:
+    async def get_message(self, channel: discord.abc.Messageable, message_id: int) -> discord.Message:
         """
         Retrieves a message from the cache or fetches it from the API.
         """

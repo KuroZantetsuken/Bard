@@ -23,7 +23,6 @@ class CodeExecutionTool(BaseTool):
     def __init__(self, context: ToolContext):
         """
         Initializes the CodeExecutionTool.
-
         Args:
             context: The ToolContext object providing shared resources.
         """
@@ -83,7 +82,6 @@ class CodeExecutionTool(BaseTool):
                 thinking_level_enum = level_map.get(
                     self.context.settings.THINKING_LEVEL.lower(), types.ThinkingLevel.HIGH
                 )
-
                 config.thinking_config = types.ThinkingConfig(
                     include_thoughts=False, thinking_level=thinking_level_enum
                 )
@@ -93,25 +91,19 @@ class CodeExecutionTool(BaseTool):
                     thinking_budget=self.context.settings.THINKING_BUDGET,
                 )
         except AttributeError:
-            log.warning(
-                "Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it."
-            )
+            log.warning("Gemini SDK version might not support 'thinking_config' for tooling. Proceeding without it.")
         return config
 
-    def _create_code_execution_internal_prompt(
-        self, code_task: str
-    ) -> List[types.Content]:
+    def _create_code_execution_internal_prompt(self, code_task: str) -> List[types.Content]:
         """
         Creates the internal prompt for the secondary Gemini call that generates Python code.
         This prompt guides the model to produce executable Python code based on the given task.
-
         Args:
             code_task: A description of the Python code to be generated.
         Returns:
             A list of Gemini Content objects forming the prompt.
         """
         prompt_parts = []
-
         prompt_parts.append(
             types.Part(
                 text=f"Please generate and execute Python code to accomplish the following task: {code_task}. Provide a verbose summary of the execution or the generated image."
@@ -120,19 +112,15 @@ class CodeExecutionTool(BaseTool):
         prompt = [types.Content(parts=prompt_parts, role="user")]
         return prompt
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the `execute_python_code` function.
         This involves making a secondary Gemini call to generate and run Python code,
         then processing its output and any generated images.
-
         Args:
             function_name: The name of the function to execute (expected to be "execute_python_code").
             args: A dictionary containing the `code_task` argument.
             context: The ToolContext object providing shared resources.
-
         Returns:
             A Gemini types.Part object containing the function response, including
             success status, output, and any generated image details.
@@ -167,11 +155,8 @@ class CodeExecutionTool(BaseTool):
                     name=function_name, response={"success": False, "error": error_msg}
                 )
             )
-
         code_exec_config = self._create_code_execution_config()
-
         contents_for_code_exec = self._create_code_execution_internal_prompt(code_task)
-
         try:
             log.debug(
                 "Sending code execution request to Gemini",
@@ -196,9 +181,7 @@ class CodeExecutionTool(BaseTool):
             if response.candidates:
                 for candidate in response.candidates:
                     for part in candidate.content.parts:
-                        if part.inline_data and part.inline_data.mime_type.startswith(
-                            "image/"
-                        ):
+                        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
                             mime_type = part.inline_data.mime_type
                             extension = mimetypes.guess_extension(mime_type) or ".bin"
                             generated_filename = f"plot{extension}"
@@ -213,10 +196,7 @@ class CodeExecutionTool(BaseTool):
                             self.context.is_final_output = True
                             text_output = f"Image generated: {generated_filename}"
                         elif part.code_execution_result:
-                            if (
-                                not image_generated
-                                and part.code_execution_result.output
-                            ):
+                            if not image_generated and part.code_execution_result.output:
                                 text_output += part.code_execution_result.output + "\n"
                         if part.executable_code and part.executable_code.code:
                             code_content = part.executable_code.code
@@ -227,7 +207,6 @@ class CodeExecutionTool(BaseTool):
                                 }
                             )
                         elif part.text:
-                            # Try to extract code from triple backticks if no formal part was found
                             code_matches = re.findall(r"```python\n(.*?)```", part.text, re.DOTALL)
                             for code_match in code_matches:
                                 self.context.code_files.append(

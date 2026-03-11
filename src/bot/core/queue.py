@@ -17,7 +17,6 @@ class MessageQueue:
     def __init__(self, message_sender: MessageSender):
         """
         Initializes the MessageQueue.
-
         Args:
             message_sender: The service used to send messages to Discord.
         """
@@ -30,23 +29,17 @@ class MessageQueue:
     def get_queue(self, channel_id: int) -> asyncio.Queue:
         """
         Retrieves or creates a queue for the specified channel ID.
-
         Args:
             channel_id: The ID of the Discord channel.
-
         Returns:
             The asyncio.Queue for the channel.
         """
         if channel_id not in self.queues:
             self.queues[channel_id] = asyncio.Queue()
             log.debug(f"Created new message queue for channel {channel_id}.")
-
             if self._running:
-                task = asyncio.create_task(
-                    self._process_queue(channel_id, self.queues[channel_id])
-                )
+                task = asyncio.create_task(self._process_queue(channel_id, self.queues[channel_id]))
                 self.worker_tasks.append(task)
-
         return self.queues[channel_id]
 
     async def enqueue(
@@ -57,7 +50,6 @@ class MessageQueue:
     ):
         """
         Enqueues a message for sending.
-
         Args:
             channel_id: The ID of the channel to send to.
             message_data: A dictionary containing the arguments for MessageSender.send.
@@ -65,9 +57,7 @@ class MessageQueue:
         """
         queue = self.get_queue(channel_id)
         await queue.put((message_data, request))
-        log.debug(
-            f"Enqueued message for channel {channel_id}. Queue size: {queue.qsize()}"
-        )
+        log.debug(f"Enqueued message for channel {channel_id}. Queue size: {queue.qsize()}")
 
     def start_workers(self):
         """
@@ -76,7 +66,6 @@ class MessageQueue:
         if self._running:
             log.warning("MessageQueue workers are already running.")
             return
-
         self._running = True
         log.info("Starting MessageQueue workers.")
         for channel_id, queue in self.queues.items():
@@ -91,17 +80,14 @@ class MessageQueue:
         log.info("Stopping MessageQueue workers.")
         for task in self.worker_tasks:
             task.cancel()
-
         if self.worker_tasks:
             await asyncio.gather(*self.worker_tasks, return_exceptions=True)
-
         self.worker_tasks.clear()
 
     async def _process_queue(self, channel_id: int, queue: asyncio.Queue):
         """
         Worker task that processes messages from a specific channel's queue.
         It will exit if the queue remains empty for 5 minutes.
-
         Args:
             channel_id: The ID of the channel.
             queue: The queue to process.
@@ -109,25 +95,18 @@ class MessageQueue:
         log.debug(f"Started worker for channel {channel_id}.")
         while self._running:
             try:
-                # Wait for a message with a timeout to allow cleanup of idle workers
                 item = await asyncio.wait_for(queue.get(), timeout=300.0)
                 message_data, request = item
                 log.debug(f"Processing message for channel {channel_id}.")
-
                 try:
                     sent_messages = await self.message_sender.send(**message_data)
                     if request and sent_messages:
                         current_messages = request.bot_messages
                         current_ids = {m.id for m in current_messages}
-                        new_messages = [
-                            m for m in sent_messages if m.id not in current_ids
-                        ]
+                        new_messages = [m for m in sent_messages if m.id not in current_ids]
                         if new_messages:
-                            request.bot_messages = (
-                                current_messages + new_messages
-                            )
+                            request.bot_messages = current_messages + new_messages
                             request.messages_ready.set()
-
                 except Exception as e:
                     log.error(
                         f"Error sending message in channel {channel_id}: {e}",
@@ -135,7 +114,6 @@ class MessageQueue:
                     )
                 finally:
                     queue.task_done()
-
             except asyncio.TimeoutError:
                 if queue.empty():
                     if channel_id in self.queues:
@@ -152,8 +130,7 @@ class MessageQueue:
                     exc_info=True,
                 )
                 await asyncio.sleep(1)
-        
-        # Remove self from worker_tasks
+
         current_task = asyncio.current_task()
         if current_task in self.worker_tasks:
             self.worker_tasks.remove(current_task)

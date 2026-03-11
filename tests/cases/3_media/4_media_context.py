@@ -12,16 +12,13 @@ class MediaRepliesTest(BardTestCase):
             content=f"<@{self.bot.settings.BOT_ID}> What is in this image?",
         )
         print(f"Response: {msg1.content}")
-
         msg2 = await self.bot.send_and_wait(
             f"<@{self.bot.settings.BOT_ID}> Tell me more about the colors used.",
             reference=msg1,
         )
-
         content_lower = msg2.content.lower()
         expected_keywords = ["green", "yellow", "red", "color", "zone", "distance"]
         found_keywords = [kw for kw in expected_keywords if kw in content_lower]
-
         self.assertTrue(
             len(found_keywords) >= 2,
             f"Expected color-related keywords, found {found_keywords}. Content: {msg2.content}",

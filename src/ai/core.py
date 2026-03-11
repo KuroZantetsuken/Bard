@@ -19,20 +19,17 @@ class GeminiCore:
     def __init__(self, api_key: str, base_url: Optional[str] = None):
         """
         Initializes the GeminiCore with the provided API key.
-
         Args:
             api_key: The API key for authenticating with the Gemini API.
             base_url: Optional custom base URL for the Gemini API.
         """
         log.debug("Initializing GeminiCore")
         self.api_key = api_key
-
         client_kwargs: dict[str, Any] = {"api_key": self.api_key}
         if base_url:
             log.debug("Using custom Gemini base URL", extra={"base_url": base_url})
-            # Pass base_url via http_options as direct keyword argument is not supported by the standard Client
-            client_kwargs["http_options"] = {"base_url": base_url}
 
+            client_kwargs["http_options"] = {"base_url": base_url}
         self.client: genai_client.Client = genai_client.Client(**client_kwargs)
 
     @property
@@ -47,27 +44,19 @@ class GeminiCore:
         """
         Generates content using the Gemini API's asynchronous method. Supports streaming
         if 'stream=True' is passed in kwargs.
-
         Args:
             model: The name of the Gemini model to use (e.g., "gemini-pro").
             contents: A list of content parts to send to the model.
             **kwargs: Additional keyword arguments to pass to the API call, including 'stream'.
-
         Returns:
             The response object from the Gemini API (or an asynchronous iterator if streaming).
-
         Raises:
             genai_errors.APIError: If an API-related error occurs during content generation.
         """
-        # log.debug(
-        #     "Generating content",
-        #     extra={"model": model, "contents": contents, "kwargs": kwargs},
-        # )
+
         try:
-            response = await self.client.aio.models.generate_content(
-                model=model, contents=contents, **kwargs
-            )
-            # log.debug("Finished generating content", extra={"response": response})
+            response = await self.client.aio.models.generate_content(model=model, contents=contents, **kwargs)
+
             return response
         except genai_errors.APIError as e:
             log.error(
@@ -76,18 +65,14 @@ class GeminiCore:
             )
             raise
 
-    async def upload_media_bytes(
-        self, data_bytes: bytes, display_name: str, mime_type: str
-    ) -> Any:
+    async def upload_media_bytes(self, data_bytes: bytes, display_name: str, mime_type: str) -> Any:
         """
         Uploads raw media bytes to the Gemini File API and returns a Gemini Part object
         referencing the uploaded file. Handles file processing status.
-
         Args:
             data_bytes: The raw bytes of the media file.
             display_name: A human-readable name for the file.
             mime_type: The MIME type of the media file (e.g., "image/png", "video/mp4").
-
         Returns:
             A gemini_types.Part object containing file_data with the URI of the uploaded file.
             Returns a text part with an error message if the upload fails.
@@ -102,58 +87,29 @@ class GeminiCore:
         )
         try:
             file_io = io.BytesIO(data_bytes)
-
             safe_display_name = (
-                "".join(
-                    c if c.isalnum() or c in [".", "-", "_"] else "_"
-                    for c in display_name
-                )
-                or "uploaded_file"
+                "".join(c if c.isalnum() or c in [".", "-", "_"] else "_" for c in display_name) or "uploaded_file"
             )
             upload_config = gemini_types.UploadFileConfig(
                 mime_type=mime_type,
                 display_name=safe_display_name,
             )
-            uploaded_file_result = await self.client.aio.files.upload(
-                file=file_io, config=upload_config
-            )
-
+            uploaded_file_result = await self.client.aio.files.upload(file=file_io, config=upload_config)
             if not uploaded_file_result or not uploaded_file_result.name:
                 raise ValueError("File upload failed to return a valid result.")
-
             active_uploaded_file = uploaded_file_result
-
-            if (
-                active_uploaded_file.state
-                and active_uploaded_file.state.name == "PROCESSING"
-            ):
+            if active_uploaded_file.state and active_uploaded_file.state.name == "PROCESSING":
                 log.info("File is PROCESSING. Polling until ACTIVE.")
                 polling_start_time = asyncio.get_event_loop().time()
-                while (
-                    active_uploaded_file.state
-                    and active_uploaded_file.state.name == "PROCESSING"
-                ):
+                while active_uploaded_file.state and active_uploaded_file.state.name == "PROCESSING":
                     if asyncio.get_event_loop().time() - polling_start_time > 120:
                         raise TimeoutError("File processing timed out.")
                     await asyncio.sleep(2)
                     if active_uploaded_file.name:
-                        active_uploaded_file = await self.client.aio.files.get(
-                            name=active_uploaded_file.name
-                        )
-
-            if (
-                not active_uploaded_file.state
-                or active_uploaded_file.state.name != "ACTIVE"
-            ):
-                final_state = (
-                    active_uploaded_file.state.name
-                    if active_uploaded_file.state
-                    else "UNKNOWN"
-                )
-                raise ValueError(
-                    f"File did not become ACTIVE. Final state: {final_state}"
-                )
-
+                        active_uploaded_file = await self.client.aio.files.get(name=active_uploaded_file.name)
+            if not active_uploaded_file.state or active_uploaded_file.state.name != "ACTIVE":
+                final_state = active_uploaded_file.state.name if active_uploaded_file.state else "UNKNOWN"
+                raise ValueError(f"File did not become ACTIVE. Final state: {final_state}")
             log.debug(
                 "Finished uploading media bytes",
                 extra={"active_uploaded_file": active_uploaded_file},
@@ -161,15 +117,8 @@ class GeminiCore:
             return active_uploaded_file
         except Exception as e:
             log.error(f"Error uploading file '{display_name}': {e}", exc_info=True)
-            # Fallback to inline data if upload fails and size is within limits (20MB)
-            if len(data_bytes) < 20 * 1024 * 1024:
-                log.info(
-                    f"Falling back to inline data for '{display_name}' due to upload error."
-                )
-                return gemini_types.Part(
-                    inline_data=gemini_types.Blob(mime_type=mime_type, data=data_bytes)
-                )
 
-            return gemini_types.Part(
-                text=f"[Attachment: {display_name} - Error: {str(e)[:100]}]"
-            )
+            if len(data_bytes) < 20 * 1024 * 1024:
+                log.info(f"Falling back to inline data for '{display_name}' due to upload error.")
+                return gemini_types.Part(inline_data=gemini_types.Blob(mime_type=mime_type, data=data_bytes))
+            return gemini_types.Part(text=f"[Attachment: {display_name} - Error: {str(e)[:100]}]")

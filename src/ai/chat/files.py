@@ -23,7 +23,6 @@ class AttachmentProcessor:
     def __init__(self, gemini_core: GeminiCore):
         """
         Initializes the AttachmentProcessor.
-
         Args:
             gemini_core: An instance of GeminiCore for interacting with the Gemini API.
         """
@@ -40,13 +39,11 @@ class AttachmentProcessor:
         """
         Uploads media bytes to the Gemini File API if not already cached,
         and returns a Gemini File object.
-
         Args:
             data_bytes: The raw bytes of the media file.
             display_name: A human-readable name for the file.
             mime_type: The MIME type of the media file.
             original_url: The original public URL of the media, if applicable.
-
         Returns:
             A gemini_types.File object or None if an error occurred.
         """
@@ -63,24 +60,18 @@ class AttachmentProcessor:
         if cache_key in self._gemini_file_cache:
             log.info(f"Cache hit for media '{display_name}'.")
             return self._gemini_file_cache[cache_key]
-
         async with self._upload_locks[cache_key]:
             if cache_key in self._gemini_file_cache:
                 log.info(f"Cache hit for media '{display_name}' after acquiring lock.")
                 return self._gemini_file_cache[cache_key]
-
             try:
                 log.info(f"Cache miss for media '{display_name}'. Uploading to Gemini.")
-                gemini_file = await self.gemini_core.upload_media_bytes(
-                    data_bytes, display_name, mime_type
-                )
+                gemini_file = await self.gemini_core.upload_media_bytes(data_bytes, display_name, mime_type)
                 if gemini_file:
                     self._gemini_file_cache[cache_key] = gemini_file
                     if original_url and hasattr(gemini_file, "uri") and gemini_file.uri:
                         self._original_urls[gemini_file.uri] = original_url
-                log.debug(
-                    "Finished uploading media bytes", extra={"gemini_file": gemini_file}
-                )
+                log.debug("Finished uploading media bytes", extra={"gemini_file": gemini_file})
                 return gemini_file
             except Exception as e:
                 log.error(

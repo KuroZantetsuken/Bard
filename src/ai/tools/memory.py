@@ -25,7 +25,6 @@ class JsonStorageManager:
     def __init__(self, storage_dir: str, file_suffix: str):
         """
         Initializes the JsonStorageManager.
-
         Args:
             storage_dir: The base directory where JSON files will be stored.
             file_suffix: The suffix to append to filenames (e.g., ".memory.json").
@@ -45,16 +44,12 @@ class JsonStorageManager:
                 exc_info=True,
             )
 
-    def _get_storage_filepath(
-        self, guild_id: Optional[int], user_id: Optional[str]
-    ) -> str:
+    def _get_storage_filepath(self, guild_id: Optional[int], user_id: Optional[str]) -> str:
         """
         Constructs the full file path for a storage file based on guild ID or user ID.
-
         Args:
             guild_id: The ID of the Discord guild, if applicable.
             user_id: The ID of the user, if applicable (for DMs or user-specific storage).
-
         Returns:
             The complete file path for the JSON storage file.
         """
@@ -63,24 +58,17 @@ class JsonStorageManager:
         elif user_id is not None:
             base_name = str(user_id)
         else:
-            log.error(
-                "Attempted to get storage filepath with neither guild_id nor user_id"
-            )
+            log.error("Attempted to get storage filepath with neither guild_id nor user_id")
             base_name = "unknown"
-
         filename = f"{base_name}{self.file_suffix}"
         return os.path.join(self.storage_dir, filename)
 
-    async def _load_data(
-        self, guild_id: Optional[int], user_id: Optional[str]
-    ) -> List[Dict[str, Any]]:
+    async def _load_data(self, guild_id: Optional[int], user_id: Optional[str]) -> List[Dict[str, Any]]:
         """
         Loads data from a JSON file.
-
         Args:
             guild_id: The ID of the Discord guild.
             user_id: The ID of the user.
-
         Returns:
             A list of dictionaries representing the loaded JSON data, or an empty list if
             the file does not exist or an error occurs during loading/parsing.
@@ -95,9 +83,7 @@ class JsonStorageManager:
                     content = await f.read()
                     data = json.loads(content)
                 if not isinstance(data, list):
-                    log.error(
-                        f"Invalid data format (not a list) for {filepath}. Deleting file."
-                    )
+                    log.error(f"Invalid data format (not a list) for {filepath}. Deleting file.")
                     try:
                         os.remove(filepath)
                     except OSError as remove_error:
@@ -117,7 +103,6 @@ class JsonStorageManager:
         """
         Saves data to a JSON file. It uses a temporary file and atomic rename
         to prevent data corruption during writes.
-
         Args:
             guild_id: The ID of the Discord guild.
             user_id: The ID of the user.
@@ -139,16 +124,12 @@ class JsonStorageManager:
                     except OSError as remove_error:
                         log.error(f"Error removing temporary file: {remove_error}")
 
-    async def _delete_data(
-        self, guild_id: Optional[int], user_id: Optional[str]
-    ) -> bool:
+    async def _delete_data(self, guild_id: Optional[int], user_id: Optional[str]) -> bool:
         """
         Deletes a data file.
-
         Args:
             guild_id: The ID of the Discord guild.
             user_id: The ID of the user.
-
         Returns:
             True if the file was successfully deleted, False otherwise.
         """
@@ -161,9 +142,7 @@ class JsonStorageManager:
                     log.info(f"Successfully deleted data file: {filepath}")
                     return True
                 except OSError as e:
-                    log.error(
-                        f"Error deleting data file {filepath}: {e}", exc_info=True
-                    )
+                    log.error(f"Error deleting data file {filepath}: {e}", exc_info=True)
             return False
 
 
@@ -176,7 +155,6 @@ class MemoryManager(JsonStorageManager):
     def __init__(self, memory_dir: str, max_memories: int):
         """
         Initializes the MemoryManager.
-
         Args:
             memory_dir: The directory where memory files are stored.
             max_memories: The maximum number of memories to store per user.
@@ -211,23 +189,15 @@ class MemoryManager(JsonStorageManager):
         if not isinstance(memories, list):
             log.error(f"Invalid memories format for user {user_id}")
             return []
-
         valid_memories = [
-            m
-            for m in memories
-            if isinstance(m, dict)
-            and "id" in m
-            and "content" in m
-            and "timestamp_added" in m
+            m for m in memories if isinstance(m, dict) and "id" in m and "content" in m and "timestamp_added" in m
         ]
         if len(valid_memories) != len(memories):
             log.warning(f"Filtered invalid memories for user {user_id}")
-
         memories = valid_memories
         if self.max_memories > 0 and len(memories) > self.max_memories:
             log.debug(f"Truncating memories for user {user_id} to {self.max_memories}")
             memories = memories[-self.max_memories :]
-
         return memories
 
     async def save_memories(self, user_id: str, memories: List[Dict[str, Any]]) -> None:
@@ -257,7 +227,6 @@ class MemoryManager(JsonStorageManager):
         if not (5 <= len(content) <= 1000):
             log.warning(f"Memory content length out of bounds: {len(content)} chars")
             return False
-
         memories = await self.load_memories(user_id)
         new_id = self._next_memory_id(memories)
         new_memory = {
@@ -301,9 +270,7 @@ class MemoryManager(JsonStorageManager):
         log.debug(f"Clearing all memories for user {user_id}")
         return await self._delete_data(guild_id=None, user_id=user_id)
 
-    def format_memories(
-        self, user_id: Optional[str], memories: List[Dict[str, Any]]
-    ) -> str:
+    def format_memories(self, user_id: Optional[str], memories: List[Dict[str, Any]]) -> str:
         """
         Format memories for LLM context.
         Args:
@@ -338,10 +305,7 @@ class MemoryTool(BaseTool):
             context: The ToolContext object providing shared resources.
         """
         super().__init__(context=context)
-
-        self.memory_manager = MemoryManager(
-            memory_dir=Settings.MEMORY_DIR, max_memories=Settings.MAX_MEMORIES
-        )
+        self.memory_manager = MemoryManager(memory_dir=Settings.MEMORY_DIR, max_memories=Settings.MAX_MEMORIES)
 
     def get_function_declarations(self) -> List[types.FunctionDeclaration]:
         """
@@ -384,7 +348,7 @@ class MemoryTool(BaseTool):
             types.FunctionDeclaration(
                 name="clear_all_user_memories",
                 description=(
-                    "Purpose: This tool allows the AI to completely erase all stored long-term memories for the current user. Results: Returns a success status indicating whether memories were cleared. Restrictions/Guidelines: Use this tool ONLY when the user explicitly requests to \"forget everything\", \"clear all memories\", \"reset your memory of me\", or otherwise indicates they want a total reset of their stored long-term information. This action is irreversible. It should be used instead of calling remove_user_memory multiple times when a total reset is requested."
+                    'Purpose: This tool allows the AI to completely erase all stored long-term memories for the current user. Results: Returns a success status indicating whether memories were cleared. Restrictions/Guidelines: Use this tool ONLY when the user explicitly requests to "forget everything", "clear all memories", "reset your memory of me", or otherwise indicates they want a total reset of their stored long-term information. This action is irreversible. It should be used instead of calling remove_user_memory multiple times when a total reset is requested.'
                 ),
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
@@ -393,9 +357,7 @@ class MemoryTool(BaseTool):
             ),
         ]
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes a specified memory management function (`add_user_memory` or `remove_user_memory`).
         Args:
@@ -420,7 +382,6 @@ class MemoryTool(BaseTool):
                     },
                 )
             )
-
         memory_service = self.memory_manager
         if function_name == "add_user_memory":
             content_arg = args.get("memory_content")

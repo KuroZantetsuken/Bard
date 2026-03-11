@@ -9,11 +9,11 @@ from ai.config import GeminiConfigManager
 from ai.context.prompts import PromptBuilder, load_prompts_from_directory
 from ai.core import GeminiCore
 from ai.tools.registry import ToolRegistry
+from bot.core.cache import MessageCache
 from bot.core.coordinator import Coordinator
 from bot.core.events import DiscordEventHandler
 from bot.core.lifecycle import RequestManager
 from bot.core.queue import MessageQueue
-from bot.core.cache import MessageCache
 from bot.core.typing import TypingManager
 from bot.message.parser import MessageParser
 from bot.message.reactions import ReactionManager
@@ -38,14 +38,12 @@ class Container:
     def __init__(self, settings: Settings):
         """
         Initializes the Container with the application configuration.
-
         Args:
             settings: An instance of the Config class containing application settings.
         """
         self.settings = settings
         self.services: Dict[str, Any] = {}
         log.debug("Container initialized.")
-
         self._service_factories: Dict[str, Callable[[], Any]] = {
             "gemini_core": self._create_gemini_core,
             "video_handler": self._create_video_handler,
@@ -75,13 +73,10 @@ class Container:
         """
         Retrieves a service instance by name. If the service has not been created yet,
         its factory function is called to create and store it.
-
         Args:
             service_name: The name of the service to retrieve.
-
         Returns:
             The instance of the requested service.
-
         Raises:
             ValueError: If an unknown service name is requested.
         """
@@ -104,11 +99,7 @@ class Container:
         log.debug("GeminiCore instance created.")
         return GeminiCore(
             api_key=self.settings.GEMINI_API_KEY,
-            base_url=(
-                self.settings.GEMINI_BASE_URL
-                if self.settings.GEMINI_USE_CUSTOM_URL
-                else None
-            ),
+            base_url=(self.settings.GEMINI_BASE_URL if self.settings.GEMINI_USE_CUSTOM_URL else None),
         )
 
     def _create_attachment_processor(self) -> AttachmentProcessor:

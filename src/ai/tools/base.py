@@ -21,9 +21,7 @@ class GeminiCoreProtocol(Protocol):
         ...
 
     @abstractmethod
-    async def upload_media_bytes(
-        self, data_bytes: bytes, display_name: str, mime_type: str
-    ) -> Any:
+    async def upload_media_bytes(self, data_bytes: bytes, display_name: str, mime_type: str) -> Any:
         """Uploads raw media bytes to the Gemini File API."""
         ...
 
@@ -77,7 +75,6 @@ class ToolContext:
     ):
         """
         Initializes the ToolContext.
-
         Args:
             settings: Application configuration settings.
             gemini_core: An object implementing GeminiCoreProtocol.
@@ -102,7 +99,6 @@ class ToolContext:
         self.gemini_core = gemini_core
         self.attachment_processor = attachment_processor
         self.image_scraper = image_scraper
-
         self.images: List[Dict[str, Any]] = []
         self.code_files: List[Dict[str, Any]] = []
         self.is_final_output: Optional[bool] = None
@@ -115,24 +111,20 @@ class ToolContext:
     def _validate_service(self, service: Any, protocol: type) -> None:
         """
         Validates that a service implements the required protocol.
-
         Args:
             service: The service instance to validate.
             protocol: The protocol (runtime_checkable) that the service must implement.
-
         Raises:
             TypeError: If the service does not implement the required protocol.
         """
         if not isinstance(service, protocol):
             raise TypeError(
-                f"Service {service.__class__.__name__} does not implement "
-                f"required protocol {protocol.__name__}"
+                f"Service {service.__class__.__name__} does not implement required protocol {protocol.__name__}"
             )
 
     def get(self, key: str, default: Optional[Any] = None) -> Optional[Any]:
         """
         Retrieves a value from the tool context by key.
-
         Args:
             key: The key of the value to retrieve.
             default: The default value to return if the key is not found.
@@ -153,16 +145,13 @@ class BaseTool(ABC):
     def __init__(self, context: ToolContext):
         """
         Initializes the BaseTool with a ToolContext.
-
         Args:
             context: The ToolContext object providing shared resources and data.
         """
         log.debug(f"Initializing {self.__class__.__name__}")
         self.context = context
 
-    def function_response_success(
-        self, function_name: str, message: str, **kwargs: Any
-    ) -> types.FunctionResponse:
+    def function_response_success(self, function_name: str, message: str, **kwargs: Any) -> types.FunctionResponse:
         """
         Creates a successful FunctionResponse object.
         """
@@ -171,15 +160,11 @@ class BaseTool(ABC):
             response={"status": "success", "message": message, **kwargs},
         )
 
-    def function_response_error(
-        self, function_name: str, error_message: str
-    ) -> types.FunctionResponse:
+    def function_response_error(self, function_name: str, error_message: str) -> types.FunctionResponse:
         """
         Creates a failed FunctionResponse object.
         """
-        return types.FunctionResponse(
-            name=function_name, response={"status": "error", "message": error_message}
-        )
+        return types.FunctionResponse(name=function_name, response={"status": "error", "message": error_message})
 
     @abstractmethod
     def get_function_declarations(self) -> List[types.FunctionDeclaration]:
@@ -191,17 +176,13 @@ class BaseTool(ABC):
         pass
 
     @abstractmethod
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the specified function of the tool.
-
         Args:
             function_name: The name of the function to execute (must match one from get_function_declarations).
             args: A dictionary of arguments for the function.
             context: A ToolContext object containing shared resources and data for execution.
-
         Returns:
             A google.genai.types.Part object, typically a FunctionResponse, containing the result of the execution.
         """

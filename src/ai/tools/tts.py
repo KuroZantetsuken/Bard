@@ -12,7 +12,6 @@ from ai.tools.base import BaseTool, ToolContext
 from settings import Settings
 
 log = logging.getLogger("Bard")
-
 DEFAULT_WAVEFORM = "FzYACgAAAAAAACQAAAAAAAA="
 
 
@@ -31,9 +30,7 @@ async def _execute_ffmpeg(
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout_data, stderr_data = await asyncio.wait_for(
-                process.communicate(input=input_data), timeout=timeout
-            )
+            stdout_data, stderr_data = await asyncio.wait_for(process.communicate(input=input_data), timeout=timeout)
         except asyncio.TimeoutError:
             log.debug(f"FFmpeg process timed out after {timeout} seconds.")
             process.kill()
@@ -43,9 +40,7 @@ async def _execute_ffmpeg(
         return_code = process.returncode if process.returncode is not None else -1
         return stdout_data, stderr_data, return_code
     except FileNotFoundError:
-        log.critical(
-            f"FFmpeg executable not found: '{arguments[0]}'. Ensure it's installed and in PATH."
-        )
+        log.critical(f"FFmpeg executable not found: '{arguments[0]}'. Ensure it's installed and in PATH.")
         return None, b"FFmpeg not found", -1
     except Exception as e:
         log.critical(f"FFmpeg execution failed: {str(e)}")
@@ -84,21 +79,16 @@ async def _convert_audio(
     return None
 
 
-def _get_audio_duration_and_waveform(
-    audio_bytes: bytes, max_waveform_points: int = 100
-) -> Tuple[float, str]:
+def _get_audio_duration_and_waveform(audio_bytes: bytes, max_waveform_points: int = 100) -> Tuple[float, str]:
     """
     Calculates the audio duration from OGG Opus bytes and generates a base64 encoded waveform string.
     The waveform is a series of 0-255 values representing audio amplitude.
-
     Args:
         audio_bytes: The audio data in OGG Opus format.
         max_waveform_points: The maximum number of points to represent the waveform.
-
     Returns:
         A tuple containing the duration of the audio in seconds and the base64 encoded waveform string.
     """
-
     log.debug("Getting audio duration and waveform")
     try:
         with io.BytesIO(audio_bytes) as audio_io:
@@ -107,15 +97,11 @@ def _get_audio_duration_and_waveform(
                 log.error("soundfile.read returned None.")
                 return 1.0, DEFAULT_WAVEFORM
             audio_data, samplerate = read_result
-
         if audio_data is None or samplerate is None:
             log.error("soundfile.read returned None for audio_data or samplerate.")
             return 1.0, DEFAULT_WAVEFORM
-
         duration_secs = len(audio_data) / float(samplerate)
-        mono_audio_data = (
-            np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
-        )
+        mono_audio_data = np.mean(audio_data, axis=1) if audio_data.ndim > 1 else audio_data
         num_samples = len(mono_audio_data)
         if num_samples == 0:
             return duration_secs, DEFAULT_WAVEFORM
@@ -169,7 +155,6 @@ class TTSGenerator(BaseTool):
     def __init__(self, context: ToolContext):
         """
         Initializes the TTSGenerator.
-
         Args:
             context: The ToolContext object providing shared resources.
         """
@@ -179,34 +164,24 @@ class TTSGenerator(BaseTool):
     async def synthesize(self, text: str, voice_id: str) -> AsyncGenerator[bytes, None]:
         """
         Synthesizes speech from text using the Gemini TTS API and yields audio chunks.
-
         Args:
             text: The text to convert to speech.
             voice_id: The ID of the voice to use for synthesis.
-
         Yields:
             Audio data chunks in bytes.
         """
-        log.debug(
-            "Synthesizing speech", extra={"text_len": len(text), "voice_id": voice_id}
-        )
+        log.debug("Synthesizing speech", extra={"text_len": len(text), "voice_id": voice_id})
         try:
-            voice_config_params = {
-                "prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=voice_id)
-            }
+            voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=voice_id)}
             speech_generation_config = types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(**voice_config_params)
-                ),
+                speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(**voice_config_params)),
             )
             log.debug(
                 "Sending TTS synthesis request to Gemini",
                 extra={
                     "model": Settings.MODEL_ID_TTS,
-                    "contents": [
-                        types.Content(parts=[types.Part(text=text)]).model_dump()
-                    ],
+                    "contents": [types.Content(parts=[types.Part(text=text)]).model_dump()],
                     "config": speech_generation_config.model_dump(),
                 },
             )
@@ -238,11 +213,9 @@ class TTSGenerator(BaseTool):
         """
         Generates speech audio in OGG Opus format from text using Gemini TTS.
         It converts the PCM data from the API response directly to OGG Opus using FFmpeg.
-
         Args:
             text_for_tts: The text to convert to speech.
             style: Optional style for the voice (e.g., tone, emotion).
-
         Returns:
             A tuple containing the OGG Opus audio bytes, its duration in seconds,
             and a base64 encoded waveform string, or None if generation fails.
@@ -254,36 +227,22 @@ class TTSGenerator(BaseTool):
         if not self.gemini_core:
             log.error("Gemini core not initialized. Cannot generate TTS.")
             return None
-
         if style:
             text_for_tts = f"{style}: {text_for_tts}"
-            log.info(
-                f"Applying style '{style}'. Modified text for TTS: '{text_for_tts}'"
-            )
-
-        voice_config_params = {
-            "prebuilt_voice_config": types.PrebuiltVoiceConfig(
-                voice_name=Settings.VOICE_NAME
-            )
-        }
+            log.info(f"Applying style '{style}'. Modified text for TTS: '{text_for_tts}'")
+        voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=Settings.VOICE_NAME)}
         speech_generation_config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(**voice_config_params)
-            ),
+            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(**voice_config_params)),
         )
-
         log.debug(
             "Sending TTS generation request to Gemini",
             extra={
                 "model": Settings.MODEL_ID_TTS,
-                "contents": [
-                    types.Content(parts=[types.Part(text=text_for_tts)]).model_dump()
-                ],
+                "contents": [types.Content(parts=[types.Part(text=text_for_tts)]).model_dump()],
                 "config": speech_generation_config.model_dump(),
             },
         )
-
         gemini_response_object = await self.gemini_core.generate_content(
             model=Settings.MODEL_ID_TTS,
             contents=[types.Content(parts=[types.Part(text=text_for_tts)])],
@@ -293,7 +252,6 @@ class TTSGenerator(BaseTool):
             "Received TTS generation response from Gemini",
             extra={"response": gemini_response_object.model_dump()},
         )
-
         reason = "Unknown"
         details = ""
         candidate = None
@@ -310,12 +268,8 @@ class TTSGenerator(BaseTool):
                 reason = finish_reason.name
                 if finish_reason.name == "SAFETY":
                     details = f"Safety Ratings: {candidate.safety_ratings}"
-        if candidate is None or (
-            candidate.finish_reason is None or candidate.finish_reason.name != "STOP"
-        ):
-            log.error(
-                f"TTS generation stopped by API. Finish Reason: {reason}. Details: {details}."
-            )
+        if candidate is None or (candidate.finish_reason is None or candidate.finish_reason.name != "STOP"):
+            log.error(f"TTS generation stopped by API. Finish Reason: {reason}. Details: {details}.")
             return None
         pcm_data_chunks = []
         if not (
@@ -323,21 +277,15 @@ class TTSGenerator(BaseTool):
             and gemini_response_object.candidates[0].content
             and gemini_response_object.candidates[0].content.parts
         ):
-            log.error(
-                f"No audio data parts found in the Gemini response for model {Settings.MODEL_ID_TTS}."
-            )
+            log.error(f"No audio data parts found in the Gemini response for model {Settings.MODEL_ID_TTS}.")
             return None
         for part in gemini_response_object.candidates[0].content.parts:
             if part.inline_data and part.inline_data.data:
                 pcm_data_chunks.append(part.inline_data.data)
             else:
-                log.debug(
-                    "Encountered a part without inline_data.data in Gemini response."
-                )
+                log.debug("Encountered a part without inline_data.data in Gemini response.")
         if not pcm_data_chunks:
-            log.warning(
-                f"No PCM data was received from Gemini for model {Settings.MODEL_ID_TTS}."
-            )
+            log.warning(f"No PCM data was received from Gemini for model {Settings.MODEL_ID_TTS}.")
             return None
         pcm_data = b"".join(pcm_data_chunks)
         pcm_format = "s16le"
@@ -375,9 +323,7 @@ class TTSGenerator(BaseTool):
         except Exception as e:
             log.error(f"FFmpeg conversion failed: {e}.", exc_info=True)
             return None
-        duration_secs, waveform_b64 = _get_audio_duration_and_waveform(
-            ogg_opus_bytes, max_waveform_points=256
-        )
+        duration_secs, waveform_b64 = _get_audio_duration_and_waveform(ogg_opus_bytes, max_waveform_points=256)
         log.info(f"Successfully generated speech audio ({duration_secs:.2f}s)")
         return ogg_opus_bytes, duration_secs, waveform_b64
 
@@ -407,17 +353,13 @@ class TTSGenerator(BaseTool):
             )
         ]
 
-    async def execute_tool(
-        self, function_name: str, args: Dict[str, Any], context: ToolContext
-    ) -> types.Part:
+    async def execute_tool(self, function_name: str, args: Dict[str, Any], context: ToolContext) -> types.Part:
         """
         Executes the `generate_speech_ogg` function.
-
         Args:
             function_name: The name of the function to execute (expected to be "generate_speech_ogg").
             args: A dictionary containing the `text_for_tts` and optional `style` arguments.
             context: The ToolContext object providing shared resources.
-
         Returns:
             A Gemini types.Part object containing the function response, including
             success status, duration, waveform, and a message.

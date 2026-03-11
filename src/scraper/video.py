@@ -39,7 +39,6 @@ class VideoHandler:
                     "Video found in cache.",
                     extra={"url": resolved_url, "path": str(video_path)},
                 )
-
                 metadata = await self._extract_metadata(resolved_url)
                 sanitized_metadata = self._sanitize_metadata(metadata)
                 return VideoDetails(
@@ -48,10 +47,7 @@ class VideoHandler:
                     metadata=sanitized_metadata,
                     video_path=str(video_path),
                 )
-
-            log.info(
-                "Video not in cache, attempting download.", extra={"url": resolved_url}
-            )
+            log.info("Video not in cache, attempting download.", extra={"url": resolved_url})
             metadata = await self._download_video(resolved_url)
             if not metadata:
                 log.debug(
@@ -59,15 +55,12 @@ class VideoHandler:
                     extra={"url": resolved_url},
                 )
                 return VideoDetails(is_video=False)
-
             video_path = None
             video_path_str = metadata.get("filepath")
             if not video_path_str and metadata.get("requested_downloads"):
                 video_path_str = metadata["requested_downloads"][0].get("filepath")
-
             if video_path_str:
                 video_path = Path(video_path_str)
-
             if video_path and video_path.exists():
                 log.info(
                     "Video downloaded successfully.",
@@ -87,7 +80,6 @@ class VideoHandler:
                 metadata=sanitized_metadata,
                 video_path=str(video_path) if video_path else None,
             )
-
         except Exception as e:
             log.error(
                 "An unexpected error occurred while processing URL for video.",
@@ -109,16 +101,12 @@ class VideoHandler:
         else:
             return str(data)
 
-    async def get_video_info(
-        self, url: str, ignore_youtube: bool = False
-    ) -> Optional[dict[str, Any]]:
+    async def get_video_info(self, url: str, ignore_youtube: bool = False) -> Optional[dict[str, Any]]:
         """
         Extracts video information from a given URL using yt-dlp.
-
         Args:
             url: The URL of the video.
             ignore_youtube: If True, yt-dlp will not process YouTube URLs.
-
         Returns:
             An optional dictionary containing video information, or None if extraction fails.
         """
@@ -132,13 +120,9 @@ class VideoHandler:
             "quiet": True,
         }
         if ignore_youtube:
-            ydl_opts["match_filter"] = match_filter_func(
-                "!is_live & !extractor_key 'Youtube'"
-            )
-
+            ydl_opts["match_filter"] = match_filter_func("!is_live & !extractor_key 'Youtube'")
         if "youtube.com" not in url and "youtu.be" not in url:
             ydl_opts["force_generic_extractor"] = True
-
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
                 info = await asyncio.to_thread(ydl.extract_info, url, download=False)  # type: ignore
@@ -166,42 +150,34 @@ class VideoHandler:
                 "noplaylist": True,
                 "ignoreerrors": True,
             }
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
-                metadata_raw = await asyncio.to_thread(
-                    ydl.extract_info, url, download=False
-                )
+                metadata_raw = await asyncio.to_thread(ydl.extract_info, url, download=False)
             log.debug(
                 "Metadata extraction result.",
                 extra={"url": url, "has_metadata": metadata_raw is not None},
             )
             return cast(dict[str, Any], metadata_raw) if metadata_raw else None
         except YoutubeDLError as e:
-            log.error(
-                "Failed to extract metadata.", extra={"url": url, "error": str(e)}
-            )
+            log.error("Failed to extract metadata.", extra={"url": url, "error": str(e)})
             return None
 
     async def _download_video(self, url: str) -> Optional[dict[str, Any]]:
         """Downloads a video and returns its metadata."""
         log.debug("Downloading video.", extra={"url": url})
         base_path = self.cache_manager.get_cache_base_path_for_url(url)
-
         ydl_opts: dict[str, Any] = {
             "executable": Settings.YTDLP_PATH,
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
             "ignoreerrors": True,
-            "max_filesize": 500 * 1024 * 1024,  # 500 MB limit
+            "max_filesize": 500 * 1024 * 1024,
             "outtmpl": f"{base_path}.%(ext)s",
             "format": "bestvideo+bestaudio/best",
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
-                metadata_raw = await asyncio.to_thread(
-                    ydl.extract_info, url, download=True
-                )
+                metadata_raw = await asyncio.to_thread(ydl.extract_info, url, download=True)
             log.debug(
                 "Video download result.",
                 extra={"url": url, "has_metadata": metadata_raw is not None},

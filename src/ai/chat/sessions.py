@@ -61,7 +61,7 @@ class ChatSessionManager:
     def _cleanup_old_sessions(self):
         """Removes the oldest sessions to prevent memory leaks."""
         if len(self._sessions) > self._max_sessions:
-            keys_to_remove = list(self._sessions.keys())[:len(self._sessions) - self._max_sessions]
+            keys_to_remove = list(self._sessions.keys())[: len(self._sessions) - self._max_sessions]
             for key in keys_to_remove:
                 del self._sessions[key]
                 if key in self._session_locks:
@@ -80,38 +80,28 @@ class ChatSessionManager:
             if not current.reference or not current.reference.message_id:
                 break
             try:
-                current = await self._message_cache.get_message(
-                    current.channel, current.reference.message_id
-                )
+                current = await self._message_cache.get_message(current.channel, current.reference.message_id)
             except (discord.NotFound, discord.HTTPException):
                 break
         return message.id
 
-    async def _reconstruct_history(
-        self, message: discord.Message
-    ) -> List[gemini_types.Content]:
+    async def _reconstruct_history(self, message: discord.Message) -> List[gemini_types.Content]:
         """
         Reconstructs the chat history by walking up the Discord reply chain.
         Returns a list of gemini_types.Content.
         """
         history_messages: List[discord.Message] = []
         current = message
-
         for _ in range(self._settings.MAX_REPLY_DEPTH):
             if not current.reference or not current.reference.message_id:
                 break
-
             try:
-                parent = await self._message_cache.get_message(
-                    current.channel, current.reference.message_id
-                )
+                parent = await self._message_cache.get_message(current.channel, current.reference.message_id)
                 history_messages.append(parent)
                 current = parent
             except (discord.NotFound, discord.HTTPException):
                 break
-
         history_messages.reverse()
-
         return [
             gemini_types.Content(
                 role="model" if msg.author.bot else "user",
@@ -128,11 +118,9 @@ class ChatSessionManager:
         session_key = await self._get_session_key(message)
         session_to_use: Optional[ChatSession] = self._sessions.get(session_key)
         is_branch = False
-
         if session_to_use:
             ref_id = message.reference.message_id if message.reference else None
 
-            # If it's not a direct continuation of the leaf, it's a branch
             if ref_id and ref_id != session_to_use.leaf_message_id:
                 log.info(
                     "Branch detected. Starting new session.",
@@ -151,20 +139,16 @@ class ChatSessionManager:
                     "Reusing existing chat session.",
                     extra={"session_key": session_key, "message_id": message.id},
                 )
-
         if session_to_use:
             session_to_use.last_interaction = datetime.utcnow()
             session_to_use.leaf_message_id = message.id
             self._sessions[session_key] = self._sessions.pop(session_key)
             return session_to_use.chat
-
         if session_key not in self._session_locks:
             self._session_locks[session_key] = asyncio.Lock()
-
         async with self._session_locks[session_key]:
             if session_key in self._sessions and not is_branch:
                 return self._sessions[session_key].chat
-
             log.info(
                 "Creating new chat session.",
                 extra={
@@ -173,32 +157,21 @@ class ChatSessionManager:
                     "is_branch": is_branch,
                 },
             )
-
             history: Any = []
             if is_branch:
                 history = await self._reconstruct_history(message)
                 log.debug(f"Reconstructed history with {len(history)} turns.")
-
             tool_declarations = self._tool_registry.get_all_function_declarations()
             system_instruction = self._prompt_builder.system_prompt
-
             config = self._config_manager.create_config(
                 system_instruction_str=system_instruction,
                 tool_declarations=tool_declarations,
             )
-
-            chat = self._gemini_core.client.chats.create(
-                model=self._settings.MODEL_ID, config=config, history=history
-            )
-
-            new_session = ChatSession(
-                chat=chat, root_message_id=session_key, leaf_message_id=message.id
-            )
+            chat = self._gemini_core.client.chats.create(model=self._settings.MODEL_ID, config=config, history=history)
+            new_session = ChatSession(chat=chat, root_message_id=session_key, leaf_message_id=message.id)
             self._sessions[session_key] = new_session
-
             if session_key in self._session_locks:
                 del self._session_locks[session_key]
-
             self._cleanup_old_sessions()
             return new_session.chat
 
@@ -210,13 +183,8 @@ class ChatSessionManager:
             (s for s in self._sessions.values() if s.leaf_message_id == user_message_id),
             None,
         )
-
         if target_session:
             target_session.leaf_message_id = bot_message_id
-            log.debug(
-                f"Updated session leaf to {bot_message_id} for user message {user_message_id}"
-            )
+            log.debug(f"Updated session leaf to {bot_message_id} for user message {user_message_id}")
         else:
-            log.warning(
-                f"Could not find session to update leaf for user message {user_message_id}"
-            )
+            log.warning(f"Could not find session to update leaf for user message {user_message_id}")
