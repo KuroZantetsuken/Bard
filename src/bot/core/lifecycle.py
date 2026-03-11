@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from bot.core.typing import TypingManager
 from bot.message.reactions import ReactionManager
 from bot.types import Request, RequestState
+from settings import Settings
 
 log = logging.getLogger("Bard")
 
@@ -14,15 +15,25 @@ class RequestManager:
         self, reaction_manager: ReactionManager, typing_manager: TypingManager
     ):
         self._requests: Dict[str, Request] = {}
+        self._max_requests = Settings.MAX_REQUESTS
         self._reaction_manager = reaction_manager
         self._typing_manager = typing_manager
         log.info("RequestManager initialized.")
+
+    def _cleanup_old_requests(self):
+        """Removes the oldest requests to keep the cache within limits."""
+        if len(self._requests) > self._max_requests:
+            # dict is insertion-ordered in Python 3.7+
+            keys_to_remove = list(self._requests.keys())[:len(self._requests) - self._max_requests]
+            for key in keys_to_remove:
+                del self._requests[key]
 
     def create_request(
         self, message: Any, original_message_id: int
     ) -> Request:
         request = Request(message=message, original_message_id=original_message_id)
         self._requests[request.id] = request
+        self._cleanup_old_requests()
         log.debug(
             f"Request {request.id} created for message {original_message_id}."
         )
