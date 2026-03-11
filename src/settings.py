@@ -41,14 +41,16 @@ class Settings:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     # Optional custom base URL for the Gemini API.
     GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
+    # Toggle to use the custom base URL if provided.
+    GEMINI_USE_CUSTOM_URL = os.getenv("GEMINI_USE_CUSTOM_URL", "false").lower() == "true"
     # The primary model identifier for text generation.
     MODEL_ID = "gemini-3-flash-preview"
     # The secondary model identifier for simple sub-tasks.
-    MODEL_ID_SECONDARY = "gemini-2.5-flash-lite"
+    MODEL_ID_SECONDARY = "gemini-3.1-flash-lite-preview"
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # The specific model identifier for image generation.
-    MODEL_ID_IMAGE_GENERATION = "gemini-3-pro-image-preview"
+    MODEL_ID_IMAGE_GENERATION = "gemini-3.1-flash-image-preview"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
 

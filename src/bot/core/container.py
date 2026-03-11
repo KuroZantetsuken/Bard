@@ -103,7 +103,12 @@ class Container:
             raise ValueError("GEMINI_API_KEY is not set in the configuration.")
         log.debug("GeminiCore instance created.")
         return GeminiCore(
-            api_key=self.settings.GEMINI_API_KEY, base_url=self.settings.GEMINI_BASE_URL
+            api_key=self.settings.GEMINI_API_KEY,
+            base_url=(
+                self.settings.GEMINI_BASE_URL
+                if self.settings.GEMINI_USE_CUSTOM_URL
+                else None
+            ),
         )
 
     def _create_attachment_processor(self) -> AttachmentProcessor:
