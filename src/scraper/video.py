@@ -193,6 +193,7 @@ class VideoHandler:
             "no_warnings": True,
             "noplaylist": True,
             "ignoreerrors": True,
+            "max_filesize": 500 * 1024 * 1024,  # 500 MB limit
             "outtmpl": f"{base_path}.%(ext)s",
             "format": "bestvideo+bestaudio/best",
         }
