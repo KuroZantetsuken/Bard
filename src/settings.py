@@ -55,6 +55,10 @@ class Settings:
     # --- AI Interaction and Limits ---
     # The maximum depth for fetching reply chains in Discord.
     MAX_REPLY_DEPTH = 10
+    # The maximum number of concurrent requests to track in memory.
+    MAX_REQUESTS = 1000
+    # The maximum number of active chat sessions to keep in memory.
+    MAX_SESSIONS = 500
     # The token budget for Gemini's internal "thinking" process when using tools.
     # Note: For Gemini 3 models, this is legacy. Use THINKING_LEVEL instead.
     THINKING_BUDGET = 128
