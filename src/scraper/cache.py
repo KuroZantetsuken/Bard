@@ -4,13 +4,13 @@ import json
 import logging
 import mimetypes
 import time
+from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
 import aiofiles
-from async_lru import alru_cache
 
 from scraper.models import (
     CachedObject,
@@ -34,6 +34,8 @@ class CacheManager:
         self.cache_dir = Path(Settings.CACHE_DIR)
         self.cache_duration = cache_duration
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._l1_cache: OrderedDict[str, CachedObject] = OrderedDict()
+        self._l1_cache_maxsize = 128
         log.info(
             "CacheManager initialized.",
             extra={"cache_dir": str(self.cache_dir), "duration": self.cache_duration},
@@ -105,9 +107,29 @@ class CacheManager:
         CachedObject exists for the given resolved URL.
         Uses an L1 in-memory cache and an L2 disk cache.
         """
-        return await self._get_from_disk_cache(url_obj)
+        resolved_url = url_obj.resolved
+        
+        # Check L1 in-memory cache
+        if resolved_url in self._l1_cache:
+            cached_obj = self._l1_cache[resolved_url]
+            if cached_obj.expires > time.time():
+                log.info("L1 Cache hit for URL.", extra={"url": resolved_url})
+                self._l1_cache.move_to_end(resolved_url)
+                return cached_obj.data
+            else:
+                log.debug("L1 Cache expired for URL.", extra={"url": resolved_url})
+                del self._l1_cache[resolved_url]
 
-    @alru_cache(maxsize=128)
+        # Check L2 disk cache
+        data = await self._get_from_disk_cache(url_obj)
+        if data:
+            # Populate L1 cache
+            expires = time.time() + self.cache_duration # Re-estimate or store actual expiry
+            self._l1_cache[resolved_url] = CachedObject(data=data, expires=expires)
+            if len(self._l1_cache) > self._l1_cache_maxsize:
+                self._l1_cache.popitem(last=False)
+        return data
+
     async def _get_from_disk_cache(self, url_obj: ResolvedURL) -> Optional[ScrapedData]:
         """
         Retrieves a ScrapedData object from the disk cache.
@@ -179,14 +201,17 @@ class CacheManager:
         else:
             data_for_serialization.screenshot_data = None
 
-        cached_obj = CachedObject(data=data_for_serialization, expires=expires)
+        cached_obj_for_disk = CachedObject(data=data_for_serialization, expires=expires)
+        cached_obj_for_memory = CachedObject(data=data, expires=expires)
 
         try:
             async with aiofiles.open(cache_path, "w") as f:
-                await f.write(json.dumps(cached_obj, cls=self.CacheEncoder, indent=4))
+                await f.write(json.dumps(cached_obj_for_disk, cls=self.CacheEncoder, indent=4))
             log.debug("Successfully cached data for URL.", extra={"url": resolved_url})
 
-            self._get_from_disk_cache.cache_clear()
+            self._l1_cache[resolved_url] = cached_obj_for_memory
+            if len(self._l1_cache) > self._l1_cache_maxsize:
+                self._l1_cache.popitem(last=False)
 
         except TypeError as e:
             log.error(
