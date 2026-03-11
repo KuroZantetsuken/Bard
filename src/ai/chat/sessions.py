@@ -55,7 +55,17 @@ class ChatSessionManager:
         self._config_manager = config_manager
         self._tool_registry = tool_registry
         self._message_cache = message_cache
+        self._max_sessions = self._settings.MAX_SESSIONS
         log.debug("ChatSessionManager initialized.")
+
+    def _cleanup_old_sessions(self):
+        """Removes the oldest sessions to prevent memory leaks."""
+        if len(self._sessions) > self._max_sessions:
+            keys_to_remove = list(self._sessions.keys())[:len(self._sessions) - self._max_sessions]
+            for key in keys_to_remove:
+                del self._sessions[key]
+                if key in self._session_locks:
+                    del self._session_locks[key]
 
     async def _get_session_key(self, message: discord.Message) -> int:
         """
@@ -145,6 +155,7 @@ class ChatSessionManager:
         if session_to_use:
             session_to_use.last_interaction = datetime.utcnow()
             session_to_use.leaf_message_id = message.id
+            self._sessions[session_key] = self._sessions.pop(session_key)
             return session_to_use.chat
 
         if session_key not in self._session_locks:
@@ -188,6 +199,7 @@ class ChatSessionManager:
             if session_key in self._session_locks:
                 del self._session_locks[session_key]
 
+            self._cleanup_old_sessions()
             return new_session.chat
 
     async def update_leaf_for_message(self, user_message_id: int, bot_message_id: int):
