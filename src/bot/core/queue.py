@@ -100,6 +100,7 @@ class MessageQueue:
     async def _process_queue(self, channel_id: int, queue: asyncio.Queue):
         """
         Worker task that processes messages from a specific channel's queue.
+        It will exit if the queue remains empty for 5 minutes.
 
         Args:
             channel_id: The ID of the channel.
@@ -108,7 +109,8 @@ class MessageQueue:
         log.debug(f"Started worker for channel {channel_id}.")
         while self._running:
             try:
-                item = await queue.get()
+                # Wait for a message with a timeout to allow cleanup of idle workers
+                item = await asyncio.wait_for(queue.get(), timeout=300.0)
                 message_data, request = item
                 log.debug(f"Processing message for channel {channel_id}.")
 
@@ -134,6 +136,13 @@ class MessageQueue:
                 finally:
                     queue.task_done()
 
+            except asyncio.TimeoutError:
+                if queue.empty():
+                    if channel_id in self.queues:
+                        del self.queues[channel_id]
+                    log.debug(f"Worker for channel {channel_id} timed out due to inactivity. Cleaning up.")
+                    break
+                continue
             except asyncio.CancelledError:
                 log.debug(f"Worker for channel {channel_id} cancelled.")
                 break
@@ -143,3 +152,8 @@ class MessageQueue:
                     exc_info=True,
                 )
                 await asyncio.sleep(1)
+        
+        # Remove self from worker_tasks
+        current_task = asyncio.current_task()
+        if current_task in self.worker_tasks:
+            self.worker_tasks.remove(current_task)
