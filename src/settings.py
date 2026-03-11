@@ -42,7 +42,7 @@ class Settings:
     # Optional custom base URL for the Gemini API.
     GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
     # Toggle to use the custom base URL if provided.
-    GEMINI_USE_CUSTOM_URL = os.getenv("GEMINI_USE_CUSTOM_URL", "false").lower() == "true"
+    GEMINI_USE_CUSTOM_URL = False
     # The primary model identifier for text generation.
     MODEL_ID = "gemini-3-flash-preview"
     # The secondary model identifier for simple sub-tasks.
