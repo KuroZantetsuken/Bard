@@ -42,14 +42,22 @@ class BotRestarter(FileSystemEventHandler):
         """
         if self.process:
             log.info("Terminating existing bot process.")
-            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            if sys.platform == "win32":
+                self.process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
             self.process.wait()
             log.info("Bot process terminated.")
         log.info(f"Starting bot with command: {sys.executable} {' '.join(self.command)}")
         env = os.environ.copy()
         src_path = os.path.dirname(os.path.abspath(__file__))
         env["PYTHONPATH"] = src_path + os.pathsep + env.get("PYTHONPATH", "")
-        self.process = subprocess.Popen([sys.executable, *self.command], preexec_fn=os.setsid, env=env)
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["preexec_fn"] = os.setsid
+        self.process = subprocess.Popen([sys.executable, *self.command], env=env, **kwargs)
 
     def on_any_event(self, event):
         """
@@ -97,7 +105,10 @@ if __name__ == "__main__":
         observer.stop()
         if event_handler.process:
             log.info("Terminating bot process.")
-            os.killpg(os.getpgid(event_handler.process.pid), signal.SIGTERM)
+            if sys.platform == "win32":
+                event_handler.process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(os.getpgid(event_handler.process.pid), signal.SIGTERM)
             event_handler.process.wait()
         log.info("Hot-reloader stopped and bot process terminated.")
     finally:
