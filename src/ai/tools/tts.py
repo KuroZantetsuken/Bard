@@ -172,10 +172,13 @@ class TTSGenerator(BaseTool):
         """
         log.debug("Synthesizing speech", extra={"text_len": len(text), "voice_id": voice_id})
         try:
-            voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=voice_id)}
             speech_generation_config = types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(**voice_config_params)),
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_id)
+                    )
+                ),
             )
             log.debug(
                 "Sending TTS synthesis request to Gemini",
@@ -230,10 +233,13 @@ class TTSGenerator(BaseTool):
         if style:
             text_for_tts = f"{style}: {text_for_tts}"
             log.info(f"Applying style '{style}'. Modified text for TTS: '{text_for_tts}'")
-        voice_config_params = {"prebuilt_voice_config": types.PrebuiltVoiceConfig(voice_name=Settings.VOICE_NAME)}
         speech_generation_config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(**voice_config_params)),
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=Settings.VOICE_NAME)
+                )
+            ),
         )
         log.debug(
             "Sending TTS generation request to Gemini",
