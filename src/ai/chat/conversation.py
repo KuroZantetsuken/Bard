@@ -233,7 +233,43 @@ class AIConversation:
                 final_text_parts.append("My response was blocked. I am unable to provide the requested information.")
                 break
             parts = current_model_content.parts or []
-            current_model_text_parts = [p for p in parts if p.text]
+            current_model_text_parts = []
+            grounding_metadata = getattr(candidate, "grounding_metadata", None)
+            supports = getattr(grounding_metadata, "grounding_supports", None) if grounding_metadata else None
+            chunks = getattr(grounding_metadata, "grounding_chunks", None) if grounding_metadata else None
+            has_grounding = grounding_metadata is not None and supports is not None and chunks is not None
+            if has_grounding and supports and chunks:
+                text_content = "".join([p.text for p in parts if p.text])
+                if text_content:
+                    valid_supports = [s for s in supports if s.segment and s.segment.end_index is not None]
+                    sorted_supports = sorted(valid_supports, key=lambda s: s.segment.end_index or 0, reverse=True)
+                    used_citations = {}
+                    for support in sorted_supports:
+                        end_index = support.segment.end_index
+                        if end_index is not None and support.grounding_chunk_indices:
+                            citation_links = []
+                            for i in support.grounding_chunk_indices:
+                                if chunks and i < len(chunks):
+                                    chunk_web = getattr(chunks[i], "web", None)
+                                    uri = getattr(chunk_web, "uri", None) if chunk_web else None
+                                    title = getattr(chunk_web, "title", "Source") if chunk_web else "Source"
+                                    if uri:
+                                        citation_index = i + 1
+                                        citation_links.append(f"[{citation_index}]")
+                                        if citation_index not in used_citations:
+                                            used_citations[citation_index] = (title, uri)
+                            if citation_links:
+                                citation_string = "".join(citation_links)
+                                text_content = text_content[:end_index] + citation_string + text_content[end_index:]
+                    if used_citations:
+                        sources_text = "\n\n---\n**Sources:**\n"
+                        for idx in sorted(used_citations.keys()):
+                            title, uri = used_citations[idx]
+                            sources_text += f"[{idx}] [{title}](<{uri}>)\n"
+                        text_content += sources_text
+                    current_model_text_parts = [gemini_types.Part(text=text_content)]
+            else:
+                current_model_text_parts = [p for p in parts if p.text]
             current_model_function_call_parts = [p for p in parts if p.function_call]
             if not current_model_function_call_parts:
                 final_text_parts.extend(p.text for p in current_model_text_parts)
@@ -254,6 +290,8 @@ class AIConversation:
                         args=args_for_tool,
                         context=tool_context,
                     )
+                    if tool_result_part and tool_result_part.function_response:
+                        tool_result_part.function_response.id = function_call.id
                     tool_class_name = self.tool_registry.function_to_tool_map.get(function_call.name)
                     if tool_class_name:
                         tool_emoji = self.tool_registry.tool_emojis.get(tool_class_name)
