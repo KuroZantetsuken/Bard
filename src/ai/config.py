@@ -67,7 +67,6 @@ class GeminiConfigManager:
         Returns:
             A `gemini_types.GenerateContentConfig` object configured with the specified parameters.
         """
-
         config_args: Dict[str, Any] = {
             "temperature": 1.0,
             "top_p": 0.95,
@@ -75,7 +74,13 @@ class GeminiConfigManager:
             "safety_settings": self.get_base_safety_settings(),
         }
         if tool_declarations:
-            config_args["tools"] = [gemini_types.Tool(function_declarations=tool_declarations)]
+            config_args["tools"] = [
+                gemini_types.Tool(google_search=gemini_types.GoogleSearch()),
+                gemini_types.Tool(function_declarations=tool_declarations),
+            ]
+        else:
+            config_args["tools"] = [gemini_types.Tool(google_search=gemini_types.GoogleSearch())]
+        config_args["automatic_function_calling"] = gemini_types.AutomaticFunctionCallingConfig(disable=True)
         if system_instruction_str:
             config_args["system_instruction"] = system_instruction_str
         config = gemini_types.GenerateContentConfig(**config_args)
@@ -97,5 +102,4 @@ class GeminiConfigManager:
                 )
         except AttributeError:
             log.warning("Gemini SDK version might not support 'thinking_config'.")
-
         return config
