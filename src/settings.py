@@ -4,8 +4,6 @@ import os
 from dotenv import find_dotenv, load_dotenv
 
 log = logging.getLogger("Bard")
-
-
 load_dotenv(find_dotenv())
 
 
@@ -26,7 +24,6 @@ class Settings:
     MAX_DISCORD_MESSAGE_LENGTH = 2000
     # Discord message flag to suppress embeds and indicate a voice message.
     DISCORD_VOICE_MESSAGE_FLAG = 8192
-
     # --- Bot Presence Settings ---
     # The type of activity for the bot's presence.
     # Options: "playing", "listening", "watching", "custom"
@@ -35,14 +32,13 @@ class Settings:
     PRESENCE_TEXT = "gooning"
     # The emoji for "custom" statuses (optional).
     PRESENCE_EMOJI = "❓"
-
     # --- Gemini AI Model Settings ---
     # The API key for the Gemini AI, retrieved from environment variables.
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     # Optional custom base URL for the Gemini API.
     GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
     # Toggle to use the custom base URL if provided.
-    GEMINI_USE_CUSTOM_URL = False
+    GEMINI_USE_CUSTOM_URL = True
     # The primary model identifier for text generation.
     MODEL_ID = "gemini-3-flash-preview"
     # The secondary model identifier for simple sub-tasks.
@@ -50,10 +46,9 @@ class Settings:
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # The specific model identifier for image generation.
-    MODEL_ID_IMAGE_GENERATION = "gemini-3.1-flash-image-preview"
+    MODEL_ID_IMAGE_GENERATION = "gemini-3.1-flash-image"
     # The pre-built voice to use for text-to-speech.
     VOICE_NAME = "Kore"
-
     # --- AI Interaction and Limits ---
     # The maximum depth for fetching reply chains in Discord.
     MAX_REPLY_DEPTH = 10
@@ -72,7 +67,6 @@ class Settings:
     TOOL_TIMEOUT_SECONDS = 60
     # The maximum number of long-term memories to store per user. 0 disables this check.
     MAX_MEMORIES = 32
-
     # --- File and Path Settings ---
     # The directory to the FFmpeg executable.
     FFMPEG_PATH = "ffmpeg"
@@ -92,7 +86,6 @@ class Settings:
     PLAYWRIGHT_BROWSER_PATH = "data/browser/"
     # The directory to the DiscordChatExporter.Cli executable.
     DISCORD_CHAT_EXPORTER_PATH = os.path.expanduser("~/DiscordChatExporter.Cli.linux-x64/DiscordChatExporter.Cli")
-
     # --- Logging Configuration ---
     # Enable or disable logging to the console.
     LOG_CONSOLE_ENABLED = True
@@ -108,7 +101,6 @@ class Settings:
     LOG_FILE_MAX_COUNT = 10
     # Enable or disable automatic log pruning on application startup.
     LOG_PRUNE_ON_STARTUP = True
-
     # --- Debugging & Testing ---
     # A list of bot user IDs that are allowed to trigger the bot (e.g., for testing).
     ALLOWED_BOT_IDS = [int(id.strip()) for id in os.getenv("ALLOWED_BOT_IDS", "").split(",") if id.strip()]
