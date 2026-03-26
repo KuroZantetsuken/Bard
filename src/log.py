@@ -220,5 +220,6 @@ def setup_logging():
         file_handler.setLevel(Settings.LOG_FILE_LEVEL)
         file_handler.setFormatter(JsonFormatter())
         logger.addHandler(file_handler)
+    logging.getLogger("google_genai.models").setLevel(logging.ERROR)
     logger.info("Logging configured successfully.")
     return logger
