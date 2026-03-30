@@ -306,6 +306,8 @@ class AIConversation:
                 response = await asyncio.to_thread(chat.send_message, tool_response_parts)
                 model_response = response
         if global_used_citations:
+            if "🌐" not in used_tool_emojis:
+                used_tool_emojis.append("🌐")
             sources_text = "\n"
             for idx in sorted(global_used_citations.keys()):
                 title, uri = global_used_citations[idx]
