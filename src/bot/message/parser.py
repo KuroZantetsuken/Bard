@@ -129,7 +129,9 @@ class MessageParser:
         )
         url_pattern = r"(?:https?://|www\.)[a-zA-Z0-9\-\._~:/?#\[\]@!$&'()*+,;=%]+"
         combined_content_for_url_extraction = f"{message.content} {reply_chain_text}"
-        urls_in_message = set(re.findall(url_pattern, combined_content_for_url_extraction))
+        content_without_markdown_links = re.sub(r"\[[^\]]*\]\([^)]+\)", "", combined_content_for_url_extraction)
+        content_without_masked_urls = re.sub(r"<(?:https?://|www\.)[^>]+>", "", content_without_markdown_links)
+        urls_in_message = set(re.findall(url_pattern, content_without_masked_urls))
         scraped_data_list = []
         if urls_in_message:
             log.info(
