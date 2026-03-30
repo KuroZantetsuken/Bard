@@ -42,7 +42,7 @@ class Settings:
     # The primary model identifier for text generation.
     MODEL_ID = "gemini-3-flash-preview"
     # The secondary model identifier for simple sub-tasks.
-    MODEL_ID_SECONDARY = "gemini-3.1-flash-lite-preview"
+    MODEL_ID_SECONDARY = "gemini-3-flash-preview"
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # The specific model identifier for image generation.

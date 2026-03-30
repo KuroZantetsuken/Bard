@@ -54,7 +54,7 @@ class ThreadTitler:
                     ],
                     role="system",
                 ),
-                max_output_tokens=50,
+                max_output_tokens=256,
                 safety_settings=safety_settings,
             )
             prompt = f"Generate a title for the following content:\n\n{text_content}"
