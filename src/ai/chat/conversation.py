@@ -217,6 +217,8 @@ class AIConversation:
         )
         final_text_parts = []
         used_tool_emojis = []
+        global_used_citations = {}
+        next_citation_idx = 1
         model_response = response
         while True:
             if not model_response.candidates:
@@ -243,7 +245,6 @@ class AIConversation:
                 if text_content:
                     valid_supports = [s for s in supports if s.segment and s.segment.end_index is not None]
                     sorted_supports = sorted(valid_supports, key=lambda s: s.segment.end_index or 0, reverse=True)
-                    used_citations = {}
                     for support in sorted_supports:
                         end_index = support.segment.end_index
                         if end_index is not None and support.grounding_chunk_indices:
@@ -254,19 +255,19 @@ class AIConversation:
                                     uri = getattr(chunk_web, "uri", None) if chunk_web else None
                                     title = getattr(chunk_web, "title", "Source") if chunk_web else "Source"
                                     if uri:
-                                        citation_index = i + 1
-                                        citation_links.append(f"[{citation_index}]")
-                                        if citation_index not in used_citations:
-                                            used_citations[citation_index] = (title, uri)
+                                        existing_idx = None
+                                        for idx, (t, u) in global_used_citations.items():
+                                            if u == uri:
+                                                existing_idx = idx
+                                                break
+                                        if existing_idx is None:
+                                            existing_idx = next_citation_idx
+                                            next_citation_idx += 1
+                                            global_used_citations[existing_idx] = (title, uri)
+                                        citation_links.append(f"[{existing_idx}]")
                             if citation_links:
                                 citation_string = "".join(citation_links)
                                 text_content = text_content[:end_index] + citation_string + text_content[end_index:]
-                    if used_citations:
-                        sources_text = "\n\n---\n**Sources:**\n"
-                        for idx in sorted(used_citations.keys()):
-                            title, uri = used_citations[idx]
-                            sources_text += f"[{idx}] [{title}](<{uri}>)\n"
-                        text_content += sources_text
                     current_model_text_parts = [gemini_types.Part(text=text_content)]
             else:
                 current_model_text_parts = [p for p in parts if p.text]
@@ -304,6 +305,12 @@ class AIConversation:
                     final_text_parts.extend(p.text for p in current_model_text_parts)
                 response = await asyncio.to_thread(chat.send_message, tool_response_parts)
                 model_response = response
+        if global_used_citations:
+            sources_text = "\n"
+            for idx in sorted(global_used_citations.keys()):
+                title, uri = global_used_citations[idx]
+                sources_text += f"-# [{idx}] [{title}](<{uri}>)\n"
+            final_text_parts.append(sources_text)
         final_text, final_media = self._build_final_response_data(tool_context, final_text_parts)
         final_response = FinalAIResponse(
             text_content=final_text,
