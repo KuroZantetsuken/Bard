@@ -91,9 +91,13 @@ class SummarizeTool(BaseTool):
                 function_response=self.function_response_error(function_name, "Missing channel information")
             )
         channel_id = getattr(context.channel, "id")
+
+        safe_after = after_date_str.replace(":", "-").replace(" ", "_")
+        safe_before = before_date_str.replace(":", "-").replace(" ", "_")
+
         output_path = os.path.join(
             self.context.settings.CACHE_DIR,
-            f"{channel_id}_{after_date_str}_{before_date_str}.json",
+            f"{channel_id}_{safe_after}_{safe_before}.json",
         )
         try:
             chat_log = None
