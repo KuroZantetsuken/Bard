@@ -205,12 +205,13 @@ class SummarizeTool(BaseTool):
                 return chat_log_json
             parsed_messages = []
             for message in log_data["messages"]:
-                author = message.get("author", {}).get("name", "Unknown")
-                nick = message.get("author", {}).get("nickname", "Unknown")
+                author_dict = message.get("author", {})
+                author = author_dict.get("name", "Unknown")
+                author_id = author_dict.get("id", "Unknown")
                 timestamp = message.get("timestamp", "")
                 content = message.get("content", "")
                 if content:
-                    parsed_messages.append(f"[{timestamp}] {author} ({nick}): {content}")
+                    parsed_messages.append(f"[{timestamp}] <@{author_id}> ({author}): {content}")
             return "\n".join(parsed_messages)
         except json.JSONDecodeError:
             log.warning("Failed to parse chat log as JSON. Returning raw content.")
