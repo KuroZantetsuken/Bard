@@ -1,8 +1,9 @@
+import contextvars
 import json
 import logging
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from settings import Settings
 
@@ -165,6 +166,23 @@ class JsonFormatter(logging.Formatter):
         return data
 
 
+request_log_path: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("request_log_path", default=None)
+
+
+def set_request_log_file(request_id: str) -> None:
+    """Sets the log file path for the current request context."""
+    if not Settings.LOG_FILE_ENABLED:
+        return
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    today_dir = os.path.join(Settings.LOG_DIR, date_str)
+    os.makedirs(today_dir, exist_ok=True)
+    time_str = datetime.now().strftime("%H-%M-%S")
+    clean_id = str(request_id).replace("/", "_").replace("\\", "_")
+    filename = f"{time_str}_{clean_id}.json"
+    filepath = os.path.join(today_dir, filename)
+    request_log_path.set(filepath)
+
+
 def _prune_logs():
     """
     Removes old log files based on age and count limits.
@@ -175,25 +193,55 @@ def _prune_logs():
     max_age_days = Settings.LOG_FILE_MAX_AGE_DAYS
     max_count = Settings.LOG_FILE_MAX_COUNT
     try:
-        log_files = sorted(
-            [os.path.join(Settings.LOG_DIR, f) for f in os.listdir(Settings.LOG_DIR) if f.endswith(".json")],
-            key=os.path.getmtime,
-            reverse=True,
-        )
+        log_files = []
+        for root, _, files in os.walk(Settings.LOG_DIR):
+            for f in files:
+                if f.endswith(".json"):
+                    log_files.append(os.path.join(root, f))
+        log_files.sort(key=os.path.getmtime, reverse=True)
         if max_count > 0 and len(log_files) > max_count:
             files_to_prune = log_files[max_count:]
             for f in files_to_prune:
-                os.remove(f)
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
             log_files = log_files[:max_count]
         if max_age_days > 0:
             for f in log_files:
                 file_age = now - datetime.fromtimestamp(os.path.getmtime(f))
                 if file_age.days > max_age_days:
-                    os.remove(f)
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
+        for root, dirs, _ in os.walk(Settings.LOG_DIR, topdown=False):
+            for d in dirs:
+                dir_path = os.path.join(root, d)
+                if not os.listdir(dir_path):
+                    try:
+                        os.rmdir(dir_path)
+                    except OSError:
+                        pass
     except FileNotFoundError:
         pass
     except Exception as e:
         logging.getLogger("Bard").error(f"Error pruning logs: {e}")
+
+
+class ContextAwareFileHandler(logging.Handler):
+    def __init__(self, startup_path: str):
+        super().__init__()
+        self.startup_path = startup_path
+
+    def emit(self, record: logging.LogRecord) -> None:
+        path = request_log_path.get() or self.startup_path
+        try:
+            msg = self.format(record)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except Exception:
+            self.handleError(record)
 
 
 def setup_logging():
@@ -214,9 +262,12 @@ def setup_logging():
     if Settings.LOG_FILE_ENABLED:
         os.makedirs(Settings.LOG_DIR, exist_ok=True)
         _prune_logs()
-        log_filename = datetime.now().strftime("%Y-%m-%dT%H-%M-%S.json")
-        log_filepath = os.path.join(Settings.LOG_DIR, log_filename)
-        file_handler = logging.FileHandler(log_filepath, mode="w", encoding="utf-8")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        today_dir = os.path.join(Settings.LOG_DIR, date_str)
+        os.makedirs(today_dir, exist_ok=True)
+        startup_filename = f"startup_{datetime.now().strftime('%H-%M-%S')}.json"
+        startup_filepath = os.path.join(today_dir, startup_filename)
+        file_handler = ContextAwareFileHandler(startup_filepath)
         file_handler.setLevel(Settings.LOG_FILE_LEVEL)
         file_handler.setFormatter(JsonFormatter())
         logger.addHandler(file_handler)

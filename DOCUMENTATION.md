@@ -145,7 +145,9 @@ The logging system employs a dual-output strategy, sending logs to two distinct 
 2.  **File Output (`DEBUG` level):**
     *   **Purpose:** Captures verbose, machine-parsable debugging information. These logs contain detailed context useful for troubleshooting and post-mortem analysis.
     *   **Format:** Structured JSON, with each log entry on a new line.
-    *   **Location:** A new log file is created in the `data/logs/` directory each time the application starts. The filename is timestamped (e.g., `2025-11-08T19-36-00.json`).
+    *   **Location:** Logs are organized into daily subfolders (e.g., `data/logs/2026-04-03/`).
+        *   **Startup/System Logs:** General bot operations are logged to a startup file (e.g., `startup_17-26-39.json`).
+        *   **Request Logs:** To ensure logs don't get mixed up concurrently, every time a user message is received, a dedicated log file is created for that specific request (e.g., `17-30-56_requestid.json`). Subsequent messages create different files.
 
 ### How to Use the Logger
 

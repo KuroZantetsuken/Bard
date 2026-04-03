@@ -74,6 +74,8 @@ class Coordinator:
             bot_messages_to_edit: Optional list of bot messages that can be edited.
             reaction_to_remove: Optional tuple containing a Reaction and User to remove after processing.
         """
+        from log import set_request_log_file
+        set_request_log_file(request.id)
         if reaction_to_remove:
             await self.reaction_manager.remove_reaction(reaction_to_remove)
         message: Message = request.message
