@@ -76,6 +76,7 @@ class JsonFormatter(logging.Formatter):
         "contents",
         "response",
         "data",
+        "thought_signature",
     }
     MAX_SIZE = 1024
     MAX_DEPTH = 20
