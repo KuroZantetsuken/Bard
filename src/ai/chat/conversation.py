@@ -210,7 +210,16 @@ class AIConversation:
             )
         response_text_for_log = ""
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-            response_text_for_log = "".join(p.text for p in response.candidates[0].content.parts if p.text)
+            parts_texts = []
+            for p in response.candidates[0].content.parts:
+                if p.text:
+                    parts_texts.append(p.text)
+                elif getattr(p, "thought", None):
+                    thought_text = getattr(p, "thought", "")
+                    if isinstance(thought_text, bool):
+                        thought_text = "..."
+                    parts_texts.append(f"[THOUGHT]\n{thought_text}\n[/THOUGHT]\n")
+            response_text_for_log = "".join(parts_texts)
         log.debug(
             f"RESPONSE from Gemini (model: {self.settings.MODEL_ID})",
             extra={"response_text": response_text_for_log},
@@ -271,13 +280,18 @@ class AIConversation:
                     current_model_text_parts = [gemini_types.Part(text=text_content)]
             else:
                 current_model_text_parts = [p for p in parts if p.text]
+
+            if parts and getattr(parts[-1], "thought_signature", None) and current_model_text_parts:
+                current_model_text_parts[-1].thought_signature = parts[-1].thought_signature
             current_model_function_call_parts = [p for p in parts if p.function_call]
             if not current_model_function_call_parts:
-                final_text_parts.extend(p.text for p in current_model_text_parts)
+                for p in current_model_text_parts:
+                    if p.text:
+                        final_text_parts.append(p.text)
                 break
             else:
                 tool_response_parts = []
-                for function_call_part in current_model_function_call_parts:
+                for idx, function_call_part in enumerate(current_model_function_call_parts):
                     function_call = function_call_part.function_call
                     if not function_call or not function_call.name:
                         continue
@@ -293,16 +307,22 @@ class AIConversation:
                     )
                     if tool_result_part and tool_result_part.function_response:
                         tool_result_part.function_response.id = function_call.id
+                        if hasattr(function_call_part, "thought_signature") and function_call_part.thought_signature:
+                            tool_result_part.thought_signature = function_call_part.thought_signature
                     tool_class_name = self.tool_registry.function_to_tool_map.get(function_call.name)
                     if tool_class_name:
                         tool_emoji = self.tool_registry.tool_emojis.get(tool_class_name)
                         if tool_emoji:
                             used_tool_emojis.append(tool_emoji)
                     if tool_result_part:
+                        if idx > 0 and hasattr(tool_result_part, "thought_signature"):
+                            tool_result_part.thought_signature = None
                         tool_response_parts.append(tool_result_part)
                         await self._process_tool_response_part(tool_result_part, tool_context)
                 if current_model_text_parts:
-                    final_text_parts.extend(p.text for p in current_model_text_parts)
+                    for p in current_model_text_parts:
+                        if p.text:
+                            final_text_parts.append(p.text)
                 response = await asyncio.to_thread(chat.send_message, tool_response_parts)
                 model_response = response
         if global_used_citations:
