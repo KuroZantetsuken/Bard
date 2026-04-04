@@ -83,11 +83,11 @@ class CodeExecutionTool(BaseTool):
                     self.context.settings.THINKING_LEVEL.lower(), types.ThinkingLevel.HIGH
                 )
                 config.thinking_config = types.ThinkingConfig(
-                    include_thoughts=False, thinking_level=thinking_level_enum
+                    include_thoughts=True, thinking_level=thinking_level_enum
                 )
             else:
                 config.thinking_config = types.ThinkingConfig(
-                    include_thoughts=False,
+                    include_thoughts=True,
                     thinking_budget=self.context.settings.THINKING_BUDGET,
                 )
         except AttributeError:

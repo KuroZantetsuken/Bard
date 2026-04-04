@@ -94,11 +94,11 @@ class GeminiConfigManager:
                 }
                 thinking_level_enum = level_map.get(self.thinking_level.lower(), gemini_types.ThinkingLevel.HIGH)
                 config.thinking_config = gemini_types.ThinkingConfig(
-                    include_thoughts=False, thinking_level=thinking_level_enum
+                    include_thoughts=True, thinking_level=thinking_level_enum
                 )
             else:
                 config.thinking_config = gemini_types.ThinkingConfig(
-                    include_thoughts=False, thinking_budget=self.thinking_budget
+                    include_thoughts=True, thinking_budget=self.thinking_budget
                 )
         except AttributeError:
             log.warning("Gemini SDK version might not support 'thinking_config'.")
