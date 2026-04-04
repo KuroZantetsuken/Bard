@@ -212,13 +212,13 @@ class AIConversation:
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
             parts_texts = []
             for p in response.candidates[0].content.parts:
-                if p.text:
-                    parts_texts.append(p.text)
-                elif getattr(p, "thought", None):
+                if getattr(p, "thought", None):
                     thought_text = getattr(p, "thought", "")
                     if isinstance(thought_text, bool):
-                        thought_text = "..."
+                        thought_text = p.text or "..."
                     parts_texts.append(f"[THOUGHT]\n{thought_text}\n[/THOUGHT]\n")
+                elif p.text:
+                    parts_texts.append(p.text)
             response_text_for_log = "".join(parts_texts)
         log.debug(
             f"RESPONSE from Gemini (model: {self.settings.MODEL_ID})",
