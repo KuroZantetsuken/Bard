@@ -179,7 +179,7 @@ def set_request_log_file(request_id: str) -> None:
     os.makedirs(today_dir, exist_ok=True)
     time_str = datetime.now().strftime("%H-%M-%S")
     clean_id = str(request_id).replace("/", "_").replace("\\", "_")
-    filename = f"{time_str}_{clean_id}.json"
+    filename = f"{time_str}_{clean_id}.jsonl"
     filepath = os.path.join(today_dir, filename)
     request_log_path.set(filepath)
 
@@ -197,7 +197,7 @@ def _prune_logs():
         log_files = []
         for root, _, files in os.walk(Settings.LOG_DIR):
             for f in files:
-                if f.endswith(".json"):
+                if f.endswith(".jsonl"):
                     log_files.append(os.path.join(root, f))
         log_files.sort(key=os.path.getmtime, reverse=True)
         if max_count > 0 and len(log_files) > max_count:
@@ -266,7 +266,7 @@ def setup_logging():
         date_str = datetime.now().strftime("%Y-%m-%d")
         today_dir = os.path.join(Settings.LOG_DIR, date_str)
         os.makedirs(today_dir, exist_ok=True)
-        startup_filename = f"startup_{datetime.now().strftime('%H-%M-%S')}.json"
+        startup_filename = f"startup_{datetime.now().strftime('%H-%M-%S')}.jsonl"
         startup_filepath = os.path.join(today_dir, startup_filename)
         file_handler = ContextAwareFileHandler(startup_filepath)
         file_handler.setLevel(Settings.LOG_FILE_LEVEL)
