@@ -8,5 +8,6 @@ You may receive a chain of messages as context marked with `[REPLIES:START]` and
 You may receive dynamic context about the environment marked with `[CONTEXT:START]` and `[CONTEXT:END]` tags.
 You may receive video metadata marked with `[VIDEOS:START]` and `[VIDEOS:END]` tags.
 You may receive a list of URLs marked with `[URLS:START]` and `[URLS:END]` tags.
+You may receive past chat logs marked with `[CHAT_LOG:START]` and `[CHAT_LOG:END]` tags. These represent historical context from past conversations, not the active conversation.
 
 [CONTEXT:END]

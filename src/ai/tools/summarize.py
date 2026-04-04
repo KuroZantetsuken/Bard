@@ -91,10 +91,8 @@ class SummarizeTool(BaseTool):
                 function_response=self.function_response_error(function_name, "Missing channel information")
             )
         channel_id = getattr(context.channel, "id")
-
         safe_after = after_date_str.replace(":", "-").replace(" ", "_")
         safe_before = before_date_str.replace(":", "-").replace(" ", "_")
-
         output_path = os.path.join(
             self.context.settings.CACHE_DIR,
             f"{channel_id}_{safe_after}_{safe_before}.json",
@@ -140,6 +138,10 @@ class SummarizeTool(BaseTool):
                 return types.Part(
                     function_response=self.function_response_error(function_name, "Failed to read or parse chat log.")
                 )
+            if len(chat_log) < 400000:
+                log.info("Chat log is within context window limits. Skipping secondary summarization API call.")
+                formatted_log = f"[CHAT_LOG:START]\n{chat_log}\n[CHAT_LOG:END]"
+                return types.Part(function_response=self.function_response_success(function_name, formatted_log))
             gemini_core = context.gemini_core
             if not gemini_core:
                 return types.Part(function_response=self.function_response_error(function_name, "Missing gemini_core"))
@@ -203,6 +205,8 @@ class SummarizeTool(BaseTool):
             if "messages" not in log_data or not isinstance(log_data["messages"], list):
                 log.warning("Chat log is missing 'messages' list or is not in the expected format.")
                 return chat_log_json
+            guild_id = log_data.get("guild", {}).get("id", "Unknown")
+            channel_id = log_data.get("channel", {}).get("id", "Unknown")
             parsed_messages = []
             for message in log_data["messages"]:
                 author_dict = message.get("author", {})
@@ -210,8 +214,21 @@ class SummarizeTool(BaseTool):
                 author_id = author_dict.get("id", "Unknown")
                 timestamp = message.get("timestamp", "")
                 content = message.get("content", "")
+                message_id = message.get("id", "Unknown")
+                is_reply = message.get("type") == "Reply"
+                reply_context = ""
+                if is_reply:
+                    reference = message.get("reference", {})
+                    ref_msg_id = reference.get("messageId", "Unknown")
+                    mentions = message.get("mentions", [])
+                    reply_authors = [f"<@{m.get('id', 'Unknown')}> {m.get('name', 'Unknown')}" for m in mentions]
+                    reply_author_str = ", ".join(reply_authors) if reply_authors else "Unknown"
+                    reply_context = f" [Replying to {ref_msg_id} by {reply_author_str}]"
                 if content:
-                    parsed_messages.append(f"[{timestamp}] <@{author_id}> ({author}): {content}")
+                    link = f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+                    parsed_messages.append(
+                        f"[{timestamp}] <@{author_id}> {author}{reply_context}:\n{content}\n({link})\n"
+                    )
             return "\n".join(parsed_messages)
         except json.JSONDecodeError:
             log.warning("Failed to parse chat log as JSON. Returning raw content.")
