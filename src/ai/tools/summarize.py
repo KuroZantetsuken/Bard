@@ -172,7 +172,7 @@ class SummarizeTool(BaseTool):
             system_instruction=types.Content(
                 parts=[
                     types.Part(
-                        text="You are an expert at summarizing chat logs. Provide a concise summary of the following chat log."
+                        text="You are an expert at summarizing chat logs while maintaining context. Provide a summary of the following chat log. Preserve user IDs and message IDs accurately as references."
                     )
                 ],
                 role="system",
