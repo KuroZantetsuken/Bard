@@ -273,9 +273,11 @@ class AIConversation:
                                             existing_idx = next_citation_idx
                                             next_citation_idx += 1
                                             global_used_citations[existing_idx] = (title, uri)
-                                        citation_links.append(f"[{existing_idx}]")
+                                        superscript_digits = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+                                        citation_str = "".join([superscript_digits[int(d)] for d in str(existing_idx)])
+                                        citation_links.append(citation_str)
                             if citation_links:
-                                citation_string = "".join(citation_links)
+                                citation_string = " " + " ".join(citation_links)
                                 text_content = text_content[:end_index] + citation_string + text_content[end_index:]
                     current_model_text_parts = [gemini_types.Part(text=text_content)]
             else:
