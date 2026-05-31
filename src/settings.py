@@ -40,9 +40,9 @@ class Settings:
     # Toggle to use the custom base URL if provided.
     GEMINI_USE_CUSTOM_URL = True
     # The primary model identifier for text generation.
-    MODEL_ID = "gemini-3-flash-preview"
+    MODEL_ID = "gemini-3.1-flash-lite-preview"
     # The secondary model identifier for simple sub-tasks.
-    MODEL_ID_SECONDARY = "gemini-3-flash-preview"
+    MODEL_ID_SECONDARY = "gemini-3.1-flash-lite-preview"
     # The specific model identifier for text-to-speech generation.
     MODEL_ID_TTS = "gemini-2.5-flash-preview-tts"
     # The specific model identifier for image generation.
