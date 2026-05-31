@@ -78,6 +78,9 @@ class GeminiConfigManager:
                 gemini_types.Tool(google_search=gemini_types.GoogleSearch()),
                 gemini_types.Tool(function_declarations=tool_declarations),
             ]
+            config_args["tool_config"] = gemini_types.ToolConfig(
+                include_server_side_tool_invocations=True
+            )
         else:
             config_args["tools"] = [gemini_types.Tool(google_search=gemini_types.GoogleSearch())]
         config_args["automatic_function_calling"] = gemini_types.AutomaticFunctionCallingConfig(disable=True)
