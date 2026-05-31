@@ -283,8 +283,6 @@ class AIConversation:
             else:
                 current_model_text_parts = [p for p in parts if p.text]
 
-            if parts and getattr(parts[-1], "thought_signature", None) and current_model_text_parts:
-                current_model_text_parts[-1].thought_signature = parts[-1].thought_signature
             current_model_function_call_parts = [p for p in parts if p.function_call]
             if not current_model_function_call_parts:
                 for p in current_model_text_parts:
@@ -293,6 +291,7 @@ class AIConversation:
                 break
             else:
                 tool_response_parts = []
+                log.debug(f"Detected {len(current_model_function_call_parts)} function calls in model response.")
                 for idx, function_call_part in enumerate(current_model_function_call_parts):
                     function_call = function_call_part.function_call
                     if not function_call or not function_call.name:
@@ -309,7 +308,8 @@ class AIConversation:
                     )
                     if tool_result_part and tool_result_part.function_response:
                         tool_result_part.function_response.id = function_call.id
-                        if hasattr(function_call_part, "thought_signature") and function_call_part.thought_signature:
+                        # Crucial for tool context circulation: preserve thought_signature from the call part
+                        if getattr(function_call_part, "thought_signature", None):
                             tool_result_part.thought_signature = function_call_part.thought_signature
                     tool_class_name = self.tool_registry.function_to_tool_map.get(function_call.name)
                     if tool_class_name:

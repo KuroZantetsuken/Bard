@@ -73,16 +73,13 @@ class GeminiConfigManager:
             "max_output_tokens": self.max_output_tokens,
             "safety_settings": self.get_base_safety_settings(),
         }
-        if tool_declarations:
-            config_args["tools"] = [
-                gemini_types.Tool(google_search=gemini_types.GoogleSearch()),
-                gemini_types.Tool(function_declarations=tool_declarations),
-            ]
-            config_args["tool_config"] = gemini_types.ToolConfig(
-                include_server_side_tool_invocations=True
+        config_args["tools"] = [
+            gemini_types.Tool(
+                google_search=gemini_types.GoogleSearch(),
+                function_declarations=tool_declarations if tool_declarations else None,
             )
-        else:
-            config_args["tools"] = [gemini_types.Tool(google_search=gemini_types.GoogleSearch())]
+        ]
+        config_args["tool_config"] = gemini_types.ToolConfig(include_server_side_tool_invocations=True)
         config_args["automatic_function_calling"] = gemini_types.AutomaticFunctionCallingConfig(disable=True)
         if system_instruction_str:
             config_args["system_instruction"] = system_instruction_str
