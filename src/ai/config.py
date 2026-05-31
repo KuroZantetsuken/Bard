@@ -79,7 +79,6 @@ class GeminiConfigManager:
                 function_declarations=tool_declarations if tool_declarations else None,
             )
         ]
-        config_args["tool_config"] = gemini_types.ToolConfig(include_server_side_tool_invocations=True)
         config_args["automatic_function_calling"] = gemini_types.AutomaticFunctionCallingConfig(disable=True)
         if system_instruction_str:
             config_args["system_instruction"] = system_instruction_str
