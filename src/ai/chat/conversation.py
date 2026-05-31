@@ -281,7 +281,7 @@ class AIConversation:
                                 text_content = text_content[:end_index] + citation_string + text_content[end_index:]
                     current_model_text_parts = [gemini_types.Part(text=text_content)]
             else:
-                current_model_text_parts = [p for p in parts if p.text]
+                current_model_text_parts = [p for p in parts if p.text and not getattr(p, "thought", False)]
 
             current_model_function_call_parts = [p for p in parts if p.function_call]
             if not current_model_function_call_parts:
