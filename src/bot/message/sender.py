@@ -341,28 +341,18 @@ class MessageSender:
         try:
             if images:
                 log.debug(f"Processing {len(images)} images for attachment.")
-                temp_dir = tempfile.gettempdir()
                 for img in images:
                     img_data = img.get("data")
                     img_filename = img.get("filename") or "image.png"
                     if img_data:
-                        temp_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{img_filename}")
-                        async with aiofiles.open(temp_path, "wb") as f:
-                            await f.write(img_data)
-                        temp_files_to_clean.append(temp_path)
-                        files_to_send.append(discord.File(temp_path, filename=img_filename))
+                        files_to_send.append(discord.File(io.BytesIO(img_data), filename=img_filename))
             if code_files:
                 log.debug(f"Processing {len(code_files)} code files for attachment.")
-                temp_dir = tempfile.gettempdir()
                 for code_file in code_files:
                     code_data = code_file.get("data")
                     code_filename = code_file.get("filename") or "code.py"
                     if code_data:
-                        temp_code_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{code_filename}")
-                        async with aiofiles.open(temp_code_path, "wb") as f:
-                            await f.write(code_data)
-                        temp_files_to_clean.append(temp_code_path)
-                        files_to_send.append(discord.File(temp_code_path, filename=code_filename))
+                        files_to_send.append(discord.File(io.BytesIO(code_data), filename=code_filename))
             if text_content or files_to_send:
                 text_content_for_send = text_content or ""
                 log.debug(
@@ -392,13 +382,8 @@ class MessageSender:
                 all_sent_messages.append(sent_audio_message)
             else:
                 log.warning("Failed to send native voice message, falling back to file.")
-                temp_audio_path = None
                 try:
-                    temp_dir = tempfile.gettempdir()
-                    temp_audio_path = os.path.join(temp_dir, f"{uuid.uuid4()}.ogg")
-                    async with aiofiles.open(temp_audio_path, "wb") as f:
-                        await f.write(audio_data)
-                    file = discord.File(temp_audio_path, filename="voice_response.ogg")
+                    file = discord.File(io.BytesIO(audio_data), filename="voice_response.ogg")
                     sent_msg = await self._send_single_message_with_fallback(
                         cast(discord.abc.Messageable, message_to_reply_to.channel),
                         content="",
@@ -409,9 +394,6 @@ class MessageSender:
                         all_sent_messages.append(sent_msg)
                 except Exception as e:
                     log.error("Failed to send audio fallback.", extra={"error": e})
-                finally:
-                    if temp_audio_path and os.path.exists(temp_audio_path):
-                        os.unlink(temp_audio_path)
         if not all_sent_messages and any([text_content, audio_data, images, code_files]):
             log.error("All content sending attempts failed.")
         log.debug(
