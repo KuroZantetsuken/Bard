@@ -248,6 +248,14 @@ class AIConversation:
             grounding_metadata = getattr(candidate, "grounding_metadata", None)
             supports = getattr(grounding_metadata, "grounding_supports", None) if grounding_metadata else None
             chunks = getattr(grounding_metadata, "grounding_chunks", None) if grounding_metadata else None
+            # Check for Google Search usage to trigger the 🌐 emoji
+            if grounding_metadata and (
+                getattr(grounding_metadata, "web_search_queries", None)
+                or getattr(grounding_metadata, "search_entry_point", None)
+            ):
+                if "🌐" not in used_tool_emojis:
+                    used_tool_emojis.append("🌐")
+
             has_grounding = grounding_metadata is not None and supports is not None and chunks is not None
             if has_grounding and supports and chunks:
                 text_content = "".join([p.text for p in parts if p.text])
